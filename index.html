@@ -2021,6 +2021,10 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 2v20"/><path d="m3 7 9 5 9-5"/></svg>
     Export to Obsidian
   </a>
+  <a class="sidebar-item" onclick="backfillNotionSync(this)" id="nav-notion-backfill" title="Run once to push all existing FLOW data into Notion. New records sync automatically after that.">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><polyline points="21 3 21 9 15 9"/></svg>
+    Sync Existing Data to Notion
+  </a>
   <a class="sidebar-item" onclick="showPage('trash')" id="nav-trash">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     Trash Bin
@@ -12493,6 +12497,83 @@ async function syncRecordToNotion(rec) {
     // operator's actual work over this.
     console.warn('Notion sync error:', e.message);
   }
+}
+
+/* One-time backfill: pushes every record that existed BEFORE Notion sync was
+   wired up — pending nominations, saved supplies, and archived records —
+   into Notion. Ongoing sync (on nomination/save) only fires for NEW
+   activity going forward, so anything already in FLOW needs this one run to
+   appear in Notion. Safe to run once; running it again would create
+   duplicate pages for anything that isn't a still-live checklist record
+   (archived/older saved records aren't re-tracked with a Notion page id),
+   so this is meant as a single backfill, not a routine action. */
+async function backfillNotionSync(btnEl) {
+  const origLabel = btnEl ? btnEl.innerHTML : '';
+
+  const pendingRecs = Object.values(_checklistRecords || {}).filter(r => !r.supplied);
+  const savedRecs = (_savedSupplies || []).slice();
+  const archivedRecs = [];
+  if (typeof _archives !== 'undefined') {
+    Object.values(_archives).forEach(months => {
+      Object.values(months).forEach(arch => {
+        if (arch && arch.records) archivedRecs.push(...arch.records.map(r => Object.assign({}, r, { _archived: true })));
+      });
+    });
+  }
+
+  // saved/archived records use different field names than a live checklist
+  // record (e.g. vlsfoAct vs actV) — normalize them into the same shape
+  // syncRecordToNotion expects, same mapping used by the Obsidian export.
+  function normalize(r) {
+    return {
+      vessel: r.vessel || r.name,
+      supplyDate: r.supplyDate || r.date,
+      bargeLabel: r.bargeLabel || r.barge,
+      nomV: r.nomV !== undefined ? r.nomV : r.vlsfoNom,
+      actV: r.actV !== undefined ? r.actV : (r.vlsfoAct !== undefined ? r.vlsfoAct : r.vQ),
+      nomM: r.nomM !== undefined ? r.nomM : r.mgoNom,
+      actM: r.actM !== undefined ? r.actM : (r.mgoAct !== undefined ? r.mgoAct : r.mQ),
+      bdnV: r.bdnV || '', bdnM: r.bdnM || '',
+      notes: r.notes || '',
+      supplied: r._archived ? true : true,
+      _archived: !!r._archived,
+      notionPageId: null,
+      _checklistUid: r.checklistUid || r.uid || null
+    };
+  }
+
+  const allRecs = [
+    ...pendingRecs,                     // real refs — notionPageId sticks directly on the live record
+    ...savedRecs.map(normalize),
+    ...archivedRecs.map(normalize)
+  ];
+
+  if (!allRecs.length) { alert('No existing FLOW data found to sync.'); return; }
+  if (!confirm(`This will push ${allRecs.length} existing record(s) into Notion. Run this only once — new nominations and saves already sync automatically. Continue?`)) return;
+
+  if (btnEl) { btnEl.style.opacity = '.6'; btnEl.style.pointerEvents = 'none'; }
+  let ok = 0, fail = 0;
+
+  for (let i = 0; i < allRecs.length; i++) {
+    if (btnEl) btnEl.innerHTML = `Syncing ${i + 1}/${allRecs.length}…`;
+    try {
+      await syncRecordToNotion(allRecs[i]);
+      // If this saved supply is tied to a still-editable live checklist
+      // record, remember the Notion page id there too, so a FUTURE edit
+      // updates this same page instead of creating a duplicate.
+      if (allRecs[i]._checklistUid && _checklistRecords[allRecs[i]._checklistUid] && allRecs[i].notionPageId) {
+        _checklistRecords[allRecs[i]._checklistUid].notionPageId = allRecs[i].notionPageId;
+      }
+      ok++;
+    } catch (e) {
+      fail++;
+    }
+    await new Promise(r => setTimeout(r, 350)); // stay well under Notion's rate limit
+  }
+
+  if (typeof saveSharedRecords === 'function') await saveSharedRecords();
+  if (btnEl) { btnEl.style.opacity = ''; btnEl.style.pointerEvents = ''; btnEl.innerHTML = origLabel; }
+  alert(`Notion backfill complete: ${ok} record(s) synced${fail ? ', ' + fail + ' failed (check they still exist / Notion is reachable)' : ''}.\n\nThis only needed to run once — new nominations and completions sync automatically from here on.`);
 }
 
 async function downloadObsidianVault(btnEl) {
