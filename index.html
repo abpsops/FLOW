@@ -2017,6 +2017,10 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
     Archives
   </a>
+  <a class="sidebar-item" onclick="downloadObsidianVault(this)" id="nav-obsidian">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M12 2v20"/><path d="m3 7 9 5 9-5"/></svg>
+    Export to Obsidian
+  </a>
   <a class="sidebar-item" onclick="showPage('trash')" id="nav-trash">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     Trash Bin
@@ -10922,6 +10926,7 @@ function injectChecklistFromSchedule(sched) {
         actM:       '',   // deliberately blank
         bdnV:       '',   // BDN No. for the VLSFO delivery (blank until entered)
         bdnM:       '',   // BDN No. for the LSMGO delivery (blank until entered)
+        notionPageId: null, // Notion page this record syncs to — set after first push, reused on every update
         supplied:   false,
         notes:      '',
         bargeLabel: item.bargeLabel || '',
@@ -10930,6 +10935,10 @@ function injectChecklistFromSchedule(sched) {
         state:      'draft',
         lockedAt:   null
       };
+      // Push this new nomination to Notion immediately, automatically — no
+      // button, no export step. Fire-and-forget: never blocks the UI, and
+      // a failed/unconfigured sync is silently logged, not surfaced as an error.
+      if (typeof syncRecordToNotion === 'function') syncRecordToNotion(_checklistRecords[uid]);
     } else if (!_checklistRecords[uid].supplied) {
       // Existing unlocked record: update display sno and nomination ref only, never actuals
       _checklistRecords[uid].sno        = item.sno;          // keep display order current
@@ -11270,6 +11279,9 @@ async function saveChecklistRecord(uid) {
   renderSavedRecords();
   renderLiveROBDashboard();
   renderChecklist(_lastSched);
+  // Push the completed delivery to Notion — updates the SAME page created
+  // at nomination time (via rec.notionPageId) rather than creating a duplicate.
+  if (typeof syncRecordToNotion === 'function') syncRecordToNotion(rec);
   if(typeof renderRemainingSupplyTracker==="function")renderRemainingSupplyTracker();
   // Remove saved vessel from Voyage Schedule immediately
   if(_lastSched&&_lastSched.length&&typeof renderBargeTabsAndTL==="function"){
@@ -12345,6 +12357,240 @@ async function downloadMonthlyReportPDF(btnEl) {
     footerNote: 'Monthly supply report · System-generated for operational reference only.'
   });
   await _flowExportReportPDF(html, `FLOW_Report_${rangeLabel}.pdf`, btnEl);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   EXPORT TO OBSIDIAN
+   Obsidian has no cloud API — it's a local app that reads a folder of
+   plain markdown files as a "vault". So instead of a live connector, this
+   builds a complete, ready-to-use vault as a .zip: one note per vessel/
+   supply record (pending AND completed), one note per month's report, and
+   one note per archived month — all cross-linked with [[wikilinks]] and
+   tagged, so Obsidian's search, backlinks, and graph view work on it
+   immediately after unzipping into a vault folder. Re-run any time to
+   refresh the vault with the latest FLOW data.
+   ═══════════════════════════════════════════════════════════════════ */
+
+// Turns a value into a safe Obsidian filename fragment (no / \ : * ? " < > |)
+function _obsSlug(s) {
+  return String(s || '').trim().replace(/[\/\\:*?"<>|]+/g, '-').replace(/\s+/g, ' ').slice(0, 120) || 'Untitled';
+}
+// Turns a value into a safe Obsidian tag fragment (letters/numbers/hyphens only)
+function _obsTagSlug(s) {
+  return String(s || '').trim().replace(/[^\w-]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'none';
+}
+function _obsDateLabel(d) {
+  if (!d) return '';
+  try { return fmt24(d); } catch(e) { return String(d); }
+}
+function _obsYAML(fields) {
+  const lines = ['---'];
+  Object.entries(fields).forEach(([k, v]) => {
+    if (v === undefined || v === null || v === '') { lines.push(`${k}:`); return; }
+    if (Array.isArray(v)) {
+      lines.push(`${k}:`);
+      v.forEach(item => lines.push(`  - ${item}`));
+    } else if (typeof v === 'number' || typeof v === 'boolean') {
+      lines.push(`${k}: ${v}`);
+    } else {
+      lines.push(`${k}: "${String(v).replace(/"/g, '\\"')}"`);
+    }
+  });
+  lines.push('---', '');
+  return lines.join('\n');
+}
+
+// Build one markdown note for a single vessel supply/checklist record —
+// used for BOTH live (pending or completed) records and archived ones.
+function _obsVesselNote(rec) {
+  const vessel = rec.vessel || rec.name || 'Unknown Vessel';
+  const dateRaw = rec.supplyDate || rec.date || null;
+  const dateLabel = _obsDateLabel(dateRaw);
+  const status = rec._archived ? 'archived' : (rec.supplied ? 'completed' : 'pending');
+  const barge = rec.bargeLabel || rec.barge || '';
+  const nomV = rec.nomV !== undefined ? rec.nomV : rec.vlsfoNom;
+  const nomM = rec.nomM !== undefined ? rec.nomM : rec.mgoNom;
+  const actV = rec.actV !== undefined && rec.actV !== '' ? rec.actV : (rec.vlsfoAct !== undefined ? rec.vlsfoAct : rec.vQ);
+  const actM = rec.actM !== undefined && rec.actM !== '' ? rec.actM : (rec.mgoAct !== undefined ? rec.mgoAct : rec.mQ);
+  const bdnV = rec.bdnV || '';
+  const bdnM = rec.bdnM || '';
+  const notes = rec.notes || '';
+  const tags = ['flow-vessel', `status/${status}`];
+  if (barge) tags.push(`barge/${_obsTagSlug(barge)}`);
+
+  const fname = `${_obsSlug(vessel)} - ${_obsSlug(dateLabel || 'no-date')} - ${_obsSlug(rec.uid || rec.id || Math.random().toString(36).slice(2,7))}.md`;
+
+  const fm = _obsYAML({
+    vessel, status, supply_date: dateLabel, barge,
+    vlsfo_nominated: (nomV === null || nomV === undefined) ? '' : nomV,
+    vlsfo_actual: (actV === null || actV === undefined || actV === '') ? '' : actV,
+    vlsfo_bdn_no: bdnV,
+    lsmgo_nominated: (nomM === null || nomM === undefined) ? '' : nomM,
+    lsmgo_actual: (actM === null || actM === undefined || actM === '') ? '' : actM,
+    lsmgo_bdn_no: bdnM,
+    tags
+  });
+
+  const body = `# ${vessel}\n\n`
+    + `**Supply Date:** ${dateLabel || '—'}  \n`
+    + `**Barge:** ${barge || '—'}  \n`
+    + `**Status:** ${status}\n\n`
+    + `| Grade | Nominated | Actual | BDN No. |\n|---|---|---|---|\n`
+    + `| VLSFO | ${(nomV===null||nomV===undefined)?'—':nomV+' MT'} | ${(actV===null||actV===undefined||actV==='')?'—':actV+' MT'} | ${bdnV||'—'} |\n`
+    + `| LSMGO | ${(nomM===null||nomM===undefined)?'—':nomM+' MT'} | ${(actM===null||actM===undefined||actM==='')?'—':actM+' MT'} | ${bdnM||'—'} |\n\n`
+    + (notes ? `**Remarks:** ${notes}\n\n` : '')
+    + `---\n*Exported from FLOW.*`;
+
+  return { fname, content: fm + body, vessel, dateLabel, status, dateRaw };
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   NOTION AUTO-SYNC
+   Fires automatically on nomination creation and on Save/Complete — no
+   button, no export step. Notion's API has no CORS support for direct
+   browser calls, so this posts to a Vercel serverless function
+   (/api/notion-sync) which holds the Notion integration token server-side
+   and relays the request. If that function/token isn't configured yet,
+   this fails silently (console warning only) so it never blocks normal
+   FLOW usage — Notion sync is a bonus layer, not a dependency.
+   ═══════════════════════════════════════════════════════════════════ */
+async function syncRecordToNotion(rec) {
+  try {
+    const status = rec._archived ? 'Archived' : (rec.supplied ? 'Completed' : 'Pending');
+    const properties = {
+      'Name':            { title: [{ text: { content: rec.vessel || 'Unknown Vessel' } }] },
+      'Status':          { select: { name: status } },
+      'Supply Date':     rec.supplyDate ? { date: { start: new Date(rec.supplyDate).toISOString().slice(0, 10) } } : { date: null },
+      'Barge':           { rich_text: [{ text: { content: rec.bargeLabel || '' } }] },
+      'VLSFO Nominated': { number: (rec.nomV === null || rec.nomV === undefined) ? null : Number(rec.nomV) },
+      'VLSFO Actual':    { number: (rec.actV === '' || rec.actV === undefined || rec.actV === null) ? null : Number(rec.actV) },
+      'VLSFO BDN No':    { rich_text: [{ text: { content: rec.bdnV || '' } }] },
+      'LSMGO Nominated': { number: (rec.nomM === null || rec.nomM === undefined) ? null : Number(rec.nomM) },
+      'LSMGO Actual':    { number: (rec.actM === '' || rec.actM === undefined || rec.actM === null) ? null : Number(rec.actM) },
+      'LSMGO BDN No':    { rich_text: [{ text: { content: rec.bdnM || '' } }] },
+      'Notes':           { rich_text: [{ text: { content: rec.notes || '' } }] }
+    };
+
+    const resp = await fetch('/api/notion-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pageId: rec.notionPageId || null, properties })
+    });
+    const data = await resp.json().catch(() => ({}));
+
+    if (resp.ok && data.pageId) {
+      // Remember the Notion page id so the NEXT sync (e.g. Save/Complete)
+      // updates this same page instead of creating a duplicate.
+      if (rec.notionPageId !== data.pageId) {
+        rec.notionPageId = data.pageId;
+        if (typeof saveSharedRecords === 'function') saveSharedRecords();
+      }
+    } else {
+      console.warn('Notion sync skipped:', data.error || resp.status);
+    }
+  } catch (e) {
+    // Network hiccup or Notion not configured yet — never interrupt the
+    // operator's actual work over this.
+    console.warn('Notion sync error:', e.message);
+  }
+}
+
+async function downloadObsidianVault(btnEl) {
+  const origLabel = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) { btnEl.style.opacity = '.6'; btnEl.style.pointerEvents = 'none'; btnEl.innerHTML = origLabel.replace(/Export to Obsidian/, 'Building vault…'); }
+  await new Promise(r => setTimeout(r, 0));
+
+  try {
+    const JSZipLib = await ciLoadJSZip();
+    const zip = new JSZipLib();
+    const vesselsFolder = zip.folder('Vessels');
+    const reportsFolder = zip.folder('Reports');
+    const archivesFolder = zip.folder('Archives');
+
+    // 1) Pending/draft checklist records — not yet saved as a completed supply
+    const pendingRecs = Object.values(_checklistRecords || {}).filter(r => !r.supplied);
+
+    // 2) Completed, currently-live saved supplies
+    const savedRecs = (_savedSupplies || []).slice();
+
+    // 3) Archived records (already moved out of live view via Archive Month)
+    const archivedRecs = [];
+    if (typeof _archives !== 'undefined') {
+      Object.entries(_archives).forEach(([yr, months]) => {
+        Object.entries(months).forEach(([mon, arch]) => {
+          if (arch && arch.records) {
+            arch.records.forEach(r => archivedRecs.push(Object.assign({}, r, { _archived: true, _archYear: yr, _archMonth: mon })));
+          }
+        });
+      });
+    }
+
+    const vesselIndex = { pending: [], completed: [], archived: [] };
+
+    [...pendingRecs, ...savedRecs, ...archivedRecs].forEach(rec => {
+      const note = _obsVesselNote(rec);
+      vesselsFolder.file(note.fname, note.content);
+      const bucket = rec._archived ? 'archived' : (rec.supplied ? 'completed' : 'pending');
+      vesselIndex[bucket].push(note);
+    });
+
+    // 4) One Report note per calendar month that has completed supplies
+    // (live saved + archived), grouping vessel links together.
+    const byMonth = {};
+    [...vesselIndex.completed, ...vesselIndex.archived].forEach(note => {
+      if (!note.dateRaw) return;
+      const d = new Date(note.dateRaw);
+      if (isNaN(d)) return;
+      const key = `${MO[d.getMonth()]} ${d.getFullYear()}`;
+      (byMonth[key] = byMonth[key] || []).push(note);
+    });
+    Object.entries(byMonth).forEach(([label, notes]) => {
+      const fm = _obsYAML({ type: 'flow-report', period: label, vessel_count: notes.length, tags: ['flow-report'] });
+      const body = `# FLOW Supply Report — ${label}\n\n${notes.length} record(s)\n\n`
+        + notes.map(n => `- [[${n.fname.replace(/\.md$/, '')}]] — ${n.dateLabel || '—'}`).join('\n')
+        + `\n\n---\n*Exported from FLOW.*`;
+      reportsFolder.file(`${_obsSlug(label)} Report.md`, fm + body);
+    });
+
+    // 5) One note per officially archived month (Archive Month button in FLOW)
+    if (typeof _archives !== 'undefined') {
+      Object.entries(_archives).forEach(([yr, months]) => {
+        Object.entries(months).forEach(([mon, arch]) => {
+          const monLabel = MO[parseInt(mon)] || mon;
+          const label = `${monLabel} ${yr}`;
+          const notesForMonth = vesselIndex.archived.filter(n => {
+            const d = n.dateRaw ? new Date(n.dateRaw) : null;
+            return d && !isNaN(d) && String(d.getFullYear()) === String(yr) && d.getMonth() === parseInt(mon);
+          });
+          const fm = _obsYAML({ type: 'flow-archive', period: label, vessel_count: notesForMonth.length, tags: ['flow-archive'] });
+          const body = `# FLOW Archive — ${label}\n\n${notesForMonth.length} record(s)\n\n`
+            + notesForMonth.map(n => `- [[${n.fname.replace(/\.md$/, '')}]] — ${n.dateLabel || '—'}`).join('\n')
+            + `\n\n---\n*Exported from FLOW.*`;
+          archivesFolder.file(`${_obsSlug(label)} Archive.md`, fm + body);
+        });
+      });
+    }
+
+    // 6) Top-level index note (Map of Content) tying everything together
+    const idxFm = _obsYAML({ type: 'flow-index', exported: fmt24(new Date()), tags: ['flow-index'] });
+    const idxBody = `# FLOW Index\n\n`
+      + `Exported ${fmt24(new Date())}\n\n`
+      + `## Pending / Draft (${vesselIndex.pending.length})\n`
+      + vesselIndex.pending.map(n => `- [[${n.fname.replace(/\.md$/, '')}]]`).join('\n') + '\n\n'
+      + `## Completed (${vesselIndex.completed.length})\n`
+      + Object.keys(byMonth).map(label => `- [[${_obsSlug(label)} Report]]`).join('\n') + '\n\n'
+      + `## Archived Months (${Object.keys(_archives || {}).reduce((n, yr) => n + Object.keys(_archives[yr]).length, 0)})\n`
+      + Object.entries(_archives || {}).flatMap(([yr, months]) => Object.keys(months).map(mon => `- [[${_obsSlug(MO[parseInt(mon)] + ' ' + yr)} Archive]]`)).join('\n') + '\n\n'
+      + `---\n*Tip: use Obsidian's search, tag pane (#flow-vessel, #barge/…, #status/…), and Graph View to explore. Re-export from FLOW any time to refresh this vault — new files will simply add alongside old ones, so delete the old Vessels/Reports/Archives folders first if you want a clean replace instead of a merge.*`;
+    zip.file('FLOW Index.md', idxFm + idxBody);
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    await _flowSaveOrShareBlob(blob, `FLOW_Obsidian_Vault_${fmt24(new Date()).replace(/\s+/g,'-').replace(/:/g,'')}.zip`);
+  } catch (e) {
+    alert('Could not build the Obsidian export: ' + e.message);
+  } finally {
+    if (btnEl) { btnEl.style.opacity = ''; btnEl.style.pointerEvents = ''; btnEl.innerHTML = origLabel; }
+  }
 }
 
 /* ─── DOWNLOAD EXCEL ─── */
