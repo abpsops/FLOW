@@ -12240,12 +12240,13 @@ function downloadAnalyticsReport() {
   const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
   // Collect all chart canvases
-  const chartIds = ['chart-monthly-trend','chart-fuel-mix','chart-vessel-vol','chart-barge-util'];
+  const chartIds = ['chart-monthly-trend','chart-fuel-mix','chart-vessel-vol','chart-supply-freq','chart-monthly-qty-analytics'];
   const chartTitles = {
-    'chart-monthly-trend': 'Monthly Supply Trend (VLSFO & LSMGO)',
-    'chart-fuel-mix':      'Barge Performance — Supplied per Grade',
-    'chart-vessel-vol':    'Top Vessels by Volume (VLSFO + LSMGO)',
-    'chart-barge-util':    'Barge Utilisation'
+    'chart-monthly-trend':        'Monthly Supply Trend (VLSFO & LSMGO)',
+    'chart-fuel-mix':             'Barge Performance — Supplied per Grade',
+    'chart-vessel-vol':           'Top Vessels by Volume (VLSFO + LSMGO)',
+    'chart-supply-freq':          'Top Ports by Vessel Count',
+    'chart-monthly-qty-analytics':'Bunker Quantity — FY26'
   };
 
   // KPI values
