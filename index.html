@@ -12458,6 +12458,11 @@ function _obsVesselNote(rec) {
    this fails silently (console warning only) so it never blocks normal
    FLOW usage — Notion sync is a bonus layer, not a dependency.
    ═══════════════════════════════════════════════════════════════════ */
+// Returns true on a confirmed successful sync, false otherwise — callers
+// (like the backfill) must check this return value rather than assume
+// success just because no exception was thrown; this function deliberately
+// swallows its own errors (logs only) so a Notion hiccup never blocks
+// normal FLOW usage, which means "didn't throw" is NOT the same as "worked".
 async function syncRecordToNotion(rec) {
   try {
     const status = rec._archived ? 'Archived' : (rec.supplied ? 'Completed' : 'Pending');
@@ -12489,13 +12494,16 @@ async function syncRecordToNotion(rec) {
         rec.notionPageId = data.pageId;
         if (typeof saveSharedRecords === 'function') saveSharedRecords();
       }
+      return true;
     } else {
       console.warn('Notion sync skipped:', data.error || resp.status);
+      return false;
     }
   } catch (e) {
     // Network hiccup or Notion not configured yet — never interrupt the
     // operator's actual work over this.
     console.warn('Notion sync error:', e.message);
+    return false;
   }
 }
 
@@ -12556,8 +12564,13 @@ async function backfillNotionSync(btnEl) {
 
   for (let i = 0; i < allRecs.length; i++) {
     if (btnEl) btnEl.innerHTML = `Syncing ${i + 1}/${allRecs.length}…`;
-    try {
-      await syncRecordToNotion(allRecs[i]);
+    // syncRecordToNotion swallows its own errors and returns true/false —
+    // it never throws — so check its RETURN VALUE, not just whether this
+    // call completed. (Earlier version always counted "ok" here, which is
+    // why a batch could report "36 synced" while nothing actually landed
+    // in Notion — every one of those calls silently returned false.)
+    const success = await syncRecordToNotion(allRecs[i]);
+    if (success) {
       // If this saved supply is tied to a still-editable live checklist
       // record, remember the Notion page id there too, so a FUTURE edit
       // updates this same page instead of creating a duplicate.
@@ -12565,7 +12578,7 @@ async function backfillNotionSync(btnEl) {
         _checklistRecords[allRecs[i]._checklistUid].notionPageId = allRecs[i].notionPageId;
       }
       ok++;
-    } catch (e) {
+    } else {
       fail++;
     }
     await new Promise(r => setTimeout(r, 350)); // stay well under Notion's rate limit
