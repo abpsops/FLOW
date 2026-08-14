@@ -12234,40 +12234,111 @@ async function saveSupplyRecord(sno) {
 
 
 /* ─── DOWNLOAD ANALYTICS REPORT ─── */
-function downloadAnalyticsReport() {
+// Lazy-loads the datalabels plugin (draws exact numbers directly on each
+// bar/point) — only needed for the high-quality Analytics export, not the
+// normal in-app charts, so it's not loaded on every page view.
+async function _loadChartDataLabels() {
+  if (typeof ChartDataLabels !== 'undefined') return ChartDataLabels;
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdnjs.cloudflare.com/ajax/libs/chartjs-plugin-datalabels/2.2.0/chartjs-plugin-datalabels.min.js';
+    s.onload = () => resolve(ChartDataLabels);
+    s.onerror = () => reject(new Error('Could not load the chart labels plugin. Check your internet connection.'));
+    document.head.appendChild(s);
+  });
+}
+
+async function downloadAnalyticsReport() {
+  const btn = document.querySelector('button[onclick="downloadAnalyticsReport()"]');
+  const origLabel = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing high-res charts…'; }
+  await new Promise(r => setTimeout(r, 0));
+
   const recs = _savedSupplies || [];
   const now = new Date();
   const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
 
-  // Collect all chart canvases
-  const chartIds = ['chart-monthly-trend','chart-fuel-mix','chart-vessel-vol','chart-supply-freq','chart-monthly-qty-analytics'];
-  const chartTitles = {
-    'chart-monthly-trend':        'Monthly Supply Trend (VLSFO & LSMGO)',
-    'chart-fuel-mix':             'Barge Performance — Supplied per Grade',
-    'chart-vessel-vol':           'Top Vessels by Volume (VLSFO + LSMGO)',
-    'chart-supply-freq':          'Top Ports by Vessel Count',
-    'chart-monthly-qty-analytics':'Bunker Quantity — FY26'
-  };
-
-  // KPI values
-  let totalV=0, totalM=0;
-  recs.forEach(r=>{ totalV+=parseFloat(r.vlsfoAct||r.vlsfoActual)||0; totalM+=parseFloat(r.mgoAct||r.mgoActual)||0; });
-  const ops = recs.length;
-  const avgV = ops ? (totalV/ops) : 0;
+  // Maps each canvas's DOM id to the key it's actually stored under in
+  // _chartInstances (inconsistent historically — most use a short name,
+  // the newer Bunker Quantity chart uses its full canvas id).
+  const chartMap = [
+    { canvasId: 'chart-monthly-trend',         instKey: 'monthly-trend',              title: 'Monthly Supply Trend (VLSFO & LSMGO)' },
+    { canvasId: 'chart-fuel-mix',               instKey: 'fuel-mix',                   title: 'Barge Performance — Supplied per Grade' },
+    { canvasId: 'chart-vessel-vol',             instKey: 'vessel-vol',                 title: 'Top Vessels by Volume (VLSFO + LSMGO)' },
+    { canvasId: 'chart-supply-freq',            instKey: 'supply-freq',                title: 'Top Ports by Vessel Count' },
+    { canvasId: 'chart-monthly-qty-analytics',  instKey: 'chart-monthly-qty-analytics',title: 'Bunker Quantity — FY26' }
+  ];
 
   let chartsHtml = '';
-  chartIds.forEach(id => {
-    const canvas = document.getElementById(id);
-    if (!canvas) return;
-    try {
-      const img = canvas.toDataURL('image/png',1.0);
-      chartsHtml += `
-        <div style="margin-bottom:32px;page-break-inside:avoid">
-          <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${chartTitles[id]||id}</div>
-          <img src="${img}" style="width:100%;max-width:720px;border:1px solid #E0E0E0;border-radius:6px" />
-        </div>`;
-    } catch(e) {}
-  });
+  try {
+    await _loadChartDataLabels();
+    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+      Chart.register(ChartDataLabels);
+    }
+
+    for (const { canvasId, instKey, title } of chartMap) {
+      const chart = _chartInstances[instKey];
+      if (!chart) continue;
+
+      // Save exactly what we're about to change, so it can be restored
+      // afterward — the LIVE on-screen chart must look identical to how
+      // it did before export once this finishes.
+      const origDPR = chart.options.devicePixelRatio;
+      const origPlugins = chart.options.plugins || {};
+      const origDatalabels = origPlugins.datalabels;
+
+      try {
+        // High resolution: render into a much denser backing canvas while
+        // the on-screen CSS size stays the same, so toDataURL() captures
+        // far more actual pixels — this is what fixes the blurry export.
+        chart.options.devicePixelRatio = 3;
+        // Exact numbers directly on the chart — necessary because tooltips
+        // (hover-only) don't exist in a static exported image at all.
+        chart.options.plugins = Object.assign({}, origPlugins, {
+          datalabels: {
+            color: (ctx) => (chart.config.type === 'line') ? (ctx.datasetIndex === 0 ? 'rgba(37,99,235,1)' : 'rgba(249,115,22,1)') : '#1a2332',
+            anchor: chart.config.type === 'line' ? 'end' : 'end',
+            align: chart.config.type === 'line' ? 'top' : 'end',
+            offset: 4,
+            font: { size: 10, family: 'DM Mono, monospace', weight: '700' },
+            formatter: (value) => (typeof value === 'number' && value !== 0) ? fmtMT(value) : ''
+          }
+        });
+        chart.resize();
+        chart.update('none');
+
+        const img = chart.canvas.toDataURL('image/png', 1.0);
+        chartsHtml += `
+          <div style="margin-bottom:32px;page-break-inside:avoid">
+            <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${title}</div>
+            <img src="${img}" style="width:100%;max-width:900px;border:1px solid #E0E0E0;border-radius:6px" />
+          </div>`;
+      } finally {
+        // Always restore, even if capture failed mid-way — never leave the
+        // live in-app chart in the temporary export state.
+        chart.options.devicePixelRatio = origDPR;
+        chart.options.plugins = Object.assign({}, origPlugins, { datalabels: origDatalabels });
+        chart.resize();
+        chart.update('none');
+      }
+    }
+  } catch (e) {
+    console.warn('High-res chart export failed, falling back to on-screen resolution:', e.message);
+    // Fallback: still produce a report, just at normal (lower) resolution,
+    // rather than failing the whole download over the plugin not loading.
+    chartMap.forEach(({ canvasId, title }) => {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+      try {
+        const img = canvas.toDataURL('image/png', 1.0);
+        chartsHtml += `
+          <div style="margin-bottom:32px;page-break-inside:avoid">
+            <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${title}</div>
+            <img src="${img}" style="width:100%;max-width:900px;border:1px solid #E0E0E0;border-radius:6px" />
+          </div>`;
+      } catch (e2) {}
+    });
+  }
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
   <title>FLOW Analytics Report — ${dateStr}</title>
@@ -12301,7 +12372,8 @@ function downloadAnalyticsReport() {
   </body></html>`;
 
   const blob = new Blob([html], {type:'text/html'});
-  _flowSaveOrShareBlob(blob, `FLOW_Analytics_${now.toISOString().slice(0,10)}.html`);
+  await _flowSaveOrShareBlob(blob, `FLOW_Analytics_${now.toISOString().slice(0,10)}.html`);
+  if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
 }
 function downloadChecklist() {
   try {
