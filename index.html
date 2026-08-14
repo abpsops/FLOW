@@ -2179,6 +2179,15 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
       </div>
     </div>
   </div>
+
+  <!-- Monthly Quantity — Jan–Jul seeded from historical records, Aug onward
+       computed live from the same data the Monthly Report uses -->
+  <div class="chart-card" style="margin-top:16px">
+    <div class="chart-title">Bunker Quantity — FY26</div>
+    <div class="chart-subtitle" id="dash-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied — Jan–Jul from records, Aug onward live from Monthly Report</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="dash-monthly-qty-summary"></div>
+    <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-dashboard"></canvas></div>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════════
@@ -2644,6 +2653,15 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
       <div class="chart-subtitle">Vessels called per port this month (FUJ, KFK, OMAN) — from saved records</div>
       <div class="chart-wrap-lg"><canvas id="chart-supply-freq"></canvas></div>
     </div>
+  </div>
+
+  <!-- Bunker Quantity FY26 — bar chart version of the Dashboard's line chart,
+       same underlying data (seeded Jan–Jul, live Aug onward) -->
+  <div class="chart-card" style="margin-bottom:24px">
+    <div class="chart-title">Bunker Quantity — FY26</div>
+    <div class="chart-subtitle" id="rep-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied — Jan–Jul from records, Aug onward live from Monthly Report</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="rep-monthly-qty-summary"></div>
+    <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-analytics"></canvas></div>
   </div>
 
   <!-- Records table preview -->
@@ -4342,6 +4360,8 @@ function renderDashCharts(records, vessels) {
     }
     _buildFuelDonut('fuel-dist-distributed', 'chart-fuel-dist-distributed', distV, distM);
     _buildFuelDonut('fuel-dist-planned',     'chart-fuel-dist-planned',     planV, planM);
+    // Bunker Quantity FY26 line chart — Jan–Jul seeded, Aug onward live
+    renderMonthlyQuantityChart('chart-monthly-qty-dashboard', 'line', 'dash-monthly-qty-summary', 'dash-monthly-qty-subtitle');
   }
 }
 
@@ -4523,6 +4543,10 @@ function renderReportCharts(records) {
       }
     });
   }
+
+  // Bunker Quantity FY26 bar chart — same series as the Dashboard's line
+  // chart (Jan–Jul seeded, Aug onward live from getMonthlyRows)
+  renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
 
   // Barge Performance — grouped bar per barge (VLSFO + MGO)
   {
@@ -7604,6 +7628,124 @@ function fmtMT(n) {
   n = parseFloat(n) || 0;
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   BUNKER QUANTITY — FY26 (Dashboard line chart + Analytics bar chart)
+   Jan–Jul 2026 are historical totals supplied directly by the user (FLOW
+   wasn't tracking deliveries before August 2026, so there's no live record
+   to compute those from). From August onward, each month is computed live
+   from getMonthlyRows() — the SAME data source the Monthly Report uses —
+   so this chart always matches the Monthly Report automatically, with
+   zero manual upkeep required going forward.
+   ═══════════════════════════════════════════════════════════════════ */
+const FY26_SEED_MONTHLY_QTY = {
+  0: { fo: 25805.705, mgo: 2872.832 },  // January
+  1: { fo: 32249.945, mgo: 1830.057 },  // February
+  2: { fo: 9508.502,  mgo: 2129.352 },  // March
+  3: { fo: 5516.713,  mgo: 26.149   },  // April
+  4: { fo: 4048.429,  mgo: 805.770  },  // May
+  5: { fo: 4362.039,  mgo: 428.486  },  // June
+  6: { fo: 11467.282, mgo: 1575.699 }   // July
+};
+const FY26_LIVE_FROM_MONTH = 7; // August (0-indexed) — first month computed live, not seeded
+
+function getMonthlyQuantitySeries(year) {
+  year = year || new Date().getFullYear();
+  const out = [];
+  for (let m = 0; m < 12; m++) {
+    if (m < FY26_LIVE_FROM_MONTH && FY26_SEED_MONTHLY_QTY[m]) {
+      out.push({ month: m, fo: FY26_SEED_MONTHLY_QTY[m].fo, mgo: FY26_SEED_MONTHLY_QTY[m].mgo, live: false });
+    } else {
+      const rows = (typeof getMonthlyRows === 'function') ? getMonthlyRows(m, year) : [];
+      const fo = rows.reduce((s, r) => s + (r.vQ || 0), 0);
+      const mgo = rows.reduce((s, r) => s + (r.mQ || 0), 0);
+      out.push({ month: m, fo, mgo, live: true });
+    }
+  }
+  return out;
+}
+
+// Renders either the Dashboard's line chart or the Analytics bar chart from
+// the exact same series/summary — `type` is 'line' or 'bar'.
+function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas || typeof Chart === 'undefined') return;
+
+  const series = getMonthlyQuantitySeries(2026);
+  const labels = series.map(s => MO[s.month]);
+  const foData = series.map(s => s.fo);
+  const mgoData = series.map(s => s.mgo);
+  const totalFO = foData.reduce((a, b) => a + b, 0);
+  const totalMGO = mgoData.reduce((a, b) => a + b, 0);
+  const grandTotal = totalFO + totalMGO;
+  const liveMonthsCount = series.filter(s => s.live && (s.fo || s.mgo)).length;
+
+  const summaryEl = summaryElId && document.getElementById(summaryElId);
+  if (summaryEl) {
+    summaryEl.innerHTML = `
+      <div style="background:var(--fuel-v-bg,rgba(37,99,235,.08));border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Total FO</div>
+        <div style="font-size:16px;font-weight:700;color:var(--fuel-v)">${fmtMT(totalFO)}</div>
+        <div style="font-size:10px;color:var(--muted)">Metric Tons</div>
+      </div>
+      <div style="background:var(--fuel-m-bg,rgba(249,115,22,.08));border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Total MGO</div>
+        <div style="font-size:16px;font-weight:700;color:var(--fuel-m)">${fmtMT(totalMGO)}</div>
+        <div style="font-size:10px;color:var(--muted)">Metric Tons</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Grand Total</div>
+        <div style="font-size:16px;font-weight:700;color:var(--ink)">${fmtMT(grandTotal)}</div>
+        <div style="font-size:10px;color:var(--muted)">Metric Tons</div>
+      </div>
+      <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Live Months</div>
+        <div style="font-size:16px;font-weight:700;color:var(--ink)">${liveMonthsCount}</div>
+        <div style="font-size:10px;color:var(--muted)">Aug onward</div>
+      </div>`;
+  }
+  const subtitleEl = subtitleElId && document.getElementById(subtitleElId);
+  if (subtitleEl) {
+    subtitleEl.textContent = `Jan–Jul from historical records · Aug onward computed live from Monthly Report · Grand total so far: ${fmtMT(grandTotal)} MT`;
+  }
+
+  const isLine = type === 'line';
+  if (_chartInstances[canvasId]) _chartInstances[canvasId].destroy();
+  _chartInstances[canvasId] = new Chart(canvas, {
+    type: type,
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'FO / VLSFO (MT)', data: foData,
+          borderColor: 'rgba(37,99,235,1)',
+          backgroundColor: isLine ? 'rgba(37,99,235,.14)' : 'rgba(37,99,235,.8)',
+          fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
+          borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
+        },
+        {
+          label: 'MGO / LSMGO (MT)', data: mgoData,
+          borderColor: 'rgba(249,115,22,1)',
+          backgroundColor: isLine ? 'rgba(249,115,22,.14)' : 'rgba(249,115,22,.75)',
+          fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
+          borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
+        }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false, interaction: { mode: 'index' },
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11, family: 'DM Sans' }, boxWidth: 10, padding: 12, color: _chartTextColor() } },
+        tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmtMT(c.parsed.y)} MT` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 10, family: 'DM Mono' }, color: _chartTextColor() } },
+        y: { grid: { color: Chart.defaults.borderColor }, ticks: { font: { size: 10, family: 'DM Mono' }, color: _chartTextColor(), callback: v => fmtMT(v) + ' MT' } }
+      }
+    }
+  });
+}
+
 function fmtShort(d) { if (!d) return '—'; return `${d.getDate()} ${MO[d.getMonth()]}`; }
 function durStr(h) { const hh = Math.floor(h), mm = Math.round((h-hh)*60); return mm > 0 ? `${hh}h ${mm}m` : `${hh}h`; }
 function addHrs(d,h) {
