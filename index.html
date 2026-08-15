@@ -12270,74 +12270,72 @@ async function downloadAnalyticsReport() {
   ];
 
   let chartsHtml = '';
+  let ChartDataLabelsPlugin = null;
   try {
-    await _loadChartDataLabels();
-    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
-      Chart.register(ChartDataLabels);
-    }
-
-    for (const { canvasId, instKey, title } of chartMap) {
-      const chart = _chartInstances[instKey];
-      if (!chart) continue;
-
-      // Save exactly what we're about to change, so it can be restored
-      // afterward — the LIVE on-screen chart must look identical to how
-      // it did before export once this finishes.
-      const origDPR = chart.options.devicePixelRatio;
-      const origPlugins = chart.options.plugins || {};
-      const origDatalabels = origPlugins.datalabels;
-
-      try {
-        // High resolution: render into a much denser backing canvas while
-        // the on-screen CSS size stays the same, so toDataURL() captures
-        // far more actual pixels — this is what fixes the blurry export.
-        chart.options.devicePixelRatio = 3;
-        // Exact numbers directly on the chart — necessary because tooltips
-        // (hover-only) don't exist in a static exported image at all.
-        chart.options.plugins = Object.assign({}, origPlugins, {
-          datalabels: {
-            color: (ctx) => (chart.config.type === 'line') ? (ctx.datasetIndex === 0 ? 'rgba(37,99,235,1)' : 'rgba(249,115,22,1)') : '#1a2332',
-            anchor: chart.config.type === 'line' ? 'end' : 'end',
-            align: chart.config.type === 'line' ? 'top' : 'end',
-            offset: 4,
-            font: { size: 10, family: 'DM Mono, monospace', weight: '700' },
-            formatter: (value) => (typeof value === 'number' && value !== 0) ? fmtMT(value) : ''
-          }
-        });
-        chart.resize();
-        chart.update('none');
-
-        const img = chart.canvas.toDataURL('image/png', 1.0);
-        chartsHtml += `
-          <div style="margin-bottom:32px;page-break-inside:avoid">
-            <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${title}</div>
-            <img src="${img}" style="width:100%;max-width:900px;border:1px solid #E0E0E0;border-radius:6px" />
-          </div>`;
-      } finally {
-        // Always restore, even if capture failed mid-way — never leave the
-        // live in-app chart in the temporary export state.
-        chart.options.devicePixelRatio = origDPR;
-        chart.options.plugins = Object.assign({}, origPlugins, { datalabels: origDatalabels });
-        chart.resize();
-        chart.update('none');
-      }
-    }
+    ChartDataLabelsPlugin = await _loadChartDataLabels();
   } catch (e) {
-    console.warn('High-res chart export failed, falling back to on-screen resolution:', e.message);
-    // Fallback: still produce a report, just at normal (lower) resolution,
-    // rather than failing the whole download over the plugin not loading.
-    chartMap.forEach(({ canvasId, title }) => {
-      const canvas = document.getElementById(canvasId);
-      if (!canvas) return;
-      try {
-        const img = canvas.toDataURL('image/png', 1.0);
-        chartsHtml += `
-          <div style="margin-bottom:32px;page-break-inside:avoid">
-            <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${title}</div>
-            <img src="${img}" style="width:100%;max-width:900px;border:1px solid #E0E0E0;border-radius:6px" />
-          </div>`;
-      } catch (e2) {}
-    });
+    console.warn('Datalabels plugin failed to load — export will still work, just without printed numbers:', e.message);
+  }
+  // IMPORTANT: never call Chart.register(ChartDataLabelsPlugin) here — that
+  // registers it GLOBALLY, silently turning on permanent number-overlays
+  // on every chart in the whole app (including ones this function never
+  // touches, like the dashboard donuts). Instead it's passed directly into
+  // each TEMPORARY chart's own `plugins:` array below, scoping it to only
+  // that one export-only chart instance.
+
+  for (const { canvasId, instKey, title } of chartMap) {
+    const liveChart = _chartInstances[instKey];
+    if (!liveChart) continue;
+
+    // Build a completely separate, detached, high-resolution chart from a
+    // clone of the live chart's data — the live chart itself is NEVER
+    // touched, so there's no restore step needed and no risk of leaving it
+    // broken (which is what happened when this used to mutate it in place).
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = 1800;
+    tempCanvas.height = 900;
+    let tempChart = null;
+    try {
+      const clonedData = JSON.parse(JSON.stringify(liveChart.data));
+      const isLine = liveChart.config.type === 'line';
+      const isDonut = liveChart.config.type === 'doughnut' || liveChart.config.type === 'pie';
+
+      tempChart = new Chart(tempCanvas, {
+        type: liveChart.config.type,
+        data: clonedData,
+        plugins: ChartDataLabelsPlugin ? [ChartDataLabelsPlugin] : [],
+        options: {
+          responsive: false, animation: false, devicePixelRatio: 1, // canvas is already explicitly high-res
+          plugins: {
+            legend: { display: true, position: 'top', labels: { font: { size: 20, family: 'DM Sans' }, boxWidth: 20, padding: 20, color: '#1a2332' } },
+            datalabels: !ChartDataLabelsPlugin ? { display: false } : (isDonut ? {
+              color: '#1a2332', font: { size: 18, family: 'DM Mono, monospace', weight: '700' },
+              formatter: (value) => value ? fmtMT(value) : ''
+            } : {
+              color: isLine ? (ctx => ctx.datasetIndex === 0 ? 'rgba(37,99,235,1)' : 'rgba(249,115,22,1)') : '#1a2332',
+              anchor: 'end', align: isLine ? 'top' : 'end', offset: 6,
+              font: { size: 16, family: 'DM Mono, monospace', weight: '700' },
+              formatter: (value) => (typeof value === 'number' && value !== 0) ? fmtMT(value) : ''
+            })
+          },
+          scales: isDonut ? undefined : {
+            x: { grid: { display: false }, ticks: { font: { size: 16, family: 'DM Mono' }, color: '#1a2332' } },
+            y: { grid: { color: '#E0E0E0' }, ticks: { font: { size: 16, family: 'DM Mono' }, color: '#1a2332', callback: v => fmtMT(v) + ' MT' } }
+          }
+        }
+      });
+
+      const img = tempCanvas.toDataURL('image/png', 1.0);
+      chartsHtml += `
+        <div style="margin-bottom:32px;page-break-inside:avoid">
+          <div style="font-size:11px;font-weight:700;color:var(--ink);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;border-left:3px solid #1565C0;padding-left:8px">${title}</div>
+          <img src="${img}" style="width:100%;max-width:900px;border:1px solid #E0E0E0;border-radius:6px" />
+        </div>`;
+    } catch (e) {
+      console.warn(`Could not render high-res export for "${title}":`, e.message);
+    } finally {
+      if (tempChart) tempChart.destroy(); // temp chart + detached canvas are discarded either way — nothing here ever touched the live chart
+    }
   }
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
