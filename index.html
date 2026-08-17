@@ -388,6 +388,14 @@ input,select,textarea{font-family:DM Sans,sans-serif}
 }
 .theme-toggle-btn:hover{background:rgba(255,255,255,.24);border-color:#fff;transform:translateY(-1px)}
 
+.topbar-menu-item{
+  display:flex;align-items:center;gap:9px;width:100%;box-sizing:border-box;
+  padding:9px 10px;background:none;border:none;border-radius:7px;
+  font-size:12.5px;font-weight:600;font-family:'DM Sans',sans-serif;
+  color:var(--ink);cursor:pointer;text-align:left;white-space:nowrap;transition:background .12s;
+}
+.topbar-menu-item:hover{background:var(--surface2)}
+
 /* ══════════��═════════════════════════════
    LAYOUT
 ════════════════════════════════════════ */
@@ -1889,9 +1897,6 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
     <button class="sync-btn" onclick="forcePull()" id="sync-pull-btn">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><polyline points="17 13 12 18 7 13"/><line x1="12" y1="6" x2="12" y2="18"/></svg>Pull
     </button>
-    <button class="sync-btn" onclick="operatorLogout()" id="sync-logout-btn" style="opacity:.75" title="Log out">
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>Log Out
-    </button>
   </div>
 </div>
 
@@ -1920,18 +1925,30 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   </div>
   <div class="topbar-spacer"></div>
   <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
-    <button id="topbar-fullreset-btn" onclick="confirmFullReset()" style="display:flex;align-items:center;gap:6px;padding:6px 13px;background:var(--red-lt);border:1.5px solid var(--red-bd);color:var(--red);border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:DM Sans,sans-serif;white-space:nowrap" onmouseover="this.style.background='var(--red)';this.style.color='#fff'" onmouseout="this.style.background='var(--red-lt)';this.style.color='var(--red)'">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
-      Full Reset
-    </button>
-    <button id="topbar-wipecloud-btn" onclick="wipeSupabaseWorkspace()" title="Delete the Supabase cloud row so all devices start clean — without losing current session data" style="display:flex;align-items:center;gap:6px;padding:6px 13px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:DM Sans,sans-serif;white-space:nowrap" onmouseover="this.style.background='rgba(255,255,255,.28)';this.style.borderColor='#fff';this.style.color='#fff'" onmouseout="this.style.background='rgba(255,255,255,.12)';this.style.borderColor='rgba(255,255,255,.4)';this.style.color='#fff'">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      Wipe Cloud
-    </button>
-    <button id="topbar-clearall-btn" onclick="confirmNuclearClear()" style="display:flex;align-items:center;gap:6px;padding:6px 13px;background:var(--amber-lt);border:1.5px solid var(--amber-bd);color:var(--amber);border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;font-family:DM Sans,sans-serif;white-space:nowrap" onmouseover="this.style.background='var(--amber)';this.style.color='#fff'" onmouseout="this.style.background='var(--amber-lt)';this.style.color='var(--amber)'">
-      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-      Clear All Data
-    </button>
+    <div id="topbar-menu-wrap" style="position:relative">
+      <button id="topbar-menu-btn" onclick="toggleTopbarMenu(event)" aria-label="More actions" title="More actions" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.12)'">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+      </button>
+      <div id="topbar-menu-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lg);z-index:9900;overflow:hidden;padding:6px">
+        <button id="topbar-fullreset-btn" onclick="closeTopbarMenu();confirmFullReset()" class="topbar-menu-item" style="color:var(--red)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
+          Full Reset
+        </button>
+        <button id="topbar-wipecloud-btn" onclick="closeTopbarMenu();wipeSupabaseWorkspace()" title="Delete the Supabase cloud row so all devices start clean — without losing current session data" class="topbar-menu-item">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Wipe Cloud
+        </button>
+        <button id="topbar-clearall-btn" onclick="closeTopbarMenu();confirmNuclearClear()" class="topbar-menu-item" style="color:var(--amber)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+          Clear All Data
+        </button>
+        <div style="height:1px;background:var(--border);margin:6px 4px"></div>
+        <button id="topbar-logout-btn" onclick="closeTopbarMenu();operatorLogout()" class="topbar-menu-item">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          Log Out
+        </button>
+      </div>
+    </div>
     <button id="theme-toggle-btn" onclick="toggleColorTheme()" aria-label="Toggle light / dark theme" title="Toggle light / dark theme" class="theme-toggle-btn">
       <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.94" y2="5.94"/><line x1="18.06" y1="18.06" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.94" y2="18.06"/><line x1="18.06" y1="5.94" x2="19.78" y2="4.22"/></svg>
       <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -3800,6 +3817,22 @@ function showPage(id) {
   if (id === 'alerts')       refreshAlertsPage();
 }
 
+/* ─── Topbar overflow menu (Full Reset / Wipe Cloud / Clear All Data / Log Out) ─── */
+function toggleTopbarMenu(evt) {
+  if (evt) evt.stopPropagation();
+  const dd = document.getElementById('topbar-menu-dropdown');
+  if (!dd) return;
+  dd.style.display = (dd.style.display === 'none' || !dd.style.display) ? 'block' : 'none';
+}
+function closeTopbarMenu() {
+  const dd = document.getElementById('topbar-menu-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+document.addEventListener('click', function(evt) {
+  const wrap = document.getElementById('topbar-menu-wrap');
+  if (wrap && !wrap.contains(evt.target)) closeTopbarMenu();
+});
+
 function toggleSidebar() {
   // Narrow phone viewports keep the existing slide-in overlay drawer.
   // Anything wider (including a phone's "Desktop site" mode, which reports
@@ -4989,13 +5022,13 @@ function _applyRoleUIRestrictions() {
 
   // Small visible indicator so a trader (and anyone glancing at their
   // screen) can tell this is a restricted view, not a bug.
-  const logoutBtn = document.getElementById('sync-logout-btn');
-  if (logoutBtn && !document.getElementById('role-badge')) {
+  const menuBtn = document.getElementById('topbar-menu-btn');
+  if (menuBtn && !document.getElementById('role-badge')) {
     const badge = document.createElement('span');
     badge.id = 'role-badge';
     badge.textContent = 'Trader view';
     badge.style.cssText = 'font-size:10.5px;font-weight:700;letter-spacing:.03em;color:#fff;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.4);border-radius:5px;padding:3px 8px;margin-right:6px;white-space:nowrap';
-    logoutBtn.parentNode.insertBefore(badge, logoutBtn);
+    menuBtn.parentNode.parentNode.insertBefore(badge, menuBtn.parentNode);
   }
 }
 </script>
