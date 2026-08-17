@@ -130,6 +130,7 @@ function _chartTextColor() {
   --pg-bargefleet:   #A17A22;
   --pg-availability: #AD611C;
   --pg-agents:       #8A6D2E;
+  --pg-weather:      #0E7C9E;
   --pg-reports:      #B4502F;
   --pg-checklist:    #A03A54;
   --pg-records:      #8B4230;
@@ -482,6 +483,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 #page-bargefleet .page-title{color:var(--pg-bargefleet)}
 #page-availability .page-title{color:var(--pg-availability)}
 #page-agents .page-title{color:var(--pg-agents)}
+#page-weather .page-title{color:var(--pg-weather)}
 #page-reports .page-title{color:var(--pg-reports)}
 #page-checklist .page-title{color:var(--pg-checklist)}
 #page-records .page-title{color:var(--pg-records)}
@@ -1936,6 +1938,10 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
       <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.94" y2="5.94"/><line x1="18.06" y1="18.06" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.94" y2="18.06"/><line x1="18.06" y1="5.94" x2="19.78" y2="4.22"/></svg>
       <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
     </button>
+    <button id="topbar-weather-chip" onclick="showPage('weather')" title="Click for global weather search" style="display:flex;align-items:center;gap:6px;padding:6px 11px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.25);border-radius:7px;cursor:pointer;font-family:'DM Sans',sans-serif;color:#fff">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
+      <span id="topbar-weather-text" style="font-size:11.5px;font-weight:600;white-space:nowrap">Weather —</span>
+    </button>
     <div id="live-clock" style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;padding-left:8px;border-left:1px solid rgba(255,255,255,.3)">
       <span id="live-clock-time" style="font-size:15px;font-weight:500;color:#fff;letter-spacing:.08em;font-family:'DM Mono',monospace;line-height:1">--:--:--</span>
       <span id="live-clock-date" style="font-size:9.5px;color:rgba(255,255,255,.78);letter-spacing:.06em;font-family:'DM Mono',monospace;line-height:1;text-transform:uppercase">-- --- ---- · UAE</span>
@@ -1986,6 +1992,10 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   <a class="sidebar-item" onclick="showPage('agents')" id="nav-agents">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Agent Directory
+  </a>
+  <a class="sidebar-item" onclick="showPage('weather')" id="nav-weather">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"/></svg>
+    Weather
   </a>
 
   <div class="sidebar-divider"></div>
@@ -2979,6 +2989,39 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   </div>
 </div>
 
+<!-- ── Weather (global, any port/city) ── -->
+<div class="page" id="page-weather" data-section="planning">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Weather</div>
+      <div class="page-sub">Live weather for any port worldwide — powered by Weatherstack</div>
+    </div>
+  </div>
+
+  <div class="chart-card" style="margin-bottom:16px">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <input id="weather-search-input" type="text" placeholder="Search any port or city — e.g. Rotterdam, Singapore, Fujairah"
+        style="flex:1;min-width:220px;padding:10px 14px;border:none;box-shadow:var(--sh-in-xs);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;background:var(--surface);outline:none"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();searchWeather(this.value);}">
+      <button class="btn btn-primary btn-sm" onclick="searchWeather(document.getElementById('weather-search-input').value)">Search</button>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <span style="font-size:11px;color:var(--muted);align-self:center;margin-right:2px">Quick ports:</span>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Fujairah, UAE')">Fujairah</button>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Khorfakkan, UAE')">Khorfakkan</button>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Dubai, UAE')">Dubai</button>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Singapore')">Singapore</button>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Rotterdam, Netherlands')">Rotterdam</button>
+      <button class="btn btn-ghost btn-sm" onclick="searchWeather('Houston, USA')">Houston</button>
+    </div>
+  </div>
+
+  <div id="weather-result-wrap">
+    <div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Loading Fujairah weather…</div>
+  </div>
+</div>
+
+
 <!-- ── Add/Edit Agent Modal ── -->
 <div id="agent-modal" style="display:none;position:fixed;inset:0;z-index:900;background:rgba(11,23,38,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center">
   <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-xl);padding:1.75rem 2rem;width:520px;max-width:95vw;max-height:90vh;overflow-y:auto;animation:fadeUp .2s ease">
@@ -3744,6 +3787,7 @@ const PAGE_META = {
   bargefleet:   { title: 'Barge Fleet Configuration',   sub: 'Register barges, ROB, pump rates and operational parameters',               section: 'planning' },
   availability: { title: 'Availability Check',          sub: 'Next Supply Availability — multi-barge checker with split recommendation', section: 'planning' },
   agents:       { title: 'Agent Directory',             sub: 'Fujairah shipping agents — company names & email contacts',                section: 'planning' },
+  weather:      { title: 'Weather',                     sub: 'Live weather for any port worldwide — powered by Weatherstack',            section: 'planning' },
   reports:      { title: 'Reports & Analytics',         sub: 'Supply performance, fuel volumes, barge utilisation',                      section: 'reports' },
   checklist:    { title: 'Supply Operations Checklist', sub: 'Mark vessels supplied, enter actuals, save records',                        section: 'reports' },
   records:      { title: 'Saved Supply Records',        sub: 'All completed supply operations — historical log',                          section: 'reports' },
@@ -3798,6 +3842,7 @@ function showPage(id) {
   if (id === 'deliverylog')  renderDeliveryLog();
   if (id === 'agents')       renderAgentDirectory();
   if (id === 'trash')        renderTrashBin();
+  if (id === 'weather')      searchWeather('Fujairah, UAE');
   if (id === 'alerts')       refreshAlertsPage();
 }
 
@@ -4885,6 +4930,7 @@ async function _startAppAfterLogin() {
   _abpsAppStarted = true;
   await _fetchAndApplyUserRole();
   if (typeof init === 'function') init();
+  if (typeof refreshTopbarWeather === 'function') refreshTopbarWeather();
 }
 
 // If this device already has a valid Supabase session, skip the gate entirely
@@ -7624,6 +7670,94 @@ function fmt24(d) { if (!(d instanceof Date) || isNaN(d.getTime())) return '—'
 // source precision (e.g. 1873.176) instead of Math.round()'ing it away, but
 // doesn't pad clean whole numbers with fake .000. Used anywhere a figure is
 // meant to be an auditable report value rather than a rounded UI display.
+/* ═══════════════════════════════════════════════════════════════════════
+   WEATHER — global search (Weatherstack, via /api/weather relay)
+   ═══════════════════════════════════════════════════════════════════ */
+async function searchWeather(query) {
+  query = (query || '').trim();
+  const wrap = document.getElementById('weather-result-wrap');
+  if (!query) { if (wrap) wrap.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Type a port or city to search.</div>`; return; }
+
+  if (wrap) wrap.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted);font-size:13px">Loading weather for ${query}…</div>`;
+
+  try {
+    const resp = await fetch('/api/weather?query=' + encodeURIComponent(query));
+    const data = await resp.json();
+
+    if (!resp.ok || data.error) {
+      if (wrap) wrap.innerHTML = `<div class="chart-card" style="text-align:center;padding:32px;color:var(--red)">${(data && data.error) || 'Could not fetch weather for that location.'}</div>`;
+      return;
+    }
+
+    const loc = data.location || {};
+    const cur = data.current || {};
+    const iconUrl = (cur.weather_icons && cur.weather_icons[0]) || '';
+
+    if (wrap) wrap.innerHTML = `
+      <div class="chart-card">
+        <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+          ${iconUrl ? `<img src="${iconUrl}" alt="" style="width:64px;height:64px">` : ''}
+          <div style="flex:1;min-width:200px">
+            <div style="font-size:18px;font-weight:700;color:var(--ink)">${loc.name || query}${loc.country ? ', ' + loc.country : ''}</div>
+            <div style="font-size:12px;color:var(--muted)">Local time: ${loc.localtime || '—'}</div>
+            <div style="font-size:13px;color:var(--sub);margin-top:4px">${(cur.weather_descriptions && cur.weather_descriptions[0]) || '—'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:36px;font-weight:700;color:var(--pg-weather)">${cur.temperature !== undefined ? cur.temperature + '°C' : '—'}</div>
+            <div style="font-size:11px;color:var(--muted)">Feels like ${cur.feelslike !== undefined ? cur.feelslike + '°C' : '—'}</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;margin-top:20px">
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Wind</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.wind_speed !== undefined ? cur.wind_speed + ' km/h' : '—'}</div>
+            <div style="font-size:10px;color:var(--muted)">${cur.wind_dir || ''}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Humidity</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.humidity !== undefined ? cur.humidity + '%' : '—'}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Visibility</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.visibility !== undefined ? cur.visibility + ' km' : '—'}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Pressure</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.pressure !== undefined ? cur.pressure + ' mb' : '—'}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">UV Index</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.uv_index !== undefined ? cur.uv_index : '—'}</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
+            <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">Cloud Cover</div>
+            <div style="font-size:14px;font-weight:700;color:var(--ink)">${cur.cloudcover !== undefined ? cur.cloudcover + '%' : '—'}</div>
+          </div>
+        </div>
+      </div>`;
+  } catch (e) {
+    if (wrap) wrap.innerHTML = `<div class="chart-card" style="text-align:center;padding:32px;color:var(--red)">Could not reach the weather service: ${e.message}</div>`;
+  }
+}
+
+// Compact topbar chip — Fujairah by default (your primary port), refreshed
+// once when the app loads. Click it to jump to the full Weather page.
+async function refreshTopbarWeather() {
+  const el = document.getElementById('topbar-weather-text');
+  if (!el) return;
+  try {
+    const resp = await fetch('/api/weather?query=' + encodeURIComponent('Fujairah, UAE'));
+    const data = await resp.json();
+    if (resp.ok && !data.error && data.current) {
+      el.textContent = `Fujairah ${data.current.temperature}°C · ${(data.current.weather_descriptions && data.current.weather_descriptions[0]) || ''}`;
+    } else {
+      el.textContent = 'Weather —';
+    }
+  } catch (e) {
+    el.textContent = 'Weather —';
+  }
+}
+
 function fmtMT(n) {
   n = parseFloat(n) || 0;
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
