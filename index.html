@@ -1811,8 +1811,8 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
             </g>
 
             <circle cx="320" cy="230" r="55" fill="#04101C" style="cursor:pointer" onclick="flowWelcomeGo('dashboard')"/>
-            <foreignObject x="255" y="165" width="130" height="130" style="pointer-events:none">
-              <canvas id="flow-welcome-orb-canvas" width="130" height="130" xmlns="http://www.w3.org/1999/xhtml"></canvas>
+            <foreignObject x="255" y="165" width="130" height="130">
+              <canvas id="flow-welcome-orb-canvas" width="130" height="130" xmlns="http://www.w3.org/1999/xhtml" style="cursor:pointer"></canvas>
             </foreignObject>
 
             <g id="flow-contact-01" class="flow-radar-contact" onclick="flowWelcomeGo('nominations')">
@@ -1954,6 +1954,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 // dismissed — leaving it running forever in the background would waste
 // CPU/battery on every device for a screen the person already left.
 let _flowWelcomeOrbRAF = null;
+let _flowWelcomeOrbListenersBound = false;
 function _flowWelcomeStartOrb() {
   const c = document.getElementById('flow-welcome-orb-canvas');
   if (!c || _flowWelcomeOrbRAF) return;
@@ -1967,25 +1968,116 @@ function _flowWelcomeStartOrb() {
     const theta = Math.sqrt(n * Math.PI) * Math.asin(y);
     pts.push({ x: Math.cos(theta) * r, y: y, z: Math.sin(theta) * r });
   }
+
+  // ── Reactive state — mirrors the old welcome-sphere: cursor tilt,
+  // flick-spin momentum, and a click shockwave ring. ──
   let rot = 0;
+  let tiltX = 0, tiltY = 0, targetTiltX = 0, targetTiltY = 0;
+  let spinV = 0;          // extra angular velocity from a mouse/touch flick
+  let hovering = false;
+  let prevPX = null, prevPY = null;
+  let ripples = []; // [{age,maxAge}]
+
+  function pointerToTilt(clientX, clientY) {
+    const rect = c.getBoundingClientRect();
+    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;   // -1..1
+    const ny = ((clientY - rect.top) / rect.height) * 2 - 1;   // -1..1
+    targetTiltY = Math.max(-1, Math.min(1, nx)) * 0.9;
+    targetTiltX = Math.max(-1, Math.min(1, -ny)) * 0.7;
+  }
+
+  function onPointerMove(e) {
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    if (prevPX !== null) {
+      spinV += (clientX - prevPX) * 0.00015;
+    }
+    prevPX = clientX; prevPY = clientY;
+    hovering = true;
+    pointerToTilt(clientX, clientY);
+  }
+  function onPointerLeave() {
+    hovering = false;
+    prevPX = prevPY = null;
+    targetTiltX = 0; targetTiltY = 0;
+  }
+  function onPointerDown() {
+    ripples.push({ age: 0, maxAge: 34 });
+  }
+
+  if (!_flowWelcomeOrbListenersBound) {
+    c.addEventListener('mousemove', onPointerMove);
+    c.addEventListener('mouseleave', onPointerLeave);
+    c.addEventListener('touchmove', onPointerMove, { passive: true });
+    c.addEventListener('touchend', onPointerLeave);
+    c.addEventListener('mousedown', onPointerDown);
+    c.addEventListener('touchstart', onPointerDown, { passive: false });
+    c.addEventListener('click', () => flowWelcomeGo('dashboard'));
+    _flowWelcomeOrbListenersBound = true;
+  }
+
   function draw() {
     ctx.clearRect(0, 0, W, H);
-    rot += 0.006;
+
+    // Base auto-rotation, sped up slightly while a flick is decaying
+    spinV *= 0.94;
+    rot += 0.006 + spinV;
+    tiltX += (targetTiltX - tiltX) * 0.08;
+    tiltY += (targetTiltY - tiltY) * 0.08;
+
+    const cosR = Math.cos(rot), sinR = Math.sin(rot);
+    const cosTX = Math.cos(tiltX), sinTX = Math.sin(tiltX);
+
     const sorted = pts.map(p => {
-      const x = p.x * Math.cos(rot) - p.z * Math.sin(rot);
-      const z = p.x * Math.sin(rot) + p.z * Math.cos(rot);
-      return { x, y: p.y, z };
+      // Spin around Y (auto-rotation + flick)
+      let x = p.x * cosR - p.z * sinR;
+      let z = p.x * sinR + p.z * cosR;
+      let y = p.y;
+      // Cursor tilt around X
+      const y2 = y * cosTX - z * sinTX;
+      const z2 = y * sinTX + z * cosTX;
+      y = y2; z = z2;
+      // Cursor tilt around Y (yaw)
+      const cosTY = Math.cos(tiltY), sinTY = Math.sin(tiltY);
+      const x2 = x * cosTY - z * sinTY;
+      const z3 = x * sinTY + z * cosTY;
+      x = x2; z = z3;
+      return { x, y, z };
     }).sort((a, b) => a.z - b.z);
+
     for (const p of sorted) {
       const scale = (p.z + 1.6) / 2.6;
-      const sx = cx + p.x * R, sy = cy + p.y * R;
-      const size = scale * 1.4;
-      const alpha = 0.2 + scale * 0.65;
+      let sx = cx + p.x * R, sy = cy + p.y * R;
+      let size = scale * 1.4;
+      let alpha = 0.2 + scale * 0.65;
+
+      // Ripple impulse: nudges nearby dots outward briefly
+      for (const rp of ripples) {
+        const ringR = (rp.age / rp.maxAge) * 60;
+        const dx = sx - cx, dy = sy - cy;
+        const d = Math.sqrt(dx * dx + dy * dy) || 0.01;
+        const diff = Math.abs(d - ringR);
+        if (diff < 14) {
+          const push = (1 - diff / 14) * (1 - rp.age / rp.maxAge) * 5;
+          sx += (dx / d) * push;
+          sy += (dy / d) * push;
+          alpha = Math.min(1, alpha + (1 - rp.age / rp.maxAge) * 0.4);
+        }
+      }
+
       ctx.beginPath();
       ctx.arc(sx, sy, size, 0, Math.PI * 2);
-      ctx.fillStyle = `rgba(23,168,209,${alpha.toFixed(2)})`;
+      ctx.fillStyle = hovering
+        ? `rgba(127,216,238,${alpha.toFixed(2)})`
+        : `rgba(23,168,209,${alpha.toFixed(2)})`;
       ctx.fill();
     }
+
+    for (let i = ripples.length - 1; i >= 0; i--) {
+      ripples[i].age++;
+      if (ripples[i].age > ripples[i].maxAge) ripples.splice(i, 1);
+    }
+
     _flowWelcomeOrbRAF = requestAnimationFrame(draw);
   }
   draw();
