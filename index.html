@@ -1758,32 +1758,37 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
         <div id="flow-welcome-rule" style="height:1px;width:100%;margin-top:12px"></div>
       </div>
 
-      <!-- Paper boats on open water -->
-      <div style="flex:1;width:100%;position:relative;min-height:0">
-        <svg viewBox="0 0 1200 700" preserveAspectRatio="xMidYMid slice" style="position:absolute;inset:0;width:100%;height:100%">
+      <!-- Paper boats on open water — each boat is a small self-contained
+           SVG positioned by percentage, so nothing gets cropped off-screen
+           regardless of device aspect ratio (the old shared-viewBox +
+           "slice" approach cut boats off on tall phone screens). -->
+      <div style="flex:1;width:100%;position:relative;min-height:0;overflow:hidden">
 
-          <g id="flow-welcome-waves" opacity="0.45">
-            <path class="flow-wave-line" d="M0,160 Q40,150 80,160 T160,160 T240,160 T320,160 T400,160 T480,160 T560,160 T640,160 T720,160 T800,160 T880,160 T960,160 T1040,160 T1120,160 T1200,160" fill="none" stroke-width="1"/>
-            <path class="flow-wave-line" d="M0,370 Q40,360 80,370 T160,370 T240,370 T320,370 T400,370 T480,370 T560,370 T640,370 T720,370 T800,370 T880,370 T960,370 T1040,370 T1120,370 T1200,370" fill="none" stroke-width="1"/>
-            <path class="flow-wave-line" d="M0,540 Q40,530 80,540 T160,540 T240,540 T320,540 T400,540 T480,540 T560,540 T640,540 T720,540 T800,540 T880,540 T960,540 T1040,540 T1120,540 T1200,540" fill="none" stroke-width="1"/>
-          </g>
+        <svg viewBox="0 0 1200 40" preserveAspectRatio="none" style="position:absolute;left:0;top:16%;width:100%;height:26px"><path class="flow-wave-line" d="M0,20 Q30,10 60,20 T120,20 T180,20 T240,20 T300,20 T360,20 T420,20 T480,20 T540,20 T600,20 T660,20 T720,20 T780,20 T840,20 T900,20 T960,20 T1020,20 T1080,20 T1140,20 T1200,20" fill="none" stroke-width="1"/></svg>
+        <svg viewBox="0 0 1200 40" preserveAspectRatio="none" style="position:absolute;left:0;top:34%;width:100%;height:26px"><path class="flow-wave-line" d="M0,20 Q30,10 60,20 T120,20 T180,20 T240,20 T300,20 T360,20 T420,20 T480,20 T540,20 T600,20 T660,20 T720,20 T780,20 T840,20 T900,20 T960,20 T1020,20 T1080,20 T1140,20 T1200,20" fill="none" stroke-width="1"/></svg>
+        <svg viewBox="0 0 1200 40" preserveAspectRatio="none" style="position:absolute;left:0;top:52%;width:100%;height:26px"><path class="flow-wave-line" d="M0,20 Q30,10 60,20 T120,20 T180,20 T240,20 T300,20 T360,20 T420,20 T480,20 T540,20 T600,20 T660,20 T720,20 T780,20 T840,20 T900,20 T960,20 T1020,20 T1080,20 T1140,20 T1200,20" fill="none" stroke-width="1"/></svg>
+        <svg viewBox="0 0 1200 40" preserveAspectRatio="none" style="position:absolute;left:0;top:70%;width:100%;height:26px"><path class="flow-wave-line" d="M0,20 Q30,10 60,20 T120,20 T180,20 T240,20 T300,20 T360,20 T420,20 T480,20 T540,20 T600,20 T660,20 T720,20 T780,20 T840,20 T900,20 T960,20 T1020,20 T1080,20 T1140,20 T1200,20" fill="none" stroke-width="1"/></svg>
+        <svg viewBox="0 0 1200 40" preserveAspectRatio="none" style="position:absolute;left:0;top:88%;width:100%;height:26px"><path class="flow-wave-line" d="M0,20 Q30,10 60,20 T120,20 T180,20 T240,20 T300,20 T360,20 T420,20 T480,20 T540,20 T600,20 T660,20 T720,20 T780,20 T840,20 T900,20 T960,20 T1020,20 T1080,20 T1140,20 T1200,20" fill="none" stroke-width="1"/></svg>
 
-          <g id="flow-boat-a" style="transform-origin:260px 200px;animation:flowFloatA 9s ease-in-out infinite">
-            <path class="flow-boat-hull" d="M232,208 L288,208 L272,228 L248,228 Z"/>
-            <path class="flow-boat-sail" d="M260,208 L260,160 L296,208 Z"/>
-          </g>
+        <div class="flow-boat" style="position:absolute;top:6%;left:10%;width:50px;height:50px;transform-origin:50% 50%;animation:flowFloatA 9s ease-in-out infinite">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
+        <div class="flow-boat" style="position:absolute;top:18%;left:70%;width:38px;height:38px;transform-origin:50% 50%;animation:flowFloatB 10.5s ease-in-out infinite;animation-delay:-2s">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
+        <div class="flow-boat" style="position:absolute;top:32%;left:32%;width:44px;height:44px;transform-origin:50% 50%;animation:flowFloatA 11.5s ease-in-out infinite;animation-delay:-4s">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
+        <div class="flow-boat" style="position:absolute;top:48%;left:76%;width:56px;height:56px;transform-origin:50% 50%;animation:flowFloatB 9.5s ease-in-out infinite;animation-delay:-6s">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
+        <div class="flow-boat" style="position:absolute;top:64%;left:14%;width:40px;height:40px;transform-origin:50% 50%;animation:flowFloatA 10s ease-in-out infinite;animation-delay:-1s">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
+        <div class="flow-boat" style="position:absolute;top:78%;left:56%;width:46px;height:46px;transform-origin:50% 50%;animation:flowFloatB 12s ease-in-out infinite;animation-delay:-5s">
+          <svg viewBox="0 0 48 48" width="100%" height="100%"><path class="boat-hull" d="M10,30 L38,30 L32,40 L16,40 Z"/><path class="boat-sail" d="M24,30 L24,8 L40,30 Z"/></svg>
+        </div>
 
-          <g id="flow-boat-b" style="transform-origin:840px 380px;animation:flowFloatB 10.5s ease-in-out infinite;animation-delay:-3.5s">
-            <path class="flow-boat-hull" d="M806,388 L862,388 L846,408 L822,408 Z"/>
-            <path class="flow-boat-sail" d="M834,388 L834,340 L870,388 Z"/>
-          </g>
-
-          <g id="flow-boat-c" style="transform-origin:470px 540px;animation:flowFloatA 11.5s ease-in-out infinite;animation-delay:-6s">
-            <path class="flow-boat-hull" d="M436,548 L492,548 L476,568 L452,568 Z"/>
-            <path class="flow-boat-sail" d="M464,548 L464,500 L500,548 Z"/>
-          </g>
-
-        </svg>
       </div>
 
       <!-- CTA + footer -->
@@ -1807,16 +1812,20 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 // ── FLOW welcome screen: paper boats on open water ──────────────────
 // Palette follows the app's own light/dark theme (html[data-theme]),
 // so this screen always matches whatever theme the operator is in.
+// Each of the 6 boats gets its own accent color, echoing the range of
+// accent colors used across the app's own page headers/highlights.
 var FLOW_WELCOME_THEMES = {
   dark: {
     bg: '#0A1420', wordmark: 'rgba(214,224,234,.92)', rule: 'rgba(214,224,234,.14)',
-    wave: 'rgba(214,224,234,.22)', hull: '#5FC7E0', sail: '#7FD8EE',
+    wave: 'rgba(214,224,234,.22)',
+    boatColors: ['#5FC7E0', '#E0A542', '#8FA6D8', '#E08464', '#6FC49A', '#B893E0'],
     btnBorder: 'rgba(0,180,216,.45)', btnBg: 'rgba(0,180,216,.12)', btnText: '#5FC7E0',
     footer: 'rgba(214,224,234,.32)'
   },
   light: {
     bg: '#F7F4EE', wordmark: 'rgba(30,38,46,.9)', rule: 'rgba(30,38,46,.12)',
-    wave: 'rgba(30,42,51,.2)', hull: '#2C6E8E', sail: '#4A93AE',
+    wave: 'rgba(30,42,51,.2)',
+    boatColors: ['#2C6E8E', '#B5822A', '#4A5D8E', '#B5573A', '#2F7A54', '#7A5AA8'],
     btnBorder: 'rgba(20,90,120,.4)', btnBg: 'rgba(20,90,120,.08)', btnText: '#1E5A78',
     footer: 'rgba(30,38,46,.38)'
   }
@@ -1833,8 +1842,13 @@ function _flowWelcomeApplyTheme() {
   var rule = document.getElementById('flow-welcome-rule');
   if (rule) rule.style.background = t.rule;
   document.querySelectorAll('.flow-wave-line').forEach(function(p) { p.setAttribute('stroke', t.wave); });
-  document.querySelectorAll('.flow-boat-hull').forEach(function(p) { p.setAttribute('fill', t.hull); p.style.opacity = 0.95; });
-  document.querySelectorAll('.flow-boat-sail').forEach(function(p) { p.setAttribute('fill', t.sail); p.style.opacity = 0.75; });
+  document.querySelectorAll('.flow-boat').forEach(function(boat, i) {
+    var color = t.boatColors[i % t.boatColors.length];
+    var hull = boat.querySelector('.boat-hull');
+    var sail = boat.querySelector('.boat-sail');
+    if (hull) { hull.setAttribute('fill', color); hull.style.opacity = 0.95; }
+    if (sail) { sail.setAttribute('fill', color); sail.style.opacity = 0.65; }
+  });
   var btn = document.getElementById('flow-welcome-btn');
   if (btn) {
     btn.style.border = '1px solid ' + t.btnBorder;
