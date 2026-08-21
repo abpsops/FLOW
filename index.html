@@ -2558,7 +2558,10 @@ function flowWelcomeGo(pageId) {
     <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Schedule a Loading</div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="field"><label>Barge</label>
+        <select id="ld-barge"></select>
+      </div>
       <div class="field"><label>Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list"></div>
       <div class="field"><label>Grade</label>
         <select id="ld-grade" onchange="_recalcLoadingEstimate()">
@@ -6100,6 +6103,7 @@ function _validateTime24Input(el) {
 }
 
 function _readLoadingForm() {
+  const barge = (document.getElementById('ld-barge')?.value || '').trim();
   const terminal = (document.getElementById('ld-terminal')?.value || '').trim();
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
@@ -6124,7 +6128,7 @@ function _readLoadingForm() {
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
 
   return {
-    terminal, grade, qty,
+    barge, terminal, grade, qty,
     startAt: start.toISOString(),
     endAt: end.toISOString(),
     preOpsHours: preOps,
@@ -6161,6 +6165,9 @@ function editLoadingRecord(id) {
   _loadingEditingId = id;
 
   const start = new Date(rec.startAt);
+  _populateLoadingBargeSelect();
+  const bargeSel = document.getElementById('ld-barge');
+  if (bargeSel && rec.barge) bargeSel.value = rec.barge;
   document.getElementById('ld-terminal').value = rec.terminal || '';
   document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
   document.getElementById('ld-qty').value = rec.qty || '';
@@ -6295,44 +6302,45 @@ function renderLoadingPage() {
   if (!_loadingEditingId && !document.getElementById('ld-start-date').value) {
     document.getElementById('ld-start-date').value = new Date().toISOString().slice(0, 10);
   }
+  _populateLoadingBargeSelect();
   _recalcLoadingEstimate();
   renderLoadingList();
+}
+
+// Keeps the Loading form's barge dropdown in sync with the configured
+// fleet, preserving whatever is currently selected where possible.
+function _populateLoadingBargeSelect() {
+  const sel = document.getElementById('ld-barge');
+  if (!sel) return;
+  const fleet = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const prev = sel.value;
+  sel.innerHTML = fleet.map(function(b) { return `<option value="${b.name}">${b.name}</option>`; }).join('');
+  if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
+}
+
+// Loadings whose window hasn't fully passed, scoped to one barge — used to
+// interleave Loading entries chronologically into that barge's Supply
+// Timeline instead of showing them as a separate summary block.
+function _loadingsForBargeName(name) {
+  const now = new Date();
+  return (_loadingRecords || []).filter(function(r) {
+    return new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+  });
 }
 
 // ── Supply Timeline strip — shows every loading whose window hasn't
 // fully passed, so operators can plan barge supply around terminal
 // occupancy. Purely additive: sits above the existing per-barge Gantt
 // and never touches its rendering.
+// ── Supply Timeline strip — superseded by inline interleaving of Loading
+// entries directly into each barge's chronological card list in buildTL()
+// below, per an explicit request that Loading sit *between* the vessel
+// cards it actually falls between, not as a separate summary block above
+// them. Left as a no-op (rather than deleted) since other code still
+// calls it via _refreshLoadingConsumers().
 function renderTimelineLoadingStrip() {
   const el = document.getElementById('timeline-loading-strip');
-  if (!el) return;
-  const now = new Date();
-  const upcoming = (_loadingRecords || [])
-    .filter(function(r) { return new Date(r.endAt) >= now; })
-    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
-
-  if (!upcoming.length) { el.innerHTML = ''; return; }
-
-  const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
-  const rows = upcoming.map(function(r) {
-    const start = new Date(r.startAt), end = new Date(r.endAt);
-    const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
-    const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
-      <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;background:${gradeColorBg};color:${gradeColor};font-family:'DM Mono',monospace">${r.grade}</span>
-      <span style="font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0">${r.terminal}</span>
-      <span style="font-size:11px;color:var(--sub)">${r.qty.toLocaleString()} MT</span>
-      <span style="font-size:11px;color:var(--muted);margin-left:auto;font-family:'DM Mono',monospace">${fmtD(start)} → ${fmtD(end)}</span>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;background:var(--surface);margin-bottom:14px">
-    <div style="padding:9px 14px;border-bottom:1px solid var(--border);background:var(--amber-lt);display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace">Loading Schedule — ${upcoming.length}</span>
-      <a onclick="showPage('loading')" style="font-size:10px;color:var(--amber);cursor:pointer;font-weight:700">Manage →</a>
-    </div>
-    ${rows}
-  </div>`;
+  if (el) el.innerHTML = '';
 }
 
 // ── Dashboard "Loading Schedule" card — sits above the delayed-ops
@@ -9261,10 +9269,11 @@ function renderBargeTabsAndTL(sched, barges) {
     tabsHtml += '</div>';
     bargeKeys.forEach((bid,i) => { tabsHtml += `<div id="tl-${bid}" style="${i>0?'display:none':''}"></div>`; });
     tlWrap.innerHTML = tabsHtml;
-    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !completedSNOs.has(item.name)), `tl-${bid}`));
+    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !completedSNOs.has(item.name)), `tl-${bid}`, _loadingsForBargeName(bargeGroups[bid].name)));
   } else {
     tlWrap.innerHTML = '<div id="tl-single"></div>';
-    buildTL(sched.filter(item => !completedSNOs.has(item.name)), 'tl-single');
+    const singleBargeName = bargeKeys[0] ? bargeGroups[bargeKeys[0]].name : '';
+    buildTL(sched.filter(item => !completedSNOs.has(item.name)), 'tl-single', _loadingsForBargeName(singleBargeName));
   }
 
   if (voyWrap) {
@@ -9400,11 +9409,20 @@ function calcRefuelTime(id) {
   prev.innerHTML = `Barge refuelling: VLSFO <strong>${rfv.toLocaleString()} MT</strong> + MGO <strong>${rfm.toLocaleString()} MT</strong> — Loading time: <strong>${durStr(rfDuration)}</strong> + 2 hr transit. Next vessel scheduled after refuel completes.`;
 }
 
-function buildTL(items, containerId) {
+function buildTL(items, containerId, loadingsForBarge) {
   const tl = document.getElementById(containerId);
   if (!tl) return;
   tl.innerHTML = '';
-  if (!items || !items.length) {
+
+  // Merge vessel supply items with this barge's Loading entries into one
+  // chronological sequence — a Loading now shows up as its own entry in
+  // between the vessel cards it actually falls between, instead of as a
+  // separate summary block above the whole timeline.
+  const vEntries = (items || []).map(function(it) { return { type: 'vessel', time: new Date(it.bargeStart || it.eta), item: it }; });
+  const lEntries = (loadingsForBarge || []).map(function(r) { return { type: 'loading', time: new Date(r.startAt), rec: r }; });
+  const merged = vEntries.concat(lEntries).sort(function(a, b) { return a.time - b.time; });
+
+  if (!merged.length) {
     tl.innerHTML = '<div style="background:var(--green-lt);border:1.5px solid var(--green-bd);border-radius:12px;padding:20px;text-align:center;margin-bottom:1rem">' +
       '<div style="margin-bottom:8px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="9 12 12 15 17 9"/></svg></div>' +
       '<div style="font-size:14px;font-weight:700;color:var(--green);margin-bottom:4px">All Vessels Completed</div>' +
@@ -9412,7 +9430,28 @@ function buildTL(items, containerId) {
       '</div>';
     return;
   }
-  items.forEach(item => {
+  merged.forEach(entry => {
+    if (entry.type === 'loading') {
+      const rec = entry.rec;
+      const gradeColor = rec.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      const gradeColorBg = rec.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+      const ld = document.createElement('div');
+      ld.className = 'tli';
+      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--amber)"></div><div class="tll"></div></div>
+      <div class="tlc" style="border-color:var(--amber-bd);background:var(--amber-lt)">
+        <div class="tlch"><div class="tlvn">⛽ Loading — ${rec.terminal}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${rec.grade}</span></div></div>
+        <div class="tlm">
+          <div class="tmi"><label>Loading Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
+          <div class="tmi"><label>Loading End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
+          <div class="tmi"><label>Quantity</label><span>${rec.qty.toLocaleString()} MT</span></div>
+          ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${rec.surveyor}</span></div>` : ''}
+        </div>
+        ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${rec.notes}</div>` : ''}
+      </div>`;
+      tl.appendChild(ld);
+      return;
+    }
+    const item = entry.item;
     const vP = Math.min(100, Math.round((item.robVA/item.VCAP)*100));
     const mP = Math.min(100, Math.round((item.robMA/item.MCAP)*100));
     const vC = vP<15?'var(--red)':vP<30?'var(--amber)':'var(--fuel-v)';
