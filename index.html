@@ -125,6 +125,7 @@ function _chartTextColor() {
   --pg-dashboard:    #0F6B5C;
   --pg-nominations:  #2E7A50;
   --pg-schedule:     #0E6E8C;
+  --pg-loading:      #C4841C;
   --pg-timeline:     #3A57A0;
   --pg-alerts:       #A23347;
   --pg-bargefleet:   #A17A22;
@@ -485,6 +486,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 #page-dashboard .page-title{color:var(--pg-dashboard)}
 #page-nominations .page-title{color:var(--pg-nominations)}
 #page-schedule .page-title{color:var(--pg-schedule)}
+#page-loading .page-title{color:var(--pg-loading)}
 #page-timeline .page-title{color:var(--pg-timeline)}
 #page-alerts .page-title{color:var(--pg-alerts)}
 #page-bargefleet .page-title{color:var(--pg-bargefleet)}
@@ -2126,6 +2128,10 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14"/><line x1="12" y1="14" x2="12" y2="14"/><line x1="16" y1="14" x2="16" y2="14"/></svg>
     Schedule Planner
   </a>
+  <a class="sidebar-item" onclick="showPage('loading')" id="nav-loading">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l3-9 3 9"/><path d="M4.5 14h3"/><path d="M14 17l2-11 2 11"/><path d="M13 14h6"/><path d="M2 20h20"/></svg>
+    Loading
+  </a>
   <a class="sidebar-item" onclick="showPage('alerts')" id="nav-alerts">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
     Alerts &amp; Notices
@@ -2497,6 +2503,93 @@ function flowWelcomeGo(pageId) {
   <div id="voy-barge-tabs-card">
     <div id="voy-barge-tabs"></div>
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE: LOADING OPERATIONS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-loading" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Loading Operations</div>
+      <div class="page-subtitle">Terminal loading schedule — quantity, grade, and estimated duration</div>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="kpi-grid kpi-grid-5" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Scheduled Loadings</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-total">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">Upcoming (7 days)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-upcoming">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">Total VLSFO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-vlsfo">0</span>
+    </div>
+    <div class="kpi-card kpi-teal" style="padding:13px 16px">
+      <span class="kpi-label">Total LSMGO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-lsmgo">0</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">Avg Duration (hrs)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-avgdur">0</span>
+    </div>
+  </div>
+
+  <!-- Loading rate configuration — drives the duration estimate below -->
+  <div class="card" style="border-top:2px solid var(--teal);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Loading Rate Configuration</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Set the terminal's loading rate per grade. Estimated duration on every loading below is calculated from these rates — change them any time and the estimates update.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px">
+      <div class="field"><label>VLSFO Rate (MT/hour)</label><input type="number" id="ld-rate-vlsfo" min="1" step="10" value="300" onchange="updateLoadingConfig()"></div>
+      <div class="field"><label>LSMGO Rate (MT/hour)</label><input type="number" id="ld-rate-lsmgo" min="1" step="10" value="150" onchange="updateLoadingConfig()"></div>
+    </div>
+  </div>
+
+  <!-- Add loading form -->
+  <div class="card" id="loading-form-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Schedule a Loading</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="field"><label>Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list"></div>
+      <div class="field"><label>Grade</label>
+        <select id="ld-grade" onchange="_recalcLoadingEstimate()">
+          <option value="VLSFO">VLSFO</option>
+          <option value="LSMGO">LSMGO</option>
+        </select>
+      </div>
+      <div class="field"><label>Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate()"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
+      <div class="field"><label>Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label>Start Time</label><input type="time" id="ld-start-time" value="08:00" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label>Estimated Duration</label><input type="text" id="ld-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)"></div>
+      <div class="field"><label>Estimated Completion</label><input type="text" id="ld-completion-display" readonly value="—" style="background:var(--surface2);color:var(--sub)"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="field"><label>End Date <span style="font-weight:400;color:var(--muted)">— override if it won't match the estimate</span></label><input type="date" id="ld-end-date-override"></div>
+      <div class="field"><label>Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
+    </div>
+
+    <button class="btn btn-primary" onclick="addLoadingRecord()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      Add Loading
+    </button>
+  </div>
+  <datalist id="ld-terminal-list"></datalist>
+
+  <!-- Loading records list -->
+  <div class="sec-hdr">
+    <span class="sec-label">Scheduled &amp; Recent Loadings</span>
+  </div>
+  <div id="loading-list"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════
@@ -3901,6 +3994,7 @@ const PAGE_META = {
   dashboard:    { title: 'Operations Dashboard',        sub: 'Bunker planning overview — live data',                                    section: 'operations' },
   nominations:  { title: 'Vessel Nominations',          sub: 'Central nomination register — intake, assignment, PAQ tracking',           section: 'operations' },
   schedule:     { title: 'Schedule Planner',            sub: 'Intelligent barge-vessel assignment · ROB impact · Conflict detection',     section: 'operations' },
+  loading:      { title: 'Loading Operations',          sub: 'Terminal loading schedule — quantity, grade, and estimated duration',       section: 'operations' },
   timeline:     { title: 'Supply Timeline',             sub: 'Operational supply timeline — active vessels only',                        section: 'operations' },
   alerts:       { title: 'Alerts & Notices',            sub: 'PAQ status · Barge ROB alerts · Replenishment · Schedule reminders',        section: 'operations' },
   bargefleet:   { title: 'Barge Fleet Configuration',   sub: 'Register barges, ROB, pump rates and operational parameters',               section: 'planning' },
@@ -3949,6 +4043,7 @@ function showPage(id) {
   if (id === 'reports')      refreshReports();
   if (id === 'records')      renderSavedRecords();
   if (id === 'checklist')    { renderChecklist(_lastSched || []); }
+  if (id === 'loading')      { renderLoadingPage(); }
   if (id === 'timeline')     {
     renderLiveROBDashboard();
     if (_lastSched && _lastSched.length && typeof renderBargeTabsAndTL === 'function')
@@ -5869,6 +5964,199 @@ async function saveSharedRecords() {
   }
 }
 
+async function saveLoadingRecords() {
+  _saveLoadingToLocal();
+  if (_syncReady()) {
+    try {
+      const state = captureCurrentState();
+      state.version = _lastKnownVersion || Date.now();
+      await _jbPut({ state, records: _savedSupplies, checklistRecords: _checklistRecords, version: state.version });
+    } catch(e) {} // silent — don't surface record-save errors to user
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   LOADING OPERATIONS — schedule terminal loadings, auto-estimate
+   duration from a configurable MT/hour rate per grade, and surface
+   every loading on the dashboard's week calendar.
+   ════════════════════════════════════════════════════ */
+
+function _loadingRateFor(grade) {
+  return (grade === 'LSMGO' ? _loadingConfig.rateLSMGO : _loadingConfig.rateVLSFO) || 1;
+}
+
+// hours as a float — callers format/round as needed
+function computeLoadingDurationHours(qty, grade) {
+  const rate = _loadingRateFor(grade);
+  if (!qty || qty <= 0 || !rate || rate <= 0) return 0;
+  return qty / rate;
+}
+
+function _formatDurationHours(hrs) {
+  if (!hrs || hrs <= 0) return '—';
+  const h = Math.floor(hrs);
+  const m = Math.round((hrs - h) * 60);
+  if (h <= 0) return m + 'm';
+  if (m <= 0) return h + 'h';
+  return h + 'h ' + m + 'm';
+}
+
+function updateLoadingConfig() {
+  const v = parseFloat(document.getElementById('ld-rate-vlsfo')?.value) || _loadingConfig.rateVLSFO;
+  const m = parseFloat(document.getElementById('ld-rate-lsmgo')?.value) || _loadingConfig.rateLSMGO;
+  _loadingConfig = { rateVLSFO: v, rateLSMGO: m };
+  saveLoadingRecords();
+  _recalcLoadingEstimate();
+  renderLoadingList();
+}
+
+// Live estimate shown in the Add Loading form as the operator types —
+// does not touch any saved record.
+function _recalcLoadingEstimate() {
+  const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
+  const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
+  const startDateStr = document.getElementById('ld-start-date')?.value;
+  const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
+
+  const hrs = computeLoadingDurationHours(qty, grade);
+  const durEl = document.getElementById('ld-duration-display');
+  const compEl = document.getElementById('ld-completion-display');
+  if (durEl) durEl.value = hrs > 0 ? _formatDurationHours(hrs) : '—';
+
+  if (compEl) {
+    if (hrs > 0 && startDateStr) {
+      const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
+      if (!isNaN(start)) {
+        const end = new Date(start.getTime() + hrs * 3600000);
+        compEl.value = end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+          + ' ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      } else {
+        compEl.value = '—';
+      }
+    } else {
+      compEl.value = '—';
+    }
+  }
+}
+
+function addLoadingRecord() {
+  const terminal = (document.getElementById('ld-terminal')?.value || '').trim();
+  const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
+  const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
+  const startDateStr = document.getElementById('ld-start-date')?.value;
+  const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
+  const endOverride = document.getElementById('ld-end-date-override')?.value;
+  const notes = (document.getElementById('ld-notes')?.value || '').trim();
+
+  if (!terminal) { alert('Enter a terminal.'); return; }
+  if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return; }
+  if (!startDateStr) { alert('Select a loading start date.'); return; }
+
+  const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
+  if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return; }
+
+  const hrs = computeLoadingDurationHours(qty, grade);
+  const estimatedEnd = new Date(start.getTime() + hrs * 3600000);
+  const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
+
+  const rec = {
+    id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+    terminal, grade, qty,
+    startAt: start.toISOString(),
+    endAt: end.toISOString(),
+    estimatedHours: hrs,
+    endOverridden: !!endOverride,
+    notes,
+    updatedAt: Date.now(),
+  };
+  _loadingRecords.push(rec);
+  saveLoadingRecords();
+
+  // Clear the form for the next entry, keep the rate/grade context
+  ['ld-terminal','ld-qty','ld-notes','ld-end-date-override'].forEach(function(id) {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  _recalcLoadingEstimate();
+  renderLoadingList();
+  if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+}
+
+function deleteLoadingRecord(id) {
+  if (!confirm('Remove this loading from the schedule?')) return;
+  _loadingRecords = _loadingRecords.filter(function(r) { return r.id !== id; });
+  saveLoadingRecords();
+  renderLoadingList();
+  if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+}
+
+function _refreshLoadingTerminalDatalist() {
+  const dl = document.getElementById('ld-terminal-list');
+  if (!dl) return;
+  const known = Array.from(new Set((_loadingRecords || []).map(function(r) { return r.terminal; }).filter(Boolean)));
+  dl.innerHTML = known.map(function(t) { return '<option value="' + t.replace(/"/g,'&quot;') + '">'; }).join('');
+}
+
+function renderLoadingList() {
+  const el = document.getElementById('loading-list');
+  if (!el) return;
+
+  const sorted = (_loadingRecords || []).slice().sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
+
+  if (!sorted.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center">No loadings scheduled yet — add one above.</div>';
+  } else {
+    el.innerHTML = sorted.map(function(r) {
+      const start = new Date(r.startAt), end = new Date(r.endAt);
+      const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+      const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); };
+      return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+        + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + r.grade + '</span>'
+        + '<div style="flex:1;min-width:160px">'
+          + '<div style="font-size:13px;font-weight:700;color:var(--ink)">' + (r.terminal || '—') + '</div>'
+          + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + r.qty.toLocaleString() + ' MT' + (r.notes ? ' · ' + r.notes : '') + '</div>'
+        + '</div>'
+        + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:150px">'
+          + '<div>' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
+          + '<div style="color:var(--muted);margin-top:1px">' + (r.endOverridden ? 'Manual end date' : 'Est. duration ' + _formatDurationHours(r.estimatedHours)) + '</div>'
+        + '</div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + r.id + '\')" title="Remove">'
+          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+        + '</button>'
+      + '</div>';
+    }).join('');
+  }
+
+  // KPIs
+  const now = new Date();
+  const in7 = new Date(now.getTime() + 7 * 86400000);
+  const totalV = sorted.filter(function(r) { return r.grade === 'VLSFO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
+  const totalM = sorted.filter(function(r) { return r.grade === 'LSMGO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
+  const upcoming = sorted.filter(function(r) { const d = new Date(r.startAt); return d >= now && d <= in7; }).length;
+  const avgHrs = sorted.length ? (sorted.reduce(function(s, r) { return s + (r.estimatedHours || 0); }, 0) / sorted.length) : 0;
+
+  const setTxt = function(id, val) { const e = document.getElementById(id); if (e) e.textContent = val; };
+  setTxt('ld-kpi-total', String(sorted.length));
+  setTxt('ld-kpi-upcoming', String(upcoming));
+  setTxt('ld-kpi-vlsfo', totalV.toLocaleString());
+  setTxt('ld-kpi-lsmgo', totalM.toLocaleString());
+  setTxt('ld-kpi-avgdur', avgHrs > 0 ? avgHrs.toFixed(1) : '0');
+
+  _refreshLoadingTerminalDatalist();
+}
+
+function renderLoadingPage() {
+  const vEl = document.getElementById('ld-rate-vlsfo');
+  const mEl = document.getElementById('ld-rate-lsmgo');
+  if (vEl) vEl.value = _loadingConfig.rateVLSFO;
+  if (mEl) mEl.value = _loadingConfig.rateLSMGO;
+  if (!document.getElementById('ld-start-date').value) {
+    document.getElementById('ld-start-date').value = new Date().toISOString().slice(0, 10);
+  }
+  _recalcLoadingEstimate();
+  renderLoadingList();
+}
+
 function _flashSyncBanner(msg, color) {
   const b = document.createElement('div');
   b.style.cssText = `position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:${color};color:#fff;border-radius:12px;padding:12px 22px;font-size:13px;font-weight:700;font-family:DM Sans,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,.22);white-space:nowrap;transition:opacity .4s`;
@@ -5957,7 +6245,7 @@ function captureCurrentState() {
     });
   });
 
-  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{} };
+  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{} };
 }
 
 /* ── ANTI-ZERO-RESET GUARD (Fix #1) ──────────────────────────────────
@@ -6115,6 +6403,22 @@ function applyState(state) {
   if (state.deliveryLog && typeof _mergeDeliveryLog === 'function') {
     _mergeDeliveryLog(state.deliveryLog);
   }
+
+  // Restore Loading records — merge by id so entries added on another
+  // device/tab aren't lost, and a locally-edited record (newer updatedAt)
+  // isn't clobbered by an older remote copy of the same id.
+  if (state.loadingRecords && state.loadingRecords.length) {
+    const localById = {};
+    (_loadingRecords || []).forEach(function(r) { localById[r.id] = r; });
+    state.loadingRecords.forEach(function(remote) {
+      const local = localById[remote.id];
+      if (!local || (remote.updatedAt || 0) >= (local.updatedAt || 0)) {
+        localById[remote.id] = remote;
+      }
+    });
+    _loadingRecords = Object.values(localById);
+  }
+  if (state.loadingConfig) _loadingConfig = Object.assign({}, _loadingConfig, state.loadingConfig);
 
   if (state.lastSched && state.lastSched.length) {
     // Restore dates (serialised as strings) back to Date objects.
@@ -7762,6 +8066,28 @@ let _lastETC = null, _closingV = 0, _closingM = 0, _lastSched = [];
 let _bargeStates = {}, _bargeConfig = [];
 const _nscCheckData = {}; // NSC check data store
 let _checklistRecords = {}; // Persistent independent checklist records
+
+// ── Loading tab: per-terminal loading operations, shown on the dashboard
+// calendar. _loadingConfig holds a configurable rate (MT/hour) per grade,
+// used to auto-estimate how long a loading operation will take.
+let _loadingRecords = [];
+let _loadingConfig = { rateVLSFO: 300, rateLSMGO: 150 }; // MT/hour, editable on the Loading page
+const LS_LOADING_KEY = 'flow_loading_' + _FLOW_BUILD_ID;
+function _loadLoadingFromLocal() {
+  try {
+    const raw = localStorage.getItem(LS_LOADING_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      _loadingRecords = parsed.records || [];
+      _loadingConfig = Object.assign({ rateVLSFO: 300, rateLSMGO: 150 }, parsed.config || {});
+    }
+  } catch(e) {}
+}
+function _saveLoadingToLocal() {
+  try { localStorage.setItem(LS_LOADING_KEY, JSON.stringify({ records: _loadingRecords, config: _loadingConfig })); } catch(e) {}
+}
+_loadLoadingFromLocal();
+
 
 /* ─── Remaining Supply Tracker — row selection (tick marks) ───
    Purely a UI/export convenience: lets the user tick specific vessels
@@ -13141,6 +13467,13 @@ function renderWeekCalendar(offsetDays) {
     const dayTotalM = dayItems.reduce((s,x)=>s+((x.nomMQ!==undefined&&x.nomMQ!==null)?x.nomMQ:(x.mQ||0)),0);
     const hasSup = dayItems.length > 0;
 
+    // Loading operations whose date range overlaps this calendar day
+    const dayEnd = new Date(day.getTime() + 86400000);
+    const dayLoadings = (_loadingRecords || []).filter(function(r) {
+      const s = new Date(r.startAt), e = new Date(r.endAt);
+      return s < dayEnd && e >= day;
+    }).sort(function(a,b) { return new Date(a.startAt) - new Date(b.startAt); });
+
     colsHtml += `<div style="
       flex:1;min-width:0;display:flex;flex-direction:column;
       border-right:${isLast?'none':'1px solid var(--border)'};
@@ -13169,6 +13502,17 @@ function renderWeekCalendar(offsetDays) {
       <div style="padding:6px 6px;border-bottom:1px solid var(--border);background:var(--surface);display:flex;gap:4px;flex-wrap:wrap;justify-content:center;min-height:23px;box-sizing:border-box">
         ${dayTotalV>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border:1px solid var(--fuel-v-bd);border-radius:2px;color:var(--fuel-v);font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums">V·${dayTotalV.toLocaleString()}</span>`:''}
         ${dayTotalM>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border:1px solid var(--fuel-m-bd);border-radius:2px;color:var(--fuel-m);font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums">M·${dayTotalM.toLocaleString()}</span>`:''}
+      </div>
+
+      <!-- Loading operations overlapping this day — always rendered (even
+           empty) so column heights stay aligned, same reasoning as above. -->
+      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--amber-lt);display:flex;flex-direction:column;gap:4px">
+        ${dayLoadings.map(function(r){
+          return `<div style="font-size:8.5px;font-weight:700;color:var(--amber);font-family:'DM Mono',monospace;display:flex;align-items:center;gap:4px;line-height:1.3" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${new Date(r.startAt).toLocaleString('en-GB')} → ${new Date(r.endAt).toLocaleString('en-GB')}${r.notes?'&#10;'+r.notes:''}">
+            <span style="width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0"></span>
+            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">LOAD · ${r.terminal} · ${r.grade} ${r.qty.toLocaleString()}</span>
+          </div>`;
+        }).join('')}
       </div>
 
       <!-- Vessel manifest entries -->
