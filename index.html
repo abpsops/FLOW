@@ -2250,6 +2250,9 @@ function flowWelcomeGo(pageId) {
   </div>
 
 
+  <!-- Loading Schedule — terminal occupancy, shown above delayed-ops/attention so it's factored in first -->
+  <div id="dash-loading-schedule"></div>
+
   <!-- Alert banners -->
   <div id="dash-alerts"></div>
 
@@ -2568,8 +2571,14 @@ function flowWelcomeGo(pageId) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
       <div class="field"><label>Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
-      <div class="field"><label>Start Time</label><input type="time" id="ld-start-time" value="08:00" onchange="_recalcLoadingEstimate()"></div>
-      <div class="field"><label>Estimated Duration</label><input type="text" id="ld-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)"></div>
+      <div class="field"><label>Start Time (24h)</label><input type="time" id="ld-start-time" lang="en-GB" value="08:00" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label>Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field"><label>Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
+      <div class="field"><label>Pumping Duration</label><input type="text" id="ld-pump-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)" title="Quantity ÷ configured rate — actual product transfer time only"></div>
+      <div class="field"><label>Total Operation Duration</label><input type="text" id="ld-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)" title="Pre-Ops + Pumping + Post-Ops"></div>
       <div class="field"><label>Estimated Completion</label><input type="text" id="ld-completion-display" readonly value="—" style="background:var(--surface2);color:var(--sub)"></div>
     </div>
 
@@ -2578,10 +2587,13 @@ function flowWelcomeGo(pageId) {
       <div class="field"><label>Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
     </div>
 
-    <button class="btn btn-primary" onclick="addLoadingRecord()">
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-      Add Loading
-    </button>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="loading-submit-btn" onclick="submitLoadingForm()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span id="loading-submit-btn-label">Add Loading</span>
+      </button>
+      <button class="btn btn-secondary" id="loading-cancel-edit-btn" onclick="cancelLoadingEdit()" style="display:none">Cancel Edit</button>
+    </div>
   </div>
   <datalist id="ld-terminal-list"></datalist>
 
@@ -2608,6 +2620,11 @@ function flowWelcomeGo(pageId) {
       </button>
     </div>
   </div>
+
+  <!-- Loading Schedule — terminal occupancy from the Loading tab, so
+       barge supply can be planned around it. Purely additive; the
+       per-barge Gantt view below is untouched. -->
+  <div id="timeline-loading-strip"></div>
 
   <!-- Legend -->
   <div class="legend">
@@ -4048,6 +4065,7 @@ function showPage(id) {
     renderLiveROBDashboard();
     if (_lastSched && _lastSched.length && typeof renderBargeTabsAndTL === 'function')
       renderBargeTabsAndTL(_lastSched, _bargeConfig && _bargeConfig.length ? _bargeConfig : []);
+    if (typeof renderTimelineLoadingStrip === 'function') renderTimelineLoadingStrip();
   }
   if (id === 'nominations')  refreshNominationKPIs();
   if (id === 'schedule')     refreshScheduleKPIs();
@@ -4453,6 +4471,7 @@ function refreshDashboard() {
   renderDashCharts(savedRecs, []);
   renderDashFleetStatus();
   renderDashActivity(savedRecs, []);
+  if (typeof renderDashLoadingSchedule === 'function') renderDashLoadingSchedule();
 }
 
 function renderDashFleetStatus() {
@@ -5977,15 +5996,18 @@ async function saveLoadingRecords() {
 
 /* ══════════════════════════════════════════════════════
    LOADING OPERATIONS — schedule terminal loadings, auto-estimate
-   duration from a configurable MT/hour rate per grade, and surface
-   every loading on the dashboard's week calendar.
+   duration from a configurable MT/hour rate per grade plus editable
+   pre-/post-loading ops buffers, and surface every loading on the
+   dashboard calendar, dashboard activity feed, and Supply Timeline.
    ════════════════════════════════════════════════════ */
+
+let _loadingEditingId = null; // non-null while the form is editing an existing record
 
 function _loadingRateFor(grade) {
   return (grade === 'LSMGO' ? _loadingConfig.rateLSMGO : _loadingConfig.rateVLSFO) || 1;
 }
 
-// hours as a float — callers format/round as needed
+// Pumping time only (product transfer) — hours as a float.
 function computeLoadingDurationHours(qty, grade) {
   const rate = _loadingRateFor(grade);
   if (!qty || qty <= 0 || !rate || rate <= 0) return 0;
@@ -6010,26 +6032,32 @@ function updateLoadingConfig() {
   renderLoadingList();
 }
 
-// Live estimate shown in the Add Loading form as the operator types —
-// does not touch any saved record.
+// Live estimate shown in the form as the operator types — does not
+// touch any saved record until Add/Update Loading is pressed.
 function _recalcLoadingEstimate() {
   const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const startDateStr = document.getElementById('ld-start-date')?.value;
   const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
+  const preOps = parseFloat(document.getElementById('ld-pre-ops')?.value) || 0;
+  const postOps = parseFloat(document.getElementById('ld-post-ops')?.value) || 0;
 
-  const hrs = computeLoadingDurationHours(qty, grade);
+  const pumpHrs = computeLoadingDurationHours(qty, grade);
+  const totalHrs = preOps + pumpHrs + postOps;
+
+  const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
-  if (durEl) durEl.value = hrs > 0 ? _formatDurationHours(hrs) : '—';
+  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) : '—';
+  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) : '—';
 
   if (compEl) {
-    if (hrs > 0 && startDateStr) {
+    if (totalHrs > 0 && startDateStr) {
       const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
       if (!isNaN(start)) {
-        const end = new Date(start.getTime() + hrs * 3600000);
+        const end = new Date(start.getTime() + totalHrs * 3600000);
         compEl.value = end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-          + ' ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+          + ' ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
       } else {
         compEl.value = '—';
       }
@@ -6039,54 +6067,129 @@ function _recalcLoadingEstimate() {
   }
 }
 
-function addLoadingRecord() {
+// Single entry point for the form's primary button — routes to add or
+// update depending on whether we're currently editing a record.
+function submitLoadingForm() {
+  if (_loadingEditingId) updateLoadingRecord(_loadingEditingId);
+  else addLoadingRecord();
+}
+
+function _readLoadingForm() {
   const terminal = (document.getElementById('ld-terminal')?.value || '').trim();
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
   const startDateStr = document.getElementById('ld-start-date')?.value;
   const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
+  const preOps = parseFloat(document.getElementById('ld-pre-ops')?.value) || 0;
+  const postOps = parseFloat(document.getElementById('ld-post-ops')?.value) || 0;
   const endOverride = document.getElementById('ld-end-date-override')?.value;
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
 
-  if (!terminal) { alert('Enter a terminal.'); return; }
-  if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return; }
-  if (!startDateStr) { alert('Select a loading start date.'); return; }
+  if (!terminal) { alert('Enter a terminal.'); return null; }
+  if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
+  if (!startDateStr) { alert('Select a loading start date.'); return null; }
 
   const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
-  if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return; }
+  if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
-  const hrs = computeLoadingDurationHours(qty, grade);
-  const estimatedEnd = new Date(start.getTime() + hrs * 3600000);
+  const pumpHrs = computeLoadingDurationHours(qty, grade);
+  const totalHrs = preOps + pumpHrs + postOps;
+  const estimatedEnd = new Date(start.getTime() + totalHrs * 3600000);
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
 
-  const rec = {
-    id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+  return {
     terminal, grade, qty,
     startAt: start.toISOString(),
     endAt: end.toISOString(),
-    estimatedHours: hrs,
+    preOpsHours: preOps,
+    pumpHours: pumpHrs,
+    postOpsHours: postOps,
+    estimatedHours: totalHrs,
     endOverridden: !!endOverride,
     notes,
-    updatedAt: Date.now(),
   };
-  _loadingRecords.push(rec);
-  saveLoadingRecords();
+}
 
-  // Clear the form for the next entry, keep the rate/grade context
+function _clearLoadingForm() {
   ['ld-terminal','ld-qty','ld-notes','ld-end-date-override'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+}
+
+function addLoadingRecord() {
+  const data = _readLoadingForm();
+  if (!data) return;
+  const rec = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
+  _loadingRecords.push(rec);
+  saveLoadingRecords();
+  _clearLoadingForm();
   _recalcLoadingEstimate();
   renderLoadingList();
-  if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+  _refreshLoadingConsumers();
+}
+
+function editLoadingRecord(id) {
+  const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  if (!rec) return;
+  _loadingEditingId = id;
+
+  const start = new Date(rec.startAt);
+  document.getElementById('ld-terminal').value = rec.terminal || '';
+  document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
+  document.getElementById('ld-qty').value = rec.qty || '';
+  document.getElementById('ld-start-date').value = start.toISOString().slice(0, 10);
+  document.getElementById('ld-start-time').value = start.toTimeString().slice(0, 5);
+  document.getElementById('ld-pre-ops').value = (rec.preOpsHours != null ? rec.preOpsHours : 2.5);
+  document.getElementById('ld-post-ops').value = (rec.postOpsHours != null ? rec.postOpsHours : 3.5);
+  document.getElementById('ld-end-date-override').value = rec.endOverridden ? new Date(rec.endAt).toISOString().slice(0, 10) : '';
+  document.getElementById('ld-notes').value = rec.notes || '';
+
+  document.getElementById('loading-submit-btn-label').textContent = 'Update Loading';
+  document.getElementById('loading-cancel-edit-btn').style.display = '';
+  _recalcLoadingEstimate();
+
+  const card = document.getElementById('loading-form-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function updateLoadingRecord(id) {
+  const data = _readLoadingForm();
+  if (!data) return;
+  const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
+  if (idx === -1) { cancelLoadingEdit(); return; }
+  _loadingRecords[idx] = Object.assign({ id: id }, data, { updatedAt: Date.now() });
+  saveLoadingRecords();
+  cancelLoadingEdit();
+  renderLoadingList();
+  _refreshLoadingConsumers();
+}
+
+function cancelLoadingEdit() {
+  _loadingEditingId = null;
+  _clearLoadingForm();
+  document.getElementById('ld-pre-ops').value = 2.5;
+  document.getElementById('ld-post-ops').value = 3.5;
+  document.getElementById('loading-submit-btn-label').textContent = 'Add Loading';
+  document.getElementById('loading-cancel-edit-btn').style.display = 'none';
+  _recalcLoadingEstimate();
 }
 
 function deleteLoadingRecord(id) {
   if (!confirm('Remove this loading from the schedule?')) return;
   _loadingRecords = _loadingRecords.filter(function(r) { return r.id !== id; });
   saveLoadingRecords();
+  if (_loadingEditingId === id) cancelLoadingEdit();
   renderLoadingList();
+  _refreshLoadingConsumers();
+}
+
+// Everywhere else in the app that shows loadings — calendar, Supply
+// Timeline, and the dashboard activity feed — refreshed together so a
+// change never goes stale on the other pages.
+function _refreshLoadingConsumers() {
   if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+  if (typeof renderTimelineLoadingStrip === 'function') renderTimelineLoadingStrip();
+  if (typeof renderDashLoadingSchedule === 'function') renderDashLoadingSchedule();
 }
 
 function _refreshLoadingTerminalDatalist() {
@@ -6109,20 +6212,30 @@ function renderLoadingList() {
       const start = new Date(r.startAt), end = new Date(r.endAt);
       const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
       const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
-      const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); };
+      const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
+      const preTag = r.preOpsHours ? ('Pre ' + _formatDurationHours(r.preOpsHours)) : '';
+      const postTag = r.postOpsHours ? ('Post ' + _formatDurationHours(r.postOpsHours)) : '';
+      const durLine = r.endOverridden
+        ? 'Manual end date'
+        : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag].filter(Boolean).join(' · ');
       return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
         + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + r.grade + '</span>'
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink)">' + (r.terminal || '—') + '</div>'
           + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + r.qty.toLocaleString() + ' MT' + (r.notes ? ' · ' + r.notes : '') + '</div>'
         + '</div>'
-        + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:150px">'
+        + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
           + '<div>' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
-          + '<div style="color:var(--muted);margin-top:1px">' + (r.endOverridden ? 'Manual end date' : 'Est. duration ' + _formatDurationHours(r.estimatedHours)) + '</div>'
+          + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
         + '</div>'
+        + '<div style="display:flex;gap:6px">'
+        + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + r.id + '\')" title="Edit">'
+          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+        + '</button>'
         + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + r.id + '\')" title="Remove">'
           + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
         + '</button>'
+        + '</div>'
       + '</div>';
     }).join('');
   }
@@ -6150,11 +6263,84 @@ function renderLoadingPage() {
   const mEl = document.getElementById('ld-rate-lsmgo');
   if (vEl) vEl.value = _loadingConfig.rateVLSFO;
   if (mEl) mEl.value = _loadingConfig.rateLSMGO;
-  if (!document.getElementById('ld-start-date').value) {
+  if (!_loadingEditingId && !document.getElementById('ld-start-date').value) {
     document.getElementById('ld-start-date').value = new Date().toISOString().slice(0, 10);
   }
   _recalcLoadingEstimate();
   renderLoadingList();
+}
+
+// ── Supply Timeline strip — shows every loading whose window hasn't
+// fully passed, so operators can plan barge supply around terminal
+// occupancy. Purely additive: sits above the existing per-barge Gantt
+// and never touches its rendering.
+function renderTimelineLoadingStrip() {
+  const el = document.getElementById('timeline-loading-strip');
+  if (!el) return;
+  const now = new Date();
+  const upcoming = (_loadingRecords || [])
+    .filter(function(r) { return new Date(r.endAt) >= now; })
+    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
+
+  if (!upcoming.length) { el.innerHTML = ''; return; }
+
+  const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
+  const rows = upcoming.map(function(r) {
+    const start = new Date(r.startAt), end = new Date(r.endAt);
+    const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+    const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--border)">
+      <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;background:${gradeColorBg};color:${gradeColor};font-family:'DM Mono',monospace">${r.grade}</span>
+      <span style="font-size:12px;font-weight:700;color:var(--ink);flex-shrink:0">${r.terminal}</span>
+      <span style="font-size:11px;color:var(--sub)">${r.qty.toLocaleString()} MT</span>
+      <span style="font-size:11px;color:var(--muted);margin-left:auto;font-family:'DM Mono',monospace">${fmtD(start)} → ${fmtD(end)}</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;background:var(--surface);margin-bottom:14px">
+    <div style="padding:9px 14px;border-bottom:1px solid var(--border);background:var(--amber-lt);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace">Loading Schedule — ${upcoming.length}</span>
+      <a onclick="showPage('loading')" style="font-size:10px;color:var(--amber);cursor:pointer;font-weight:700">Manage →</a>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+// ── Dashboard "Loading Schedule" card — sits above the delayed-ops
+// banner and Needs Attention queue, so terminal occupancy is visible
+// before an operator plans other supply around it.
+function renderDashLoadingSchedule() {
+  const el = document.getElementById('dash-loading-schedule');
+  if (!el) return;
+  const now = new Date();
+  const upcoming = (_loadingRecords || [])
+    .filter(function(r) { return new Date(r.endAt) >= now; })
+    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
+    .slice(0, 5);
+
+  if (!upcoming.length) { el.innerHTML = ''; return; }
+
+  const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
+  const rows = upcoming.map(function(r) {
+    const start = new Date(r.startAt), end = new Date(r.endAt);
+    const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+    const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+    return `<div class="aq-row">
+      <span class="aq-tag" style="color:${gradeColor};background:${gradeColorBg};border-color:${gradeColor}">${r.grade}</span>
+      <div class="aq-body">
+        <div class="aq-name">${r.terminal} — ${r.qty.toLocaleString()} MT</div>
+        <div class="aq-detail">${fmtD(start)} → ${fmtD(end)}</div>
+      </div>
+      <div class="aq-actions"><button class="aq-btn" onclick="showPage('loading')">Open</button></div>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;background:var(--surface);margin-bottom:14px">
+    <div style="padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace">Loading Schedule — ${upcoming.length}</span>
+    </div>
+    ${rows}
+  </div>`;
 }
 
 function _flashSyncBanner(msg, color) {
