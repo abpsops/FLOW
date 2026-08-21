@@ -2260,9 +2260,6 @@ function flowWelcomeGo(pageId) {
   </div>
 
 
-  <!-- Loading Schedule — terminal occupancy, shown above delayed-ops/attention so it's factored in first -->
-  <div id="dash-loading-schedule"></div>
-
   <!-- Alert banners -->
   <div id="dash-alerts"></div>
 
@@ -4487,7 +4484,6 @@ function refreshDashboard() {
   renderDashCharts(savedRecs, []);
   renderDashFleetStatus();
   renderDashActivity(savedRecs, []);
-  if (typeof renderDashLoadingSchedule === 'function') renderDashLoadingSchedule();
 }
 
 function renderDashFleetStatus() {
@@ -4529,6 +4525,27 @@ function renderDashFleetStatus() {
 function renderDashActivity(records, vessels) {
   const el = document.getElementById('dash-activity-feed');
   const items = [];
+  // Upcoming/active Loading operations — shown first since they're the
+  // most time-sensitive item on this feed (terminal occupancy affects
+  // how other supply gets planned).
+  const _ldNow = new Date();
+  (_loadingRecords || [])
+    .filter(function(r) { return new Date(r.endAt) >= _ldNow; })
+    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
+    .slice(0, 5)
+    .forEach(function(r) {
+      const start = new Date(r.startAt), end = new Date(r.endAt);
+      const t = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateLbl = start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      items.push({
+        color,
+        title: 'Loading Scheduled',
+        detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
+        time: dateLbl + ' ' + t,
+        onclick: `showPage('loading');editLoadingRecord('${r.id}')`,
+      });
+    });
   // From _savedSupplies (live in-memory — most accurate)
   const liveRecs = (_savedSupplies && _savedSupplies.length) ? _savedSupplies : records;
   liveRecs.slice(-8).reverse().forEach(r => {
@@ -4553,7 +4570,7 @@ function renderDashActivity(records, vessels) {
     return;
   }
   el.innerHTML = items.slice(0,10).map(i =>
-    `<div class="activity-item">
+    `<div class="activity-item" ${i.onclick ? `style="cursor:pointer" onclick="${i.onclick}"` : ''}>
       <div class="activity-dot" style="background:${i.color}"></div>
       <div class="activity-content">
         <div class="activity-title">${i.title}</div>
@@ -6229,12 +6246,12 @@ function deleteLoadingRecord(id) {
 }
 
 // Everywhere else in the app that shows loadings — calendar, Supply
-// Timeline, and the dashboard activity feed — refreshed together so a
-// change never goes stale on the other pages.
+// Timeline, and the dashboard Operational Activity feed — refreshed
+// together so a change never goes stale on the other pages.
 function _refreshLoadingConsumers() {
   if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
   if (typeof renderTimelineLoadingStrip === 'function') renderTimelineLoadingStrip();
-  if (typeof renderDashLoadingSchedule === 'function') renderDashLoadingSchedule();
+  if (typeof refreshDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) refreshDashboard();
 }
 
 function _refreshLoadingTerminalDatalist() {
@@ -6351,43 +6368,6 @@ function _loadingsForBargeName(name) {
 function renderTimelineLoadingStrip() {
   const el = document.getElementById('timeline-loading-strip');
   if (el) el.innerHTML = '';
-}
-
-// ── Dashboard "Loading Schedule" card — sits above the delayed-ops
-// banner and Needs Attention queue, so terminal occupancy is visible
-// before an operator plans other supply around it.
-function renderDashLoadingSchedule() {
-  const el = document.getElementById('dash-loading-schedule');
-  if (!el) return;
-  const now = new Date();
-  const upcoming = (_loadingRecords || [])
-    .filter(function(r) { return new Date(r.endAt) >= now; })
-    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
-    .slice(0, 5);
-
-  if (!upcoming.length) { el.innerHTML = ''; return; }
-
-  const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
-  const rows = upcoming.map(function(r) {
-    const start = new Date(r.startAt), end = new Date(r.endAt);
-    const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
-    const gradeColorBg = r.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
-    return `<div class="aq-row">
-      <span class="aq-tag" style="color:${gradeColor};background:${gradeColorBg};border-color:${gradeColor}">${r.grade}</span>
-      <div class="aq-body">
-        <div class="aq-name">${r.terminal} — ${r.qty.toLocaleString()} MT</div>
-        <div class="aq-detail">${fmtD(start)} → ${fmtD(end)}</div>
-      </div>
-      <div class="aq-actions"><button class="aq-btn" onclick="showPage('loading')">Open</button></div>
-    </div>`;
-  }).join('');
-
-  el.innerHTML = `<div style="border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden;background:var(--surface);margin-bottom:14px">
-    <div style="padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:space-between">
-      <span style="font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace">Loading Schedule — ${upcoming.length}</span>
-    </div>
-    ${rows}
-  </div>`;
 }
 
 function _flashSyncBanner(msg, color) {
