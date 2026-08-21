@@ -13815,7 +13815,7 @@ function renderWeekCalendar(offsetDays) {
             </div>
             <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
               <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
-              ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.75);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
+              ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
             </div>
           </div>`;
         }).join('')}
@@ -13846,7 +13846,7 @@ function renderWeekCalendar(offsetDays) {
               <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
             </div>
             <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${item.name}</div>
-            <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+            <div style="display:flex;flex-wrap:wrap;row-gap:2px;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
               ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${calNomV.toLocaleString()}</span>`:''}
               ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${calNomM.toLocaleString()}</span>`:''}
             </div>
