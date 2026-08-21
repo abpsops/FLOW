@@ -13784,16 +13784,39 @@ function renderWeekCalendar(offsetDays) {
         ${dayTotalM>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border:1px solid var(--fuel-m-bd);border-radius:2px;color:var(--fuel-m);font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums">M·${dayTotalM.toLocaleString()}</span>`:''}
       </div>
 
-      <!-- Loading operations overlapping this day — always rendered (even
-           empty) so column heights stay aligned, same reasoning as above.
-           VLSFO and LSMGO are colored separately (same fuel-v/fuel-m tokens
-           used everywhere else in the app) instead of one uniform amber. -->
-      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:4px">
+      <!-- Loading operations overlapping this day — same full card treatment
+           as the vessel entries below, but with a solid grade-tinted fill
+           (fuel-v-lt / fuel-m-lt) instead of a plain background, so a
+           loading ticket reads as its own distinct kind of card at a glance. -->
+      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:5px">
         ${dayLoadings.map(function(r){
-          const gc = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
-          return `<div style="font-size:8.5px;font-weight:700;color:${gc};font-family:'DM Mono',monospace;display:flex;align-items:center;gap:4px;line-height:1.3" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${new Date(r.startAt).toLocaleString('en-GB')} → ${new Date(r.endAt).toLocaleString('en-GB')}${r.notes?'&#10;'+r.notes:''}">
-            <span style="width:5px;height:5px;border-radius:50%;background:${gc};flex-shrink:0"></span>
-            <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">LOAD · ${r.terminal} · ${r.grade} ${r.qty.toLocaleString()}</span>
+          const isM = r.grade === 'LSMGO';
+          const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';
+          const bg = isM ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+          const start = new Date(r.startAt), end = new Date(r.endAt);
+          return `<div style="
+            background:${bg};
+            border:1px solid var(--border);
+            border-left:3px solid ${gc};
+            border-radius:3px;
+            padding:6px 7px;
+            overflow:hidden;
+            box-sizing:border-box;
+            cursor:pointer;
+            transition:border-color .12s, transform .12s;
+          " class="cal-ticket-clickable" onclick="showPage('loading');editLoadingRecord('${r.id}')" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+r.surveyor:''}${r.notes?'&#10;'+r.notes:''}&#10;Click to open in Loading">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:${gc};display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${fmt(start)}</span>
+              <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc};border-radius:2px;color:${gc};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${r.grade}</span>
+            </div>
+            <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${r.terminal}</div>
+            <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+              <span style="color:${gc}">${r.grade}&nbsp;${r.qty.toLocaleString()}</span>
+            </div>
+            <div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:8.5px;color:var(--sub);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
+              ${r.surveyor?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
+            </div>
           </div>`;
         }).join('')}
       </div>
