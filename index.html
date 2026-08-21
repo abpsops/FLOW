@@ -9439,7 +9439,7 @@ function buildTL(items, containerId, loadingsForBarge) {
       ld.className = 'tli';
       ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--amber)"></div><div class="tll"></div></div>
       <div class="tlc" style="border-color:var(--amber-bd);background:var(--amber-lt)">
-        <div class="tlch"><div class="tlvn">⛽ Loading — ${rec.terminal}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${rec.grade}</span></div></div>
+        <div class="tlch"><div class="tlvn">Loading — ${rec.terminal}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${rec.grade}</span></div></div>
         <div class="tlm">
           <div class="tmi"><label>Loading Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
           <div class="tmi"><label>Loading End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
