@@ -2571,7 +2571,7 @@ function flowWelcomeGo(pageId) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
       <div class="field"><label>Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
-      <div class="field"><label>Start Time (24h)</label><input type="time" id="ld-start-time" lang="en-GB" value="08:00" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label>Start Time (24h)</label><input type="text" id="ld-start-time" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_validateTime24Input(this)"></div>
       <div class="field"><label>Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
       <div class="field"><label>Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
     </div>
@@ -2584,6 +2584,9 @@ function flowWelcomeGo(pageId) {
 
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
       <div class="field"><label>End Date <span style="font-weight:400;color:var(--muted)">— override if it won't match the estimate</span></label><input type="date" id="ld-end-date-override"></div>
+      <div class="field"><label>Surveyor</label><input type="text" id="ld-surveyor" placeholder="e.g. SGS, Intertek, independent surveyor"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px">
       <div class="field"><label>Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
     </div>
 
@@ -6074,6 +6077,28 @@ function submitLoadingForm() {
   else addLoadingRecord();
 }
 
+// Native <input type="time"> renders 12h/24h based on the DEVICE's OS
+// locale, not the page's lang attribute — Chrome ignores lang="en-GB" for
+// the picker UI. A plain text field with digit-masking sidesteps that
+// entirely: it's always 24h, and typing raw digits like "2300" auto-formats
+// to "23:00" as you type, which is exactly what a native time input can't
+// reliably do across devices.
+function _maskTime24Input(el) {
+  const digits = el.value.replace(/[^\d]/g, '').slice(0, 4);
+  el.value = digits.length > 2 ? digits.slice(0, 2) + ':' + digits.slice(2) : digits;
+}
+function _validateTime24Input(el) {
+  const digits = el.value.replace(/[^\d]/g, '');
+  let hh = 8, mm = 0;
+  if (digits.length === 3) { hh = parseInt(digits[0], 10); mm = parseInt(digits.slice(1), 10); }
+  else if (digits.length === 4) { hh = parseInt(digits.slice(0, 2), 10); mm = parseInt(digits.slice(2), 10); }
+  else if (digits.length <= 2 && digits.length > 0) { hh = parseInt(digits, 10); mm = 0; }
+  hh = Math.min(23, Math.max(0, hh || 0));
+  mm = Math.min(59, Math.max(0, mm || 0));
+  el.value = String(hh).padStart(2, '0') + ':' + String(mm).padStart(2, '0');
+  _recalcLoadingEstimate();
+}
+
 function _readLoadingForm() {
   const terminal = (document.getElementById('ld-terminal')?.value || '').trim();
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
@@ -6083,6 +6108,7 @@ function _readLoadingForm() {
   const preOps = parseFloat(document.getElementById('ld-pre-ops')?.value) || 0;
   const postOps = parseFloat(document.getElementById('ld-post-ops')?.value) || 0;
   const endOverride = document.getElementById('ld-end-date-override')?.value;
+  const surveyor = (document.getElementById('ld-surveyor')?.value || '').trim();
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
 
   if (!terminal) { alert('Enter a terminal.'); return null; }
@@ -6106,12 +6132,13 @@ function _readLoadingForm() {
     postOpsHours: postOps,
     estimatedHours: totalHrs,
     endOverridden: !!endOverride,
+    surveyor,
     notes,
   };
 }
 
 function _clearLoadingForm() {
-  ['ld-terminal','ld-qty','ld-notes','ld-end-date-override'].forEach(function(id) {
+  ['ld-terminal','ld-qty','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
 }
@@ -6142,6 +6169,7 @@ function editLoadingRecord(id) {
   document.getElementById('ld-pre-ops').value = (rec.preOpsHours != null ? rec.preOpsHours : 2.5);
   document.getElementById('ld-post-ops').value = (rec.postOpsHours != null ? rec.postOpsHours : 3.5);
   document.getElementById('ld-end-date-override').value = rec.endOverridden ? new Date(rec.endAt).toISOString().slice(0, 10) : '';
+  document.getElementById('ld-surveyor').value = rec.surveyor || '';
   document.getElementById('ld-notes').value = rec.notes || '';
 
   document.getElementById('loading-submit-btn-label').textContent = 'Update Loading';
@@ -6223,6 +6251,7 @@ function renderLoadingList() {
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink)">' + (r.terminal || '—') + '</div>'
           + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + r.qty.toLocaleString() + ' MT' + (r.notes ? ' · ' + r.notes : '') + '</div>'
+          + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + r.surveyor + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
           + '<div>' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
