@@ -13785,11 +13785,14 @@ function renderWeekCalendar(offsetDays) {
       </div>
 
       <!-- Loading operations overlapping this day — always rendered (even
-           empty) so column heights stay aligned, same reasoning as above. -->
-      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--amber-lt);display:flex;flex-direction:column;gap:4px">
+           empty) so column heights stay aligned, same reasoning as above.
+           VLSFO and LSMGO are colored separately (same fuel-v/fuel-m tokens
+           used everywhere else in the app) instead of one uniform amber. -->
+      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:4px">
         ${dayLoadings.map(function(r){
-          return `<div style="font-size:8.5px;font-weight:700;color:var(--amber);font-family:'DM Mono',monospace;display:flex;align-items:center;gap:4px;line-height:1.3" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${new Date(r.startAt).toLocaleString('en-GB')} → ${new Date(r.endAt).toLocaleString('en-GB')}${r.notes?'&#10;'+r.notes:''}">
-            <span style="width:5px;height:5px;border-radius:50%;background:var(--amber);flex-shrink:0"></span>
+          const gc = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+          return `<div style="font-size:8.5px;font-weight:700;color:${gc};font-family:'DM Mono',monospace;display:flex;align-items:center;gap:4px;line-height:1.3" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${new Date(r.startAt).toLocaleString('en-GB')} → ${new Date(r.endAt).toLocaleString('en-GB')}${r.notes?'&#10;'+r.notes:''}">
+            <span style="width:5px;height:5px;border-radius:50%;background:${gc};flex-shrink:0"></span>
             <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">LOAD · ${r.terminal} · ${r.grade} ${r.qty.toLocaleString()}</span>
           </div>`;
         }).join('')}
