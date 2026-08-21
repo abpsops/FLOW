@@ -13012,11 +13012,23 @@ async function downloadAnalyticsReport() {
   const btn = document.querySelector('button[onclick="downloadAnalyticsReport()"]');
   const origLabel = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing high-res charts…'; }
-  await new Promise(r => setTimeout(r, 0));
+  try {
+    await new Promise(r => setTimeout(r, 0));
 
-  const recs = _savedSupplies || [];
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    const recs = _savedSupplies || [];
+    const now = new Date();
+    const dateStr = now.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+
+    // Same KPI computation used to populate the on-screen Reports & Analytics
+    // cards (refreshReports()), so the downloaded report always matches what's
+    // currently on screen.
+    let totalV = 0, totalM = 0;
+    recs.forEach(r => {
+      totalV += parseFloat(r.vlsfoAct) || parseFloat(r.vlsfoActual) || 0;
+      totalM += parseFloat(r.mgoAct)   || parseFloat(r.mgoActual)   || 0;
+    });
+    const ops = recs.length;
+    const avgV = ops ? (totalV/ops) : 0;
 
   // Maps each canvas's DOM id to the key it's actually stored under in
   // _chartInstances (inconsistent historically — most use a short name,
@@ -13131,7 +13143,12 @@ async function downloadAnalyticsReport() {
 
   const blob = new Blob([html], {type:'text/html'});
   await _flowSaveOrShareBlob(blob, `FLOW_Analytics_${now.toISOString().slice(0,10)}.html`);
-  if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+  } catch (e) {
+    console.error('Analytics download failed:', e);
+    alert('Could not generate the analytics report: ' + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
+  }
 }
 function downloadChecklist() {
   try {
