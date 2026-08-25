@@ -8,7 +8,7 @@
    Bump CACHE_VERSION whenever index.html / style.css / app.js change so
    returning users pick up the new build instead of a stale cached copy. */
 
-const CACHE_VERSION = 'flow-shell-v1';
+const CACHE_VERSION = 'flow-shell-v2';
 
 const APP_SHELL = [
   './',
@@ -55,20 +55,29 @@ self.addEventListener('fetch', (event) => {
     return; // let the browser handle it normally
   }
 
+  // NETWORK-FIRST (not cache-first). This app has no hashed/versioned
+  // filenames — index.html is the single, always-live entry point that
+  // carries all of the app's logic — so serving a cached copy first
+  // means a redeployed change silently doesn't show up until a second
+  // reload. Worse: stale JS from before a deploy can end up running
+  // against the current (newer) Supabase data shape, misreading state
+  // like barge ROB as empty and then auto-saving that wrong "0" back up
+  // as the new latest version — a corruption the app's own anti-zero-ROB
+  // guard can't catch, since it only protects against an OLDER incoming
+  // version, not a bad save made by stale-but-currently-running code.
+  // Network-first means every online load — deploy or not — always runs
+  // the current code against current data. The cache is now purely an
+  // offline fallback, matching what this file's top comment says it's
+  // for, and is refreshed on every successful online load.
   event.respondWith(
-    caches.match(req).then((cached) => {
-      const networkFetch = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
-          }
-          return res;
-        })
-        .catch(() => cached); // offline: fall back to cache
-
-      // Cache-first for instant loads, but refresh the cache in the background
-      return cached || networkFetch;
-    })
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE_VERSION).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      })
+      .catch(() => caches.match(req)) // offline: fall back to last cached copy
   );
 });
