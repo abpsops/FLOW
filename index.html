@@ -2952,6 +2952,7 @@ function flowWelcomeGo(pageId) {
         <select id="rep-monthly-qty-year-select" onchange="_onFYChartSelectorChange()" style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--ink)">
           <option value="__live__">FY26 (Live)</option>
         </select>
+        <button id="rep-monthly-qty-undo-btn" class="btn btn-ghost btn-sm" style="display:none" onclick="_undoCurrentlyViewedFYArchive()" title="Remove this archive and return to live data">Undo Archive</button>
         <button class="btn btn-ghost btn-sm" onclick="confirmArchiveFiscalYear()" title="Freeze the current chart data under a fiscal-year label — protected from Full Reset, Clear All Data, and Wipe Cloud">Archive Year</button>
       </div>
     </div>
@@ -8478,6 +8479,19 @@ function confirmArchiveFiscalYear() {
   archiveFiscalYear(label);
 }
 
+// Removes an archived year entirely. If the chart is currently showing
+// that year, it falls back to Live automatically.
+function unarchiveFiscalYear(label) {
+  if (!_fyArchives[label]) return;
+  if (!confirm(`Remove the "${label}" archive? This can't be undone — you'd need to Archive Year again to recreate it from current data.`)) return;
+  delete _fyArchives[label];
+  _saveFYArchives();
+  showToast(`${label} archive removed`, 'info');
+  _populateFYChartSelector();
+  _onFYChartSelectorChange();
+  if (typeof renderArchivedFYList === 'function') renderArchivedFYList();
+}
+
 // Full-record view on the Archives page — every archived fiscal year with
 // its complete monthly FO/MGO breakdown, not just a chart-side summary.
 function renderArchivedFYList() {
@@ -8494,9 +8508,12 @@ function renderArchivedFYList() {
     const totalMGO = arch.series.reduce((s, m) => s + m.mgo, 0);
     const monthRows = arch.series.map(m => `<tr><td style="padding:4px 8px;font-size:11px;color:var(--sub)">${MO[m.month]}</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:var(--fuel-v);font-weight:600">${fmtMT(m.fo)}</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:var(--fuel-m);font-weight:600">${fmtMT(m.mgo)}</td></tr>`).join('');
     return `<details style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
-      <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:var(--ink)">
-        <span>${label}</span>
-        <span style="font-size:11px;font-weight:600;color:var(--muted)">VLSFO ${fmtMT(totalFO)} MT · LSMGO ${fmtMT(totalMGO)} MT · Archived ${new Date(arch.archivedAt).toLocaleDateString('en-GB')}</span>
+      <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:var(--ink)">
+        <span style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span>${label}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--muted)">VLSFO ${fmtMT(totalFO)} MT · LSMGO ${fmtMT(totalMGO)} MT · Archived ${new Date(arch.archivedAt).toLocaleDateString('en-GB')}</span>
+        </span>
+        <button class="btn btn-ghost btn-sm" onclick="event.preventDefault();event.stopPropagation();unarchiveFiscalYear('${label}')" title="Remove this archive">Undo Archive</button>
       </summary>
       <table style="width:100%;margin-top:8px;border-top:1px solid var(--border)">
         <thead><tr><th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--muted)">Month</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:var(--muted)">VLSFO (MT)</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:var(--muted)">LSMGO (MT)</th></tr></thead>
@@ -8522,13 +8539,26 @@ function _populateFYChartSelector() {
 // re-rendered as usual), an archived year renders its frozen snapshot.
 function _onFYChartSelectorChange() {
   const sel = document.getElementById('rep-monthly-qty-year-select');
+  const undoBtn = document.getElementById('rep-monthly-qty-undo-btn');
   if (!sel) return;
   if (sel.value === '__live__') {
+    if (undoBtn) undoBtn.style.display = 'none';
     renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
   } else {
     const arch = _fyArchives[sel.value];
-    if (arch) renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle', arch.series, sel.value);
+    if (arch) {
+      if (undoBtn) undoBtn.style.display = '';
+      renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle', arch.series, sel.value);
+    }
   }
+}
+
+// "Undo Archive" next to the dropdown — removes whichever archived year is
+// currently being viewed on the chart, then falls back to Live.
+function _undoCurrentlyViewedFYArchive() {
+  const sel = document.getElementById('rep-monthly-qty-year-select');
+  if (!sel || sel.value === '__live__') return;
+  unarchiveFiscalYear(sel.value);
 }
 
 function getMonthlyQuantitySeries(year) {
