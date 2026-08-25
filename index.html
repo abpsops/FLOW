@@ -2941,9 +2941,20 @@ function flowWelcomeGo(pageId) {
   </div>
 
   <!-- Bunker Quantity FY26 — bar chart version of the Dashboard's line chart,
-       same underlying data (seeded Jan–Jul, live Aug onward) -->
+       same underlying data (seeded Jan–Jul, live Aug onward). A fiscal year
+       can be archived (frozen snapshot, protected from Full Reset / Clear
+       All Data / Wipe Cloud) and viewed later from the dropdown — archiving
+       never switches the chart away from live data on its own. -->
   <div class="chart-card" style="margin-bottom:24px">
-    <div class="chart-title">Bunker Quantity — FY26</div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:2px">
+      <div class="chart-title" style="margin-bottom:0">Bunker Quantity</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select id="rep-monthly-qty-year-select" onchange="_onFYChartSelectorChange()" style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--ink)">
+          <option value="__live__">FY26 (Live)</option>
+        </select>
+        <button class="btn btn-ghost btn-sm" onclick="confirmArchiveFiscalYear()" title="Freeze the current chart data under a fiscal-year label — protected from Full Reset, Clear All Data, and Wipe Cloud">Archive Year</button>
+      </div>
+    </div>
     <div class="chart-subtitle" id="rep-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied — Jan–Jul from records, Aug onward live from Monthly Report</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="rep-monthly-qty-summary"></div>
     <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-analytics"></canvas></div>
@@ -3103,6 +3114,16 @@ function flowWelcomeGo(pageId) {
   <div class="card">
     <div id="archive-panel" style="margin-bottom:8px"></div>
     <div style="font-size:12px;color:var(--sub)">Use <strong>Archive Month</strong> in Monthly Report. Archives survive Full Reset.</div>
+  </div>
+
+  <!-- Archived Fiscal Years — separate from the monthly archives above.
+       These are frozen Bunker Quantity chart snapshots, protected from
+       Full Reset, Clear All Data, AND Wipe Cloud (the monthly archives
+       above are explicitly wiped by Clear All Data; these are not). -->
+  <div class="card" style="margin-top:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Archived Fiscal Years — Bunker Quantity Chart</div>
+    <div id="fy-archive-list"><div style="font-size:12px;color:var(--muted);padding:8px 0">No fiscal years archived yet. Use <strong>Archive Year</strong> on the Bunker Quantity chart in Reports &amp; Analytics.</div></div>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px">Protected from Full Reset, Clear All Data, and Wipe Cloud — archiving a year never changes what the live chart shows.</div>
   </div>
 </div>
 
@@ -4082,7 +4103,7 @@ function showPage(id) {
   }
   if (id === 'nominations')  refreshNominationKPIs();
   if (id === 'schedule')     refreshScheduleKPIs();
-  if (id === 'archives')     renderArchivePanel();
+  if (id === 'archives')     { renderArchivePanel(); renderArchivedFYList(); }
   if (id === 'deliverylog')  renderDeliveryLog();
   if (id === 'agents')       renderAgentDirectory();
   if (id === 'trash')        renderTrashBin();
@@ -4872,6 +4893,7 @@ function renderReportCharts(records) {
 
   // Bunker Quantity FY26 bar chart — same series as the Dashboard's line
   // chart (Jan–Jul seeded, Aug onward live from getMonthlyRows)
+  _populateFYChartSelector();
   renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
 
   // Barge Performance — grouped bar per barge (VLSFO + MGO)
@@ -8415,6 +8437,100 @@ const FY26_SEED_MONTHLY_QTY = {
 };
 const FY26_LIVE_FROM_MONTH = 7; // August (0-indexed) — first month computed live, not seeded
 
+// ── Archived Fiscal Years ─────────────────────────────────────────────
+// Deliberately stored under a key that does NOT start with "abps_" or
+// "flow_" — Full Reset, Clear All Data, and Wipe Cloud all sweep every
+// localStorage key with those prefixes, and an archived year must survive
+// all three of those (explicit requirement). This also means archived
+// years are local to the device that archived them — not synced via the
+// shared Supabase workspace row, since that row is exactly what Wipe
+// Cloud deletes.
+const FY_ARCHIVE_LS_KEY = 'flowops_fy_archive_v1';
+var _fyArchives = {};
+function _saveFYArchives() {
+  try { localStorage.setItem(FY_ARCHIVE_LS_KEY, JSON.stringify(_fyArchives)); } catch(e) {}
+}
+function _loadFYArchives() {
+  try {
+    const raw = localStorage.getItem(FY_ARCHIVE_LS_KEY);
+    if (raw) _fyArchives = JSON.parse(raw) || {};
+  } catch(e) { /* leave _fyArchives as-is */ }
+}
+_loadFYArchives();
+
+// Freezes the current live monthly series under a label (e.g. "FY26") so
+// it stays exactly as it was at archive time, unaffected by later records.
+function archiveFiscalYear(label) {
+  label = (label || '').trim();
+  if (!label) return;
+  if (_fyArchives[label] && !confirm(`"${label}" is already archived. Overwrite it with today's data?`)) return;
+  const series = getMonthlyQuantitySeries(2026);
+  _fyArchives[label] = { series, archivedAt: new Date().toISOString() };
+  _saveFYArchives();
+  showToast(`${label} archived — the chart keeps showing live data until you pick it from the dropdown`, 'success');
+  _populateFYChartSelector();
+  if (typeof renderArchivedFYList === 'function') renderArchivedFYList();
+}
+
+function confirmArchiveFiscalYear() {
+  const label = prompt('Archive the current chart data under which fiscal year label?', 'FY26');
+  if (label === null) return;
+  archiveFiscalYear(label);
+}
+
+// Full-record view on the Archives page — every archived fiscal year with
+// its complete monthly FO/MGO breakdown, not just a chart-side summary.
+function renderArchivedFYList() {
+  const el = document.getElementById('fy-archive-list');
+  if (!el) return;
+  const years = Object.keys(_fyArchives).sort().reverse();
+  if (!years.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:8px 0">No fiscal years archived yet. Use <strong>Archive Year</strong> on the Bunker Quantity chart in Reports &amp; Analytics.</div>';
+    return;
+  }
+  el.innerHTML = years.map(function(label) {
+    const arch = _fyArchives[label];
+    const totalFO = arch.series.reduce((s, m) => s + m.fo, 0);
+    const totalMGO = arch.series.reduce((s, m) => s + m.mgo, 0);
+    const monthRows = arch.series.map(m => `<tr><td style="padding:4px 8px;font-size:11px;color:var(--sub)">${MO[m.month]}</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:var(--fuel-v);font-weight:600">${fmtMT(m.fo)}</td><td style="padding:4px 8px;font-size:11px;text-align:right;color:var(--fuel-m);font-weight:600">${fmtMT(m.mgo)}</td></tr>`).join('');
+    return `<details style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <summary style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;color:var(--ink)">
+        <span>${label}</span>
+        <span style="font-size:11px;font-weight:600;color:var(--muted)">VLSFO ${fmtMT(totalFO)} MT · LSMGO ${fmtMT(totalMGO)} MT · Archived ${new Date(arch.archivedAt).toLocaleDateString('en-GB')}</span>
+      </summary>
+      <table style="width:100%;margin-top:8px;border-top:1px solid var(--border)">
+        <thead><tr><th style="padding:4px 8px;font-size:10px;text-align:left;color:var(--muted)">Month</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:var(--muted)">VLSFO (MT)</th><th style="padding:4px 8px;font-size:10px;text-align:right;color:var(--muted)">LSMGO (MT)</th></tr></thead>
+        <tbody>${monthRows}</tbody>
+      </table>
+    </details>`;
+  }).join('');
+}
+
+// Populates the chart's year dropdown with "FY26 (Live)" plus every
+// archived year, without changing what's currently selected.
+function _populateFYChartSelector() {
+  const sel = document.getElementById('rep-monthly-qty-year-select');
+  if (!sel) return;
+  const prev = sel.value;
+  const years = Object.keys(_fyArchives).sort().reverse();
+  sel.innerHTML = '<option value="__live__">FY26 (Live)</option>' +
+    years.map(y => `<option value="${y}">${y} (Archived)</option>`).join('');
+  if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+}
+
+// Fires when the dropdown changes — live stays live (current data,
+// re-rendered as usual), an archived year renders its frozen snapshot.
+function _onFYChartSelectorChange() {
+  const sel = document.getElementById('rep-monthly-qty-year-select');
+  if (!sel) return;
+  if (sel.value === '__live__') {
+    renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
+  } else {
+    const arch = _fyArchives[sel.value];
+    if (arch) renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle', arch.series, sel.value);
+  }
+}
+
 function getMonthlyQuantitySeries(year) {
   year = year || new Date().getFullYear();
   const out = [];
@@ -8433,11 +8549,11 @@ function getMonthlyQuantitySeries(year) {
 
 // Renders either the Dashboard's line chart or the Analytics bar chart from
 // the exact same series/summary — `type` is 'line' or 'bar'.
-function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId) {
+function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, overrideSeries, fyLabel) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === 'undefined') return;
 
-  const series = getMonthlyQuantitySeries(2026);
+  const series = overrideSeries || getMonthlyQuantitySeries(2026);
   const labels = series.map(s => MO[s.month]);
   const foData = series.map(s => s.fo);
   const mgoData = series.map(s => s.mgo);
@@ -8472,7 +8588,9 @@ function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId) {
   }
   const subtitleEl = subtitleElId && document.getElementById(subtitleElId);
   if (subtitleEl) {
-    subtitleEl.textContent = `Jan–Jul from historical records · Aug onward computed live from Monthly Report · Grand total so far: ${fmtMT(grandTotal)} MT`;
+    subtitleEl.textContent = overrideSeries
+      ? `Archived snapshot — ${fyLabel} — frozen at archive time, not affected by later records · Total: ${fmtMT(grandTotal)} MT`
+      : `Jan–Jul from historical records · Aug onward computed live from Monthly Report · Grand total so far: ${fmtMT(grandTotal)} MT`;
   }
 
   const isLine = type === 'line';
