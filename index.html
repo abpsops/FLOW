@@ -4530,7 +4530,7 @@ function renderDashActivity(records, vessels) {
   // how other supply gets planned).
   const _ldNow = new Date();
   (_loadingRecords || [])
-    .filter(function(r) { return new Date(r.endAt) >= _ldNow; })
+    .filter(function(r) { return !r.completed && new Date(r.endAt) >= _ldNow; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
     .slice(0, 5)
     .forEach(function(r) {
@@ -6245,6 +6245,32 @@ function deleteLoadingRecord(id) {
   _refreshLoadingConsumers();
 }
 
+// Marks a loading as complete — this is what actually removes it from the
+// calendar, Supply Timeline, and dashboard Operational Activity feed. The
+// record itself isn't deleted, just excluded from those "what's still
+// happening" views; it stays visible (greyed, tagged Done) in the Loading
+// page's own list, with an Undo option in case it was marked by mistake.
+function markLoadingRecordDone(id) {
+  const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  if (!rec) return;
+  rec.completed = true;
+  rec.completedAt = Date.now();
+  saveLoadingRecords();
+  if (_loadingEditingId === id) cancelLoadingEdit();
+  renderLoadingList();
+  _refreshLoadingConsumers();
+}
+
+function undoLoadingRecordDone(id) {
+  const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  if (!rec) return;
+  rec.completed = false;
+  delete rec.completedAt;
+  saveLoadingRecords();
+  renderLoadingList();
+  _refreshLoadingConsumers();
+}
+
 // Everywhere else in the app that shows loadings — calendar, Supply
 // Timeline, and the dashboard Operational Activity feed — refreshed
 // together so a change never goes stale on the other pages.
@@ -6265,7 +6291,13 @@ function renderLoadingList() {
   const el = document.getElementById('loading-list');
   if (!el) return;
 
-  const sorted = (_loadingRecords || []).slice().sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
+  // Active loadings first (chronological), completed ones after — so the
+  // list stays focused on what's still happening, while completed records
+  // remain visible (not deleted) further down for reference.
+  const sorted = (_loadingRecords || []).slice().sort(function(a, b) {
+    if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
+    return new Date(a.startAt) - new Date(b.startAt);
+  });
 
   if (!sorted.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center">No loadings scheduled yet — add one above.</div>';
@@ -6280,10 +6312,28 @@ function renderLoadingList() {
       const durLine = r.endOverridden
         ? 'Manual end date'
         : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag].filter(Boolean).join(' · ');
-      return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">'
+      const doneStyle = r.completed ? 'opacity:.55' : '';
+      const actionBtns = r.completed
+        ? '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + r.id + '\')" title="Undo — put back on the calendar">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
+          + '</button>'
+          + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + r.id + '\')" title="Remove">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+          + '</button>'
+        : '<button class="btn btn-primary btn-sm" onclick="markLoadingRecordDone(\'' + r.id + '\')" title="Mark as done — removes it from the calendar and timeline">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
+          + '</button>'
+          + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + r.id + '\')" title="Edit">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
+          + '</button>'
+          + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + r.id + '\')" title="Remove">'
+            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+          + '</button>';
+      return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;' + doneStyle + '">'
         + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + r.grade + '</span>'
+        + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
         + '<div style="flex:1;min-width:160px">'
-          + '<div style="font-size:13px;font-weight:700;color:var(--ink)">' + (r.terminal || '—') + '</div>'
+          + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + (r.terminal || '—') + '</div>'
           + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + r.qty.toLocaleString() + ' MT' + (r.notes ? ' · ' + r.notes : '') + '</div>'
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + r.surveyor + '</div>' : '')
         + '</div>'
@@ -6292,27 +6342,24 @@ function renderLoadingList() {
           + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:6px">'
-        + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + r.id + '\')" title="Edit">'
-          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>'
-        + '</button>'
-        + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + r.id + '\')" title="Remove">'
-          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-        + '</button>'
+        + actionBtns
         + '</div>'
       + '</div>';
     }).join('');
   }
 
-  // KPIs
+  // KPIs — scoped to ACTIVE loadings only; a completed one is no longer
+  // "upcoming" regardless of what its original date said.
+  const active = sorted.filter(function(r) { return !r.completed; });
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 86400000);
-  const totalV = sorted.filter(function(r) { return r.grade === 'VLSFO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
-  const totalM = sorted.filter(function(r) { return r.grade === 'LSMGO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
-  const upcoming = sorted.filter(function(r) { const d = new Date(r.startAt); return d >= now && d <= in7; }).length;
-  const avgHrs = sorted.length ? (sorted.reduce(function(s, r) { return s + (r.estimatedHours || 0); }, 0) / sorted.length) : 0;
+  const totalV = active.filter(function(r) { return r.grade === 'VLSFO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
+  const totalM = active.filter(function(r) { return r.grade === 'LSMGO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
+  const upcoming = active.filter(function(r) { const d = new Date(r.startAt); return d >= now && d <= in7; }).length;
+  const avgHrs = active.length ? (active.reduce(function(s, r) { return s + (r.estimatedHours || 0); }, 0) / active.length) : 0;
 
   const setTxt = function(id, val) { const e = document.getElementById(id); if (e) e.textContent = val; };
-  setTxt('ld-kpi-total', String(sorted.length));
+  setTxt('ld-kpi-total', String(active.length));
   setTxt('ld-kpi-upcoming', String(upcoming));
   setTxt('ld-kpi-vlsfo', totalV.toLocaleString());
   setTxt('ld-kpi-lsmgo', totalM.toLocaleString());
@@ -6351,7 +6398,7 @@ function _populateLoadingBargeSelect() {
 function _loadingsForBargeName(name) {
   const now = new Date();
   return (_loadingRecords || []).filter(function(r) {
-    return new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+    return !r.completed && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
   });
 }
 
@@ -13728,9 +13775,13 @@ function renderWeekCalendar(offsetDays) {
     const dayTotalM = dayItems.reduce((s,x)=>s+((x.nomMQ!==undefined&&x.nomMQ!==null)?x.nomMQ:(x.mQ||0)),0);
     const hasSup = dayItems.length > 0;
 
-    // Loading operations whose date range overlaps this calendar day
+    // Loading operations whose date range overlaps this calendar day —
+    // a loading marked Done is intentionally excluded here so completing
+    // it removes it from the calendar immediately, even if its date range
+    // technically still overlaps today/future days.
     const dayEnd = new Date(day.getTime() + 86400000);
     const dayLoadings = (_loadingRecords || []).filter(function(r) {
+      if (r.completed) return false;
       const s = new Date(r.startAt), e = new Date(r.endAt);
       return s < dayEnd && e >= day;
     }).sort(function(a,b) { return new Date(a.startAt) - new Date(b.startAt); });
