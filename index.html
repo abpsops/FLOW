@@ -5731,8 +5731,34 @@ function _updateSyncUI() {
 }
 
 /* ── Supabase table helpers (replaces JSONBin) ── */
+
+// Proactively refreshes the sign-in session if it's expired or close to
+// expiring, before a real sync call is attempted. autoRefreshToken only
+// runs its background timer while the tab is actively alive — this app
+// is normally left open all day as a dashboard, and browsers routinely
+// throttle or fully pause timers on an inactive/backgrounded tab, which
+// lets the token quietly expire while nobody's looking. The first sync
+// call after the tab becomes active again would otherwise just get
+// rejected outright and surface as "Cloud sync failed", when a proactive
+// refresh right here would have silently fixed it. Errors here are
+// swallowed on purpose — if refresh genuinely fails, the real call right
+// after this still runs and its real error is what the user sees.
+async function _ensureFreshSession() {
+  if (!supabaseClient) return;
+  try {
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error || !data || !data.session) return;
+    const expiresAt = data.session.expires_at; // unix seconds
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (!expiresAt || expiresAt <= nowSec + 60) {
+      await supabaseClient.auth.refreshSession();
+    }
+  } catch(e) { /* real call below will surface any genuine problem */ }
+}
+
 async function _jbPut(payload) {
   if (!supabaseClient) throw new Error(_supabaseLoadError || 'Supabase client not available');
+  await _ensureFreshSession();
   const { error } = await supabaseClient
     .from('abps_workspace')
     .upsert({ id: ABPS_WORKSPACE_ID, payload, version: payload.version, updated_at: new Date().toISOString() });
@@ -5742,6 +5768,7 @@ async function _jbPut(payload) {
 
 async function _jbGet() {
   if (!supabaseClient) throw new Error(_supabaseLoadError || 'Supabase client not available');
+  await _ensureFreshSession();
   const { data, error } = await supabaseClient
     .from('abps_workspace')
     .select('payload, version')
@@ -5899,12 +5926,25 @@ function _showSyncWarningBanner(errMsg) {
   if (!banner) {
     banner = document.createElement('div');
     banner.id = 'sync-warning-banner';
-    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999997;background:var(--amber-lt);border-bottom:1px solid #F5C842;color:var(--amber);font-size:12px;font-weight:600;padding:8px 16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999997;background:var(--amber-lt);border-bottom:1px solid #F5C842;color:var(--amber);font-size:12px;font-weight:600;padding:8px 16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap';
     banner.innerHTML = '<span>⚠ Cloud sync failed — your changes are saved on this device only and won\'t reach your team until this is fixed.</span>' +
+      '<span id="sync-warning-detail" style="font-weight:400;opacity:.85"></span>' +
       '<button onclick="_retrySyncNow()" style="background:var(--amber);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Retry</button>' +
       '<button onclick="document.getElementById(\'sync-warning-banner\').style.display=\'none\'" style="background:transparent;color:var(--amber);border:1px solid var(--amber);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Dismiss</button>';
     document.body.appendChild(banner);
   }
+  // Show the real reason inline instead of only in a hover tooltip, and
+  // phrase the common cases in plain language so this is self-diagnosable
+  // without having to go dig through code every time it happens.
+  const m = (errMsg || '').toLowerCase();
+  let friendly = errMsg ? `(${errMsg})` : '';
+  if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401')) {
+    friendly = "(Your sign-in session expired — click Retry, or refresh the page if that doesn't clear it.)";
+  } else if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network')) {
+    friendly = '(Could not reach the server — check your internet connection.)';
+  }
+  const detailEl = document.getElementById('sync-warning-detail');
+  if (detailEl) detailEl.textContent = friendly;
   banner.title = errMsg || '';
   banner.style.display = 'flex';
 }
@@ -6471,6 +6511,20 @@ function startAutoSync() {
     _isSyncing = false;
   }, 30000);
 }
+
+// A background/minimized tab routinely has its timers throttled or fully
+// paused by the browser — including the 30s auto-sync poll above and
+// Supabase's own autoRefreshToken timer — so a long idle stretch (this is
+// a dashboard people leave open all day) is exactly when the session is
+// most likely to have quietly expired by the time anyone looks at the tab
+// again. Proactively refresh the instant it becomes visible, rather than
+// waiting for whatever the user does next to be the thing that discovers
+// the expired token and shows the sync-failed banner.
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && _syncReady()) {
+    _ensureFreshSession();
+  }
+});
 
 /* ══════════════════════════════════════════════════════
    SYNC SETUP — no longer needed. Supabase is pre-configured
