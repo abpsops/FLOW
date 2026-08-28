@@ -9164,6 +9164,7 @@ function rmV(id) {
   const card = document.getElementById(`vessel-${id}`);
   if (!card) return;
   const name     = document.getElementById(`v${id}-name`)?.value || '';
+  const imo      = document.getElementById(`v${id}-imo`)?.value || '';
   const area     = document.getElementById(`v${id}-area`)?.value || 'FUJ-A';
   const type     = document.getElementById(`v${id}-type`)?.value || 'VLSFO';
   const qty      = parseFloat(document.getElementById(`v${id}-vlsfo`)?.value) || 0;
@@ -9173,6 +9174,7 @@ function rmV(id) {
   const manifold = document.getElementById(`v${id}-manifold`)?.value || '';
   const lc       = document.getElementById(`v${id}-lc`)?.value || '';
   const eta      = document.getElementById(`v${id}-eta`)?.value || '';
+  const remarks  = document.getElementById(`v${id}-remarks`)?.value || '';
   const paq      = document.getElementById(`v${id}-paq`)?.value || 'no';
   const bargeId  = document.getElementById(`v${id}-barge`)?.value || '';
   const refuelChk= document.getElementById(`v${id}-refuel-chk`)?.checked || false;
@@ -9180,6 +9182,23 @@ function rmV(id) {
   const rfm      = parseFloat(document.getElementById(`v${id}-rfm`)?.value) || 0;
   const rfvr     = parseFloat(document.getElementById(`v${id}-rfvr`)?.value) || 750;
   const rfmr     = parseFloat(document.getElementById(`v${id}-rfmr`)?.value) || 275;
+
+  // Removing a nomination and cancelling it were previously two completely
+  // disconnected actions — deleting here never sent any email to Ops,
+  // for anyone, operator or trader. If this nomination hasn't already had
+  // a cancellation email sent (via the card's own "Cancel Nomination"
+  // button), offer to send one now in the same step, so a deletion can't
+  // silently happen with Ops never being told.
+  const nomUidForCancel = card.dataset.nomUid;
+  const alreadyCancelled = !!(nomUidForCancel && _nomCancelEmailLog[nomUidForCancel] && _nomCancelEmailLog[nomUidForCancel].emailSent);
+  if (name && !alreadyCancelled) {
+    if (confirm(`Also send a "Nomination Cancelled" email to Ops for ${name}?\n\n(Choose Cancel if you're just correcting/redoing this entry — nothing will be emailed.)`)) {
+      sendNominationCancelledEmailIfNeeded({
+        nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
+        agent, manifold, spec, lc, eta, remarks
+      });
+    }
+  }
 
   // Move to Trash Bin instead of permanent delete
   const trashEntry = {
