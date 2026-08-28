@@ -3007,13 +3007,29 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <div id="cc-wallboard" style="width:100%;aspect-ratio:16/9;background:#000000;overflow:hidden;border:1px solid #2A2A2A;border-radius:4px;position:relative">
+  <div id="cc-wallboard-outer" style="max-width:1040px;margin:0 auto">
+  <div id="cc-wallboard" style="width:100%;aspect-ratio:16/9;background:#000000;overflow:hidden;border:1px solid #3A3A3A;border-radius:8px;position:relative;box-shadow:0 0 0 1px #000, 0 8px 30px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.4)">
    <!-- Fixed 1280×720 logical canvas, scaled to fit #cc-wallboard via _ccFitCanvas().
         Compact terminal sizing (close to the original), but the fixed
         canvas + scale means it never collapses/overflows on a narrow
         screen and stays sharp if cast bigger on a TV — real DOM text
         scaling, not a raster image. -->
    <div id="cc-canvas" style="position:absolute;top:0;left:0;width:1280px;height:720px;transform-origin:top left;background:#000000;font-family:'Courier New',Courier,monospace;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased">
+
+    <!-- Terminal chrome bar — classic traffic-light dots + a real "BACK TO OPS"
+         control. This sits inside the canvas itself so it's always reachable
+         even in true Fullscreen mode / on a phone with no browser chrome
+         (e.g. the Android app), where there'd otherwise be no way back. -->
+    <div style="flex-shrink:0;display:flex;align-items:center;gap:10px;padding:7px 14px;background:#161616;border-bottom:1px solid #000">
+      <span style="width:11px;height:11px;border-radius:50%;background:#FF5F57;display:inline-block"></span>
+      <span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E;display:inline-block"></span>
+      <span style="width:11px;height:11px;border-radius:50%;background:#28C840;display:inline-block"></span>
+      <button onclick="_ccBackToOps()" style="margin-left:10px;display:flex;align-items:center;gap:5px;background:#242424;border:1px solid #3A3A3A;color:#FFFFFF;font-family:'Courier New',Courier,monospace;font-size:11px;letter-spacing:.05em;padding:4px 10px;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        BACK TO OPS
+      </button>
+      <span style="flex:1;text-align:center;font-size:11px;color:#777;letter-spacing:.1em;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">flow-ops-terminal — bash — 128×32</span>
+    </div>
 
     <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#0A0A0A;border-bottom:1px solid #F0A500">
       <div style="display:flex;align-items:center;gap:14px">
@@ -3037,6 +3053,17 @@ function flowWelcomeGo(pageId) {
       <div id="cc-ticker" style="display:inline-block;font-size:12px;color:#4FD1E8;padding-left:100%"></div>
     </div>
    </div>
+   <!-- Full-size (never scaled) fullscreen-exit button. It lives outside
+        #cc-canvas so it stays a comfortably large, easy-to-tap control on
+        a phone even when the 1280×720 canvas is scaled way down — this is
+        the one that matters most in true Screen Mode, where there's no
+        sidebar/hamburger at all to get back with. Hidden unless the
+        wallboard is actually the fullscreen element. -->
+   <button id="cc-fs-back-btn" onclick="_ccBackToOps()" style="display:none;position:absolute;top:14px;left:14px;z-index:10;align-items:center;gap:7px;background:rgba(20,20,20,.92);border:1px solid #555;color:#FFFFFF;font-family:'Courier New',Courier,monospace;font-size:15px;letter-spacing:.05em;padding:10px 16px;border-radius:6px;cursor:pointer">
+     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+     BACK TO OPS
+   </button>
+  </div>
   </div>
 </div>
 
@@ -9908,9 +9935,9 @@ function renderCommandCenter() {
           const accent = r.grade === 'LSMGO' ? '#F0A542' : '#4FD1E8';
           return `<tr style="border-top:1px solid #222">
             <td colspan="5" style="padding:6px 10px 6px 8px;background:linear-gradient(90deg, ${accent}33, ${accent}0D 65%, transparent);border-left:3px solid ${accent}">
-              <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em;white-space:nowrap;overflow:hidden">
-                <span style="color:${accent};font-weight:700;overflow:hidden;text-overflow:ellipsis">[ LOADING ] ${r.terminal.toUpperCase()}</span>
-                <span style="color:#EAEAEA;flex-shrink:0">${r.grade} · ${r.qty.toLocaleString()} MT · ${fmtWB(entry.t)}</span>
+              <div style="display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em">
+                <span style="color:${accent};font-weight:700;white-space:normal;word-break:break-word">[ LOADING ] ${r.terminal.toUpperCase()}</span>
+                <span style="color:#EAEAEA;white-space:nowrap">${r.grade} · ${r.qty.toLocaleString()} MT · ${fmtWB(entry.t)}</span>
               </div>
             </td>
           </tr>`;
@@ -10015,6 +10042,31 @@ function _ccFitCanvas() {
   if (!wrap || !canvas) return;
   const scale = wrap.clientWidth / 1280;
   canvas.style.transform = 'scale(' + scale + ')';
+  // The full-size back button only needs to appear once we're actually in
+  // Fullscreen — that's the one mode with zero other way back (no sidebar,
+  // no browser chrome on the Android app).
+  const fsBtn = document.getElementById('cc-fs-back-btn');
+  if (fsBtn) {
+    const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+    fsBtn.style.display = isFs ? 'flex' : 'none';
+  }
+}
+
+// Explicit way back to Operations from inside the terminal — needed
+// because on a phone (especially the Android app, which has no browser
+// chrome/back button at all) there is otherwise no way out once this
+// screen — or worse, true Fullscreen mode — is open. Always exits
+// fullscreen first if active, then routes back to the dashboard.
+function _ccBackToOps() {
+  const exitFs = document.exitFullscreen || document.webkitExitFullscreen || document.msExitFullscreen;
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+  if (isFs && exitFs) {
+    exitFs.call(document).catch(function() {}).then(function() { showPage('dashboard'); });
+    // Fallback in case the promise never settles on some old WebViews.
+    setTimeout(function() { showPage('dashboard'); }, 350);
+  } else {
+    showPage('dashboard');
+  }
 }
 
 // True fullscreen (Fullscreen API) on just the terminal panel itself —
