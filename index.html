@@ -3007,6 +3007,18 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
+  <style>
+    /* In true Fullscreen ("Screen Mode"), the wallboard should fill the
+       whole screen — not stay pinned to its normal 16:9 card size, which
+       left a large dead black area below it on phones with a different
+       aspect ratio. Also center the (still fixed 1280×720) canvas inside
+       whatever space is actually available. */
+    #cc-wallboard:fullscreen, #cc-wallboard:-webkit-full-screen {
+      width: 100vw; height: 100vh; aspect-ratio: unset; max-width: none;
+      border-radius: 0; border: none; box-shadow: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
   <div id="cc-wallboard-outer" style="max-width:1040px;margin:0 auto">
   <div id="cc-wallboard" style="width:100%;aspect-ratio:16/9;background:#000000;overflow:hidden;border:1px solid #3A3A3A;border-radius:8px;position:relative;box-shadow:0 0 0 1px #000, 0 8px 30px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.4)">
    <!-- Fixed 1280×720 logical canvas, scaled to fit #cc-wallboard via _ccFitCanvas().
@@ -3024,7 +3036,7 @@ function flowWelcomeGo(pageId) {
       <span style="width:11px;height:11px;border-radius:50%;background:#FF5F57;display:inline-block"></span>
       <span style="width:11px;height:11px;border-radius:50%;background:#FEBC2E;display:inline-block"></span>
       <span style="width:11px;height:11px;border-radius:50%;background:#28C840;display:inline-block"></span>
-      <button onclick="_ccBackToOps()" style="margin-left:10px;display:flex;align-items:center;gap:5px;background:#242424;border:1px solid #3A3A3A;color:#FFFFFF;font-family:'Courier New',Courier,monospace;font-size:11px;letter-spacing:.05em;padding:4px 10px;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent">
+      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="margin-left:10px;display:flex;align-items:center;gap:5px;background:#242424;border:1px solid #3A3A3A;color:#FFFFFF;font-family:'Courier New',Courier,monospace;font-size:11px;letter-spacing:.05em;padding:4px 10px;border-radius:4px;cursor:pointer;-webkit-tap-highlight-color:transparent">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
         BACK TO OPS
       </button>
@@ -10040,16 +10052,25 @@ function _ccFitCanvas() {
   const wrap = document.getElementById('cc-wallboard');
   const canvas = document.getElementById('cc-canvas');
   if (!wrap || !canvas) return;
-  const scale = wrap.clientWidth / 1280;
+  const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
+  // Outside fullscreen the wallboard is always exactly 16:9, so width alone
+  // gives the right scale. In fullscreen the actual screen is very likely
+  // a different ratio (e.g. a tall phone), so scale against whichever of
+  // width/height is tighter — this is what keeps the canvas centered with
+  // even letterboxing instead of leaving a big dead area on one side.
+  const scale = isFs
+    ? Math.min(wrap.clientWidth / 1280, wrap.clientHeight / 720)
+    : wrap.clientWidth / 1280;
   canvas.style.transform = 'scale(' + scale + ')';
-  // The full-size back button only needs to appear once we're actually in
-  // Fullscreen — that's the one mode with zero other way back (no sidebar,
-  // no browser chrome on the Android app).
+  // In fullscreen ("Screen Mode") show only the one full-size back button —
+  // that's the mode with zero other way back (no sidebar, no browser
+  // chrome on the Android app). Outside fullscreen, only the small
+  // title-bar one is shown. Showing both at once (as before) looked like
+  // two overlapping buttons in the same corner.
   const fsBtn = document.getElementById('cc-fs-back-btn');
-  if (fsBtn) {
-    const isFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement;
-    fsBtn.style.display = isFs ? 'flex' : 'none';
-  }
+  const titleBtn = document.getElementById('cc-title-back-btn');
+  if (fsBtn) fsBtn.style.display = isFs ? 'flex' : 'none';
+  if (titleBtn) titleBtn.style.display = isFs ? 'none' : 'flex';
 }
 
 // Explicit way back to Operations from inside the terminal — needed
