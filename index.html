@@ -3007,15 +3007,15 @@ function flowWelcomeGo(pageId) {
 
   <div id="cc-wallboard" style="width:100%;aspect-ratio:16/9;background:#000000;overflow:hidden;font-family:'Courier New',Courier,monospace;display:flex;flex-direction:column;border:1px solid #2A2A2A;border-radius:4px">
 
-    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:8px 16px;background:#0A0A0A;border-bottom:1px solid #F0A500">
-      <div style="display:flex;align-items:center;gap:12px">
-        <span style="font-size:15px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</span>
-        <span style="font-size:11px;color:#777;letter-spacing:.08em">BUNKER OPS TERMINAL</span>
+    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#0A0A0A;border-bottom:1px solid #F0A500">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:17px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</span>
+        <span style="font-size:12.5px;color:#B8B8B8;letter-spacing:.08em">BUNKER OPS TERMINAL</span>
       </div>
       <div style="display:flex;align-items:center;gap:20px">
-        <span id="cc-date" style="font-size:11px;color:#777"></span>
-        <span id="cc-clock" style="font-size:14px;font-weight:700;color:#3ECF6E;font-variant-numeric:tabular-nums">00:00:00</span>
-        <span id="cc-live-dot" style="font-size:10px;color:#3ECF6E;border:1px solid #3ECF6E;padding:2px 6px">● LIVE</span>
+        <span id="cc-date" style="font-size:12.5px;color:#B8B8B8"></span>
+        <span id="cc-clock" style="font-size:16px;font-weight:700;color:#3ECF6E;font-variant-numeric:tabular-nums">00:00:00</span>
+        <span id="cc-live-dot" style="font-size:11px;color:#3ECF6E;border:1px solid #3ECF6E;padding:2px 7px">● LIVE</span>
       </div>
     </div>
 
@@ -9828,7 +9828,15 @@ function renderCommandCenter() {
   const castBtn = document.getElementById('cc-cast-btn');
   if (castBtn) castBtn.style.display = ('PresentationRequest' in window) ? '' : 'none';
 
-  // ── Barge ROB ──
+  // ── Vessel Schedule data — computed first so the ROB panel can show a
+  //    "to be supplied" total per barge alongside current ROB. ──
+  const completedSNOs = new Set((_savedSupplies || []).filter(r => r.supplied).map(r => r.vessel));
+  const activeItems = (_lastSched || [])
+    .filter(item => !completedSNOs.has(item.name))
+    .sort((a, b) => new Date(a.bargeStart) - new Date(b.bargeStart));
+
+  // ── Barge ROB — current level plus what's still queued to go out
+  //    against it from the active schedule, per grade. ──
   const robPanel = document.getElementById('cc-rob-panel');
   const liveROBs = getAllLiveROBs();
   if (robPanel) {
@@ -9838,24 +9846,27 @@ function renderCommandCenter() {
       const mPct = b.mcap ? Math.round((rob.liveM || 0) / b.mcap * 100) : 0;
       const vColor = vPct < 20 ? '#E5484D' : vPct < 40 ? '#F0A500' : '#3ECF6E';
       const mColor = mPct < 20 ? '#E5484D' : mPct < 40 ? '#F0A500' : '#3ECF6E';
-      return `<div style="margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #1A1A1A">
-        <div style="font-size:11px;font-weight:700;color:#DDD;margin-bottom:5px">${b.name}</div>
-        <div style="font-size:9.5px;color:#666;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:${vColor}">${Math.round(rob.liveV || 0).toLocaleString()} MT (${vPct}%)</span></div>
-        <div style="font-size:9.5px;color:#666;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:${mColor}">${Math.round(rob.liveM || 0).toLocaleString()} MT (${mPct}%)</span></div>
+      const bItems = activeItems.filter(item => item.bargeLabel === b.name);
+      const toSupplyV = bItems.reduce((s, i) => s + (i.nomVQ || i.vQ || 0), 0);
+      const toSupplyM = bItems.reduce((s, i) => s + (i.nomMQ || i.mQ || 0), 0);
+      return `<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #222">
+        <div style="font-size:13px;font-weight:700;color:#EEE;margin-bottom:6px">${b.name}</div>
+        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:${vColor}">${Math.round(rob.liveV || 0).toLocaleString()} MT (${vPct}%)</span></div>
+        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:${mColor}">${Math.round(rob.liveM || 0).toLocaleString()} MT (${mPct}%)</span></div>
+        <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #222">
+          <div style="font-size:9.5px;color:#F0A500;letter-spacing:.06em;margin-bottom:3px">TO BE SUPPLIED</div>
+          <div style="font-size:11px;color:#999;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:#4FD1E8">${toSupplyV ? toSupplyV.toLocaleString() + ' MT' : '—'}</span></div>
+          <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:#F0A542">${toSupplyM ? toSupplyM.toLocaleString() + ' MT' : '—'}</span></div>
+        </div>
       </div>`;
     }).join('');
-    robPanel.innerHTML = '<div style="font-size:10px;color:#F0A500;letter-spacing:.1em;margin-bottom:8px;border-bottom:1px solid #2A2A2A;padding-bottom:5px">BARGE ROB</div>' +
-      (rows || '<div style="font-size:10px;color:#555">No barges configured</div>');
+    robPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">BARGE ROB</div>' +
+      (rows || '<div style="font-size:11px;color:#999">No barges configured</div>');
   }
 
   // ── Vessel Schedule (active vessels only, soonest first, split by barge
   //    when there's more than one — this is a wallboard meant to be read
   //    at a glance, not clicked through tabs like the Supply Timeline is) ──
-  const completedSNOs = new Set((_savedSupplies || []).filter(r => r.supplied).map(r => r.vessel));
-  const activeItems = (_lastSched || [])
-    .filter(item => !completedSNOs.has(item.name))
-    .sort((a, b) => new Date(a.bargeStart) - new Date(b.bargeStart));
-
   const schedPanel = document.getElementById('cc-schedule-panel');
   if (schedPanel) {
     const barges = _bargeConfig || [];
@@ -9868,32 +9879,32 @@ function renderCommandCenter() {
         const statusText = item.isDelayed ? 'DELAY' : 'ONTIME';
         const vQty = item.nomVQ || item.vQ || 0;
         const mQty = item.nomMQ || item.mQ || 0;
-        return `<tr style="border-top:1px solid #1A1A1A">
-          <td style="padding:3px 4px 3px 0;color:#DDD;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px">${item.name}</td>
-          <td style="text-align:right;color:#AAA;font-size:10px;white-space:nowrap">${fmt24(item.bargeStart)}</td>
-          <td style="text-align:right;color:#4FD1E8;font-size:10px;white-space:nowrap">${vQty ? vQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;color:#F0A500;font-size:10px;white-space:nowrap">${mQty ? mQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;color:${statusColor};font-size:10px;white-space:nowrap">${statusText}</td>
+        return `<tr style="border-top:1px solid #222">
+          <td style="padding:5px 4px 5px 0;color:#EEE;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:1px">${item.name}</td>
+          <td style="text-align:right;color:#CCC;font-size:11.5px;white-space:nowrap">${fmt24(item.bargeStart)}</td>
+          <td style="text-align:right;color:#4FD1E8;font-size:11.5px;white-space:nowrap">${vQty ? vQty.toLocaleString() : '—'}</td>
+          <td style="text-align:right;color:#F0A542;font-size:11.5px;white-space:nowrap">${mQty ? mQty.toLocaleString() : '—'}</td>
+          <td style="text-align:right;color:${statusColor};font-size:11.5px;white-space:nowrap">${statusText}</td>
         </tr>`;
       }).join('');
       return '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-        '<tr style="color:#666;font-size:9px"><td>VESSEL</td><td style="text-align:right">START</td><td style="text-align:right">VLSFO</td><td style="text-align:right">LSMGO</td><td style="text-align:right">STATUS</td></tr>' +
-        (rows || '<tr><td colspan="5" style="color:#555;font-size:10px;padding-top:6px">No active vessels</td></tr>') + '</table>';
+        '<tr style="color:#999;font-size:10px"><td>VESSEL</td><td style="text-align:right">START</td><td style="text-align:right">VLSFO</td><td style="text-align:right">LSMGO</td><td style="text-align:right">STATUS</td></tr>' +
+        (rows || '<tr><td colspan="5" style="color:#999;font-size:11px;padding-top:8px">No active vessels</td></tr>') + '</table>';
     }
 
     if (barges.length > 1) {
       // Split screen — one sub-column per barge, side by side.
       const cols = barges.map(function(b) {
         const bItems = activeItems.filter(item => item.bargeLabel === b.name);
-        return `<div style="flex:1;min-width:0;padding:0 8px;border-right:1px solid #1A1A1A">
-          <div style="font-size:9.5px;color:#DDD;font-weight:700;margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.name}</div>
+        return `<div style="flex:1;min-width:0;padding:0 10px;border-right:1px solid #222">
+          <div style="font-size:11px;color:#EEE;font-weight:700;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${b.name}</div>
           ${scheduleTableHtml(bItems)}
         </div>`;
       }).join('');
-      schedPanel.innerHTML = '<div style="font-size:10px;color:#F0A500;letter-spacing:.1em;margin-bottom:8px;border-bottom:1px solid #2A2A2A;padding-bottom:5px">VESSEL SCHEDULE — SPLIT BY BARGE</div>' +
-        `<div style="display:flex;margin:0 -8px">${cols}</div>`;
+      schedPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">VESSEL SCHEDULE — SPLIT BY BARGE</div>' +
+        `<div style="display:flex;margin:0 -10px">${cols}</div>`;
     } else {
-      schedPanel.innerHTML = '<div style="font-size:10px;color:#F0A500;letter-spacing:.1em;margin-bottom:8px;border-bottom:1px solid #2A2A2A;padding-bottom:5px">VESSEL SCHEDULE</div>' +
+      schedPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">VESSEL SCHEDULE</div>' +
         scheduleTableHtml(activeItems);
     }
   }
@@ -9910,10 +9921,10 @@ function renderCommandCenter() {
     if (b.mcap && (rob.liveM || 0) / b.mcap < 0.2) alerts.push({ label: 'LSMGO ROB LOW', sub: b.name, color: '#E5484D' });
   });
   if (alertsPanel) {
-    alertsPanel.innerHTML = `<div style="font-size:10px;color:#E5484D;letter-spacing:.1em;margin-bottom:8px;border-bottom:1px solid #2A2A2A;padding-bottom:5px">ALERTS — ${alerts.length} ACTIVE</div>` +
+    alertsPanel.innerHTML = `<div style="font-size:11.5px;color:#E5484D;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">ALERTS — ${alerts.length} ACTIVE</div>` +
       (alerts.length
-        ? alerts.map(a => `<div style="font-size:10px;color:${a.color};padding:4px 0;border-top:1px solid #1A1A1A">${a.label}<br><span style="color:#777;font-size:9px">${a.sub}</span></div>`).join('')
-        : '<div style="font-size:10px;color:#3ECF6E;padding-top:4px">No active alerts</div>');
+        ? alerts.map(a => `<div style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#999;font-size:10.5px">${a.sub}</span></div>`).join('')
+        : '<div style="font-size:11.5px;color:#3ECF6E;padding-top:5px">No active alerts</div>');
   }
 
   // ── Ticker ──
