@@ -913,6 +913,19 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   color:var(--green);background:var(--green-lt);border-color:var(--green-bd);
   opacity:1;
 }
+.cancel-email-btn{
+  font-size:11px;cursor:pointer;color:var(--red);
+  background:var(--red-lt);border:1px solid var(--red-bd);
+  padding:3px 9px;border-radius:var(--radius-xs);
+  display:inline-flex;align-items:center;gap:5px;
+  transition:all .15s;
+}
+.cancel-email-btn:hover:not(:disabled){background:var(--red);color:#fff;border-color:var(--red)}
+.cancel-email-btn:disabled{cursor:default;opacity:.65}
+.cancel-email-btn.sent{
+  color:var(--muted);background:var(--surface2);border-color:var(--border);
+  opacity:1;
+}
 
 /* ── ETC Preview ── */
 .etc-prev{
@@ -1662,7 +1675,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   .vcard-hdr, .bcard-hdr { flex-wrap: wrap; row-gap: 8px; }
   .vcard-hdr > div, .bcard-hdr > div { flex-wrap: wrap; row-gap: 6px; }
   .vcard-hdr input[type="text"], .bcard-hdr input[type="text"] { width: 100px !important; min-width: 0; flex: 1 1 100px; }
-  .vcard-hdr .send-email-btn, .vcard-hdr .rm-btn,
+  .vcard-hdr .send-email-btn, .vcard-hdr .cancel-email-btn, .vcard-hdr .rm-btn,
   .bcard-hdr .btn, .bcard-hdr .rm-btn { white-space: nowrap; }
 
   /* ── VLSFO/LSMGO ROB summary cards: two cards side-by-side each holding
@@ -5760,6 +5773,204 @@ function _refreshSendEmailButtonState(id) {
     _lockSendEmailButton(btn);
   }
 }
+
+/* ── "Nomination Cancelled" email — same delivery path (EmailJS, same
+   to/from address, same one-time-per-nomination guarantee) as the
+   regular nomination email above, just its own independent log and its
+   own subject/body so cancelling never touches or re-locks the original
+   "Send Nomination Email" button, and vice versa. ── */
+const NOM_CANCEL_EMAIL_WORKSPACE_ID = 'nomination_cancel_email_log';
+const NOM_CANCEL_EMAIL_LS_KEY        = 'abps_nomination_cancel_email_log_v1';
+
+let _nomCancelEmailLog = {};  // { [nomUid]: { emailSent: true, sentAt, vessel } }
+let _nomCancelEmailLogLoaded = false;
+
+function _loadNomCancelEmailLogLocal() {
+  try {
+    const raw = localStorage.getItem(NOM_CANCEL_EMAIL_LS_KEY);
+    if (raw) { _nomCancelEmailLog = JSON.parse(raw) || {}; return true; }
+  } catch(e) {}
+  return false;
+}
+function _saveNomCancelEmailLogLocal() {
+  try { localStorage.setItem(NOM_CANCEL_EMAIL_LS_KEY, JSON.stringify(_nomCancelEmailLog)); } catch(e) {}
+}
+async function _loadNomCancelEmailLogRemote() {
+  if (!_syncReady()) { _nomCancelEmailLogLoaded = true; return; }
+  try {
+    const { data, error } = await supabaseClient
+      .from('abps_workspace')
+      .select('payload')
+      .eq('id', NOM_CANCEL_EMAIL_WORKSPACE_ID)
+      .maybeSingle();
+    if (!error && data && data.payload) {
+      const remote = data.payload;
+      Object.keys(remote).forEach(function(uid) {
+        if (!_nomCancelEmailLog[uid] || (remote[uid].emailSent && !_nomCancelEmailLog[uid].emailSent)) {
+          _nomCancelEmailLog[uid] = remote[uid];
+        }
+      });
+      _saveNomCancelEmailLogLocal();
+    }
+  } catch(e) {}
+  _nomCancelEmailLogLoaded = true;
+}
+async function _pushNomCancelEmailLogRemote() {
+  if (!_syncReady()) return;
+  try {
+    await supabaseClient.from('abps_workspace').upsert({
+      id: NOM_CANCEL_EMAIL_WORKSPACE_ID, payload: _nomCancelEmailLog, version: Date.now(), updated_at: new Date().toISOString()
+    });
+  } catch(e) { console.warn('ABPS: nomination-cancelled email log cloud sync failed (will retry on next cancellation):', e.message); }
+}
+
+// Same field layout as _buildNominationEmail — only the subject prefix and
+// an explicit "This nomination has been CANCELLED" line differ, so a
+// cancellation email is unmistakable at a glance in an inbox even before
+// it's opened, while still carrying every detail the original had.
+function _buildNominationCancelledEmail(v) {
+  const subject = 'Nomination Cancelled – ' + (v.name || 'Unnamed Vessel');
+
+  const lines = [];
+  lines.push('NOMINATION CANCELLED');
+  lines.push('');
+  lines.push('Vessel Name: ' + (v.name || '—') + (v.imo ? ' (' + v.imo + ')' : ''));
+  if (v.eta) lines.push('ETA: ' + v.eta);
+  if (v.area) {
+    const areaOpt = (typeof AREA_OPTIONS !== 'undefined') ? AREA_OPTIONS.find(function(o){ return o.value === v.area; }) : null;
+    lines.push('Location: ' + (areaOpt ? areaOpt.label : v.area));
+  }
+  lines.push('');
+  lines.push('Quantity (as nominated):');
+  if (v.type === 'BOTH') {
+    lines.push('MGO: ' + (v.mgo || 0) + ' MT');
+    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+  } else if (v.type === 'MGO') {
+    lines.push('LSMGO: ' + (v.mgo || v.qty || 0) + ' MT');
+  } else {
+    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+  }
+  lines.push('');
+  if (v.agent)     lines.push('Agents: ' + v.agent);
+  if (v.manifold)  lines.push('MANIFOLD: ' + v.manifold);
+  if (v.spec)      lines.push('ISO Spec: ' + v.spec);
+  if (v.lc)        lines.push('Nominated Laycan: ' + v.lc);
+  if (v.remarks)   lines.push('Remarks: ' + v.remarks);
+
+  return { subject: subject, body: lines.join('\n') };
+}
+
+async function sendNominationCancelledEmailIfNeeded(v) {
+  if (!v || !v.nomUid) return;
+  if (!_nomCancelEmailLogLoaded) { _loadNomCancelEmailLogLocal(); await _loadNomCancelEmailLogRemote(); }
+
+  if (_nomCancelEmailLog[v.nomUid] && _nomCancelEmailLog[v.nomUid].emailSent) {
+    return; // already sent a cancellation for this nomination — never send twice
+  }
+
+  const { subject, body } = _buildNominationCancelledEmail(v);
+
+  if (!_emailNotifyConfigured()) {
+    console.warn('ABPS: nomination "' + (v.name||'') + '" cancellation — email NOT sent (EmailJS not configured). Subject would be: ' + subject);
+    _flashNominationEmailBanner('Email notifications are not configured yet — nothing was sent.', false);
+    return;
+  }
+
+  _nomCancelEmailLog[v.nomUid] = { emailSent: true, sentAt: new Date().toISOString(), vessel: v.name || '' };
+  _saveNomCancelEmailLogLocal();
+
+  try {
+    await _loadEmailJS();
+    await emailjs.send(EMAILJS_SERVICE_ID, EMAILJS_TEMPLATE_ID, {
+      to_email: NOMINATION_EMAIL_TO,
+      from_email: NOMINATION_EMAIL_FROM,
+      subject: subject,
+      message: body
+    });
+    _pushNomCancelEmailLogRemote();
+    _flashNominationEmailBanner('Nomination cancelled email sent for ' + (v.name || 'vessel') + '.', true);
+  } catch(e) {
+    const reason = (e && e.text) ? e.text
+                 : (e && e.message) ? e.message
+                 : (typeof e === 'string') ? e
+                 : JSON.stringify(e);
+    console.error('ABPS: nomination-cancelled email send failed for "' + (v.name||'') + '":', reason, e);
+    delete _nomCancelEmailLog[v.nomUid];
+    _saveNomCancelEmailLogLocal();
+    _flashNominationEmailBanner('Email failed to send (' + reason + '). You can try again.', false);
+  }
+}
+
+async function sendNominationCancelledEmailForCard(id) {
+  const card = document.getElementById('vessel-' + id);
+  if (!card) return;
+  const btn = document.getElementById('v' + id + '-cancel-email-btn');
+
+  const name = document.getElementById(`v${id}-name`)?.value?.trim();
+  if (!name) { alert('Enter a vessel name first.'); return; }
+
+  if (!confirm('Send a "Nomination Cancelled" email for ' + name + '?')) return;
+
+  if (!_nomCancelEmailLogLoaded) { _loadNomCancelEmailLogLocal(); await _loadNomCancelEmailLogRemote(); }
+  if (_nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent) {
+    _lockCancelEmailButton(btn);
+    return;
+  }
+
+  const ty = document.getElementById(`v${id}-type`)?.value;
+  const origLabel = btn ? btn.innerHTML : '';
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" style="animation:spin .8s linear infinite"><path d="M21 12a9 9 0 1 1-2.64-6.36"/></svg> Sending…';
+  }
+
+  try {
+    await sendNominationCancelledEmailIfNeeded({
+      nomUid:   card.dataset.nomUid,
+      name:     name,
+      imo:      document.getElementById(`v${id}-imo`)?.value || '',
+      area:     document.getElementById(`v${id}-area`)?.value || '',
+      type:     ty,
+      qty:      ty === 'MGO'   ? 0 : parseFloat(document.getElementById(`v${id}-vlsfo`)?.value || 0),
+      mgo:      ty === 'VLSFO' ? 0 : parseFloat(document.getElementById(`v${id}-mgo`)?.value   || 0),
+      agent:    document.getElementById(`v${id}-agent`)?.value || '',
+      manifold: document.getElementById(`v${id}-manifold`)?.value || '',
+      spec:     document.getElementById(`v${id}-spec`)?.value || '',
+      lc:       document.getElementById(`v${id}-lc`)?.value || '',
+      eta:      document.getElementById(`v${id}-eta`)?.value || '',
+      remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
+    });
+  } finally {
+    const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
+    if (sent) {
+      _lockCancelEmailButton(btn);
+    } else if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = origLabel;
+    }
+  }
+}
+
+// Unlike the "Sent" nomination-email lock, cancellation can legitimately
+// need to be sent again if the user made a mistake, so this only shows a
+// "Cancelled ✓" confirmation state — it does not otherwise change what
+// the button can do; sendNominationCancelledEmailIfNeeded() is still the
+// one source of truth preventing an accidental double-send.
+function _lockCancelEmailButton(btn) {
+  if (!btn) return;
+  btn.disabled = true;
+  btn.classList.add('sent');
+  btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg> Cancelled';
+}
+
+function _refreshCancelEmailButtonState(id) {
+  const card = document.getElementById('vessel-' + id);
+  const btn = document.getElementById('v' + id + '-cancel-email-btn');
+  if (!card || !btn) return;
+  if (_nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent) {
+    _lockCancelEmailButton(btn);
+  }
+}
 </script>
 
 <script>
@@ -9190,6 +9401,10 @@ function addVessel(def = {}) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
         Send Nomination Email
       </button>
+      <button class="cancel-email-btn" id="v${id}-cancel-email-btn" onclick="sendNominationCancelledEmailForCard(${id})">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        Send Nomination Cancelled Email
+      </button>
       <button class="rm-btn" onclick="rmV(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
     </div>
   </div>
@@ -9304,6 +9519,7 @@ function addVessel(def = {}) {
   // log cache, lock the button immediately so it never flashes as
   // sendable for a moment after reload.
   if (typeof _refreshSendEmailButtonState === 'function') _refreshSendEmailButtonState(id);
+  if (typeof _refreshCancelEmailButtonState === 'function') _refreshCancelEmailButtonState(id);
   // FT84 FIX (Issue 4): Restore per-vessel manual barge assignment from saved state.
   // populateBargeDropdowns() applies a global preferred-barge fallback which overwrites
   // individual assignments. We must apply def.bargeId AFTER the dropdown is populated.
@@ -15200,6 +15416,10 @@ async function nuclearClear() {
       const r2 = await supabaseClient.from('abps_workspace').delete().eq('id', 'nomination_email_log');
       if (r2.error) { console.error('Clear All Data: failed to delete nomination_email_log row:', r2.error.message); }
     } catch(e) { console.error('Clear All Data: nomination_email_log delete threw:', e.message); }
+    try {
+      const r3 = await supabaseClient.from('abps_workspace').delete().eq('id', 'nomination_cancel_email_log');
+      if (r3.error) { console.error('Clear All Data: failed to delete nomination_cancel_email_log row:', r3.error.message); }
+    } catch(e) { console.error('Clear All Data: nomination_cancel_email_log delete threw:', e.message); }
   }
 
   // ── 3. Reset all in-memory state ──
@@ -15336,6 +15556,7 @@ async function wipeSupabaseWorkspace() {
   try {
     await supabaseClient.from('abps_workspace').delete().eq('id', ABPS_WORKSPACE_ID);
     await supabaseClient.from('abps_workspace').delete().eq('id', 'nomination_email_log');
+    await supabaseClient.from('abps_workspace').delete().eq('id', 'nomination_cancel_email_log');
     // Also wipe all localStorage flow_ and abps_ keys so a reload starts clean too
     const toRemove = [];
     for (let i = 0; i < localStorage.length; i++) {
@@ -15426,6 +15647,7 @@ async function init() {
   // state on the very first paint, with no flash of an incorrect state.
   // The slower remote reconciliation still happens later, non-blocking.
   _loadNomEmailLogLocal();
+  _loadNomCancelEmailLogLocal();
 
   // Load saved records first
   await loadSharedRecords(true);
@@ -15458,9 +15680,11 @@ async function init() {
   // this device's local cache didn't have yet (e.g. sent from another
   // operator's browser).
   await _loadNomEmailLogRemote();
+  await _loadNomCancelEmailLogRemote();
   document.querySelectorAll('.vcard[id^="vessel-"]').forEach(function(card) {
     const id = card.id.replace('vessel-', '');
     _refreshSendEmailButtonState(id);
+    _refreshCancelEmailButtonState(id);
   });
 
   // If schedule was restored from state, rebuild dependent UI.
