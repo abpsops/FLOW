@@ -3010,10 +3010,10 @@ function flowWelcomeGo(pageId) {
     <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#0A0A0A;border-bottom:1px solid #F0A500">
       <div style="display:flex;align-items:center;gap:14px">
         <span style="font-size:17px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</span>
-        <span style="font-size:12.5px;color:#B8B8B8;letter-spacing:.08em">BUNKER OPS TERMINAL</span>
+        <span style="font-size:13.5px;color:#FFFFFF;letter-spacing:.08em">BUNKER OPS TERMINAL</span>
       </div>
       <div style="display:flex;align-items:center;gap:20px">
-        <span id="cc-date" style="font-size:12.5px;color:#B8B8B8"></span>
+        <span id="cc-date" style="font-size:13.5px;color:#FFFFFF"></span>
         <span id="cc-clock" style="font-size:16px;font-weight:700;color:#3ECF6E;font-variant-numeric:tabular-nums">00:00:00</span>
         <span id="cc-live-dot" style="font-size:11px;color:#3ECF6E;border:1px solid #3ECF6E;padding:2px 7px">● LIVE</span>
       </div>
@@ -9851,17 +9851,17 @@ function renderCommandCenter() {
       const toSupplyM = bItems.reduce((s, i) => s + (i.nomMQ || i.mQ || 0), 0);
       return `<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #222">
         <div style="font-size:13px;font-weight:700;color:#EEE;margin-bottom:6px">${b.name}</div>
-        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:${vColor}">${Math.round(rob.liveV || 0).toLocaleString()} MT (${vPct}%)</span></div>
-        <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:${mColor}">${Math.round(rob.liveM || 0).toLocaleString()} MT (${mPct}%)</span></div>
+        <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:${vColor}">${Math.round(rob.liveV || 0).toLocaleString()} MT (${vPct}%)</span></div>
+        <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:${mColor}">${Math.round(rob.liveM || 0).toLocaleString()} MT (${mPct}%)</span></div>
         <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #222">
           <div style="font-size:9.5px;color:#F0A500;letter-spacing:.06em;margin-bottom:3px">TO BE SUPPLIED</div>
-          <div style="font-size:11px;color:#999;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:#4FD1E8">${toSupplyV ? toSupplyV.toLocaleString() + ' MT' : '—'}</span></div>
-          <div style="font-size:11px;color:#999;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:#F0A542">${toSupplyM ? toSupplyM.toLocaleString() + ' MT' : '—'}</span></div>
+          <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:#4FD1E8">${toSupplyV ? toSupplyV.toLocaleString() + ' MT' : '—'}</span></div>
+          <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:#F0A542">${toSupplyM ? toSupplyM.toLocaleString() + ' MT' : '—'}</span></div>
         </div>
       </div>`;
     }).join('');
     robPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">BARGE ROB</div>' +
-      (rows || '<div style="font-size:11px;color:#999">No barges configured</div>');
+      (rows || '<div style="font-size:12.5px;color:#FFFFFF">No barges configured</div>');
   }
 
   // ── Vessel Schedule (active vessels only, soonest first, split by barge
@@ -9888,8 +9888,8 @@ function renderCommandCenter() {
         </tr>`;
       }).join('');
       return '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-        '<tr style="color:#999;font-size:10px"><td>VESSEL</td><td style="text-align:right">START</td><td style="text-align:right">VLSFO</td><td style="text-align:right">LSMGO</td><td style="text-align:right">STATUS</td></tr>' +
-        (rows || '<tr><td colspan="5" style="color:#999;font-size:11px;padding-top:8px">No active vessels</td></tr>') + '</table>';
+        '<tr style="color:#FFFFFF;font-size:11.5px"><td>VESSEL</td><td style="text-align:right">START</td><td style="text-align:right">VLSFO</td><td style="text-align:right">LSMGO</td><td style="text-align:right">STATUS</td></tr>' +
+        (rows || '<tr><td colspan="5" style="color:#FFFFFF;font-size:12.5px;padding-top:8px">No active vessels</td></tr>') + '</table>';
     }
 
     if (barges.length > 1) {
@@ -9923,7 +9923,7 @@ function renderCommandCenter() {
   if (alertsPanel) {
     alertsPanel.innerHTML = `<div style="font-size:11.5px;color:#E5484D;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">ALERTS — ${alerts.length} ACTIVE</div>` +
       (alerts.length
-        ? alerts.map(a => `<div style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#999;font-size:10.5px">${a.sub}</span></div>`).join('')
+        ? alerts.map(a => `<div style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#FFFFFF;font-size:12px">${a.sub}</span></div>`).join('')
         : '<div style="font-size:11.5px;color:#3ECF6E;padding-top:5px">No active alerts</div>');
   }
 
