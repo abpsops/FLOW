@@ -9889,16 +9889,17 @@ function renderCommandCenter() {
       const rows = merged.slice(0, 12).map(function(entry) {
         if (entry.kind === 'loading') {
           const r = entry.data;
-          // Solid, fully color-filled banner row — deliberately louder than
-          // the vessel rows (which are just colored text on black) so a
-          // planned loading reads as an occupied-barge event at a glance
-          // on a wallboard, not something you have to squint to notice.
-          const fill = r.grade === 'LSMGO' ? '#BE6118' : '#2C5FA8';
+          // Terminal-style alert line, not a modern rounded UI card — flat
+          // black background (matches the rest of the wallboard exactly),
+          // a colored left rule + bracket tag for signal, monospace,
+          // uppercase. This is what makes it read as "Ops Terminal" instead
+          // of a phone-app notification pasted onto a CRT screen.
+          const accent = r.grade === 'LSMGO' ? '#F0A542' : '#4FD1E8';
           return `<tr style="border-top:1px solid #222">
-            <td colspan="5" style="padding:5px 8px;background:${fill}">
-              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#FFFFFF;font-weight:700">
-                <span>⛴ LOADING — ${r.terminal}</span>
-                <span>${r.grade} · ${r.qty.toLocaleString()} MT · ${fmt24(entry.t)}</span>
+            <td colspan="5" style="padding:5px 8px 5px 6px;background:#0A0A0A;border-left:3px solid ${accent}">
+              <div style="display:flex;justify-content:space-between;align-items:center;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em">
+                <span style="color:${accent};font-weight:700">[ LOADING ] ${r.terminal.toUpperCase()}</span>
+                <span style="color:#CCCCCC">${r.grade} · ${r.qty.toLocaleString()} MT · ${fmt24(entry.t)}</span>
               </div>
             </td>
           </tr>`;
