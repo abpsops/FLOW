@@ -14677,6 +14677,7 @@ function renderWeekCalendar(offsetDays) {
           " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
             <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
               <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
+              ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:''}
               <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
             </div>
             <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${item.name}</div>
