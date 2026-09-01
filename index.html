@@ -4671,10 +4671,31 @@ function renderDashActivity(records, vessels) {
       const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
       items.push({
         color,
-        title: 'Loading Scheduled',
+        title: `Loading Scheduled — ${r.grade}`,
         detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
         time: dateLbl + ' ' + t,
         onclick: `showPage('loading');editLoadingRecord('${r.id}')`,
+      });
+    });
+  // Recently-completed Loading operations — marking a Loading "Done" used
+  // to just silently drop it from this feed with no record it ever
+  // happened. Show it here instead, tagged by grade, same as the
+  // scheduled ones above.
+  (_loadingRecords || [])
+    .filter(function(r) { return r.completed && r.completedAt; })
+    .sort(function(a, b) { return b.completedAt - a.completedAt; })
+    .slice(0, 5)
+    .forEach(function(r) {
+      const d = new Date(r.completedAt);
+      const t = isNaN(d) ? '—' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateLbl = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      items.push({
+        color,
+        title: `Loading Completed — ${r.grade}`,
+        detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''}`,
+        time: (dateLbl + ' ' + t).trim() || '—',
+        onclick: `showPage('loading')`,
       });
     });
   // From _savedSupplies (live in-memory — most accurate)
@@ -6666,11 +6687,13 @@ function deleteLoadingRecord(id) {
   _refreshLoadingConsumers();
 }
 
-// Marks a loading as complete — this is what actually removes it from the
-// calendar, Supply Timeline, and dashboard Operational Activity feed. The
-// record itself isn't deleted, just excluded from those "what's still
-// happening" views; it stays visible (greyed, tagged Done) in the Loading
-// page's own list, with an Undo option in case it was marked by mistake.
+// Marks a loading as complete — this removes it from the calendar and
+// Supply Timeline ("what's still happening" views), but it now still
+// appears in the dashboard Operational Activity feed as a completed
+// entry (see renderDashActivity) instead of disappearing silently. The
+// record itself isn't deleted; it stays visible (greyed, tagged Done)
+// in the Loading page's own list, with an Undo option in case it was
+// marked by mistake.
 function markLoadingRecordDone(id) {
   const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
   if (!rec) return;
