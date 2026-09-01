@@ -6545,9 +6545,58 @@ function _clearLoadingForm() {
   });
 }
 
+// ── Loading vs. vessel-supply / other-loading conflict check ──────────
+// Reuses the exact same overlap math (_doesJobConflict) already trusted
+// for vessel-to-vessel barge scheduling, so a Loading gets checked
+// against that barge's live vessel supply commitments the same way. This
+// warns rather than blocks — sometimes an overlap is known/intentional
+// (e.g. loading finishing right as supply starts) — but it's never
+// silent anymore.
+function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
+  const conflicts = [];
+  if (!bargeName) return conflicts;
+  const b = (_bargeConfig || []).find(function(x) { return x.name === bargeName; });
+  const travelHrs = (_calcParams && _calcParams.travelHrs) || 0;
+  const jobStart = new Date(startAt);
+  const jobEnd = new Date(endAt);
+
+  // Against that barge's active vessel supply commitments
+  if (b) {
+    _getBargeTimeline(b.id, b.name).forEach(function(op) {
+      if (_doesJobConflict(jobStart, jobEnd, op, travelHrs, 0)) {
+        conflicts.push(`Vessel ${op.vessel} (supply ${fmt24(op.start)} → ${fmt24(op.etc)})`);
+      }
+    });
+  }
+
+  // Against that barge's OTHER loadings (direct window overlap, no travel
+  // buffer needed since both events are on the same barge already)
+  (_loadingRecords || []).forEach(function(r) {
+    if (r.id === excludeLoadingId) return;
+    if (r.barge !== bargeName) return;
+    const rStart = new Date(r.startAt), rEnd = new Date(r.endAt);
+    if (jobStart < rEnd && jobEnd > rStart) {
+      conflicts.push(`Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
+    }
+  });
+
+  return conflicts;
+}
+
+function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId) {
+  const conflicts = _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId);
+  if (!conflicts.length) return true;
+  return confirm(
+    `⚠ ${bargeName} is already committed during this window:\n\n` +
+    conflicts.map(c => '• ' + c).join('\n') +
+    `\n\nSave this Loading anyway?`
+  );
+}
+
 function addLoadingRecord() {
   const data = _readLoadingForm();
   if (!data) return;
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null)) return;
   const rec = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
   _loadingRecords.push(rec);
   saveLoadingRecords();
@@ -6590,6 +6639,7 @@ function updateLoadingRecord(id) {
   if (!data) return;
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id)) return;
   _loadingRecords[idx] = Object.assign({ id: id }, data, { updatedAt: Date.now() });
   saveLoadingRecords();
   cancelLoadingEdit();
