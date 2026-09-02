@@ -14692,80 +14692,94 @@ function renderWeekCalendar(offsetDays) {
         ${dayTotalM>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border:1px solid var(--fuel-m-bd);border-radius:2px;color:var(--fuel-m);font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums">M·${dayTotalM.toLocaleString()}</span>`:''}
       </div>
 
-      <!-- Loading operations overlapping this day — same full card treatment
-           as the vessel entries below, but with a solid grade-tinted fill
-           (fuel-v-lt / fuel-m-lt) instead of a plain background, so a
-           loading ticket reads as its own distinct kind of card at a glance. -->
-      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:5px">
-        ${dayLoadings.map(function(r){
-          const isM = r.grade === 'LSMGO';
-          const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';       // solid grade color — used as the card's fill
-          const gcBd = isM ? 'var(--fuel-m-bd)' : 'var(--fuel-v-bd)';
-          const start = new Date(r.startAt), end = new Date(r.endAt);
-          return `<div style="
-            background:${gc};
-            border:1px solid ${gcBd};
-            border-radius:4px;
-            padding:6px 7px;
-            overflow:hidden;
-            box-sizing:border-box;
-            cursor:pointer;
-            transition:filter .12s, transform .12s;
-          " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${r.id}')" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+r.surveyor:''}${r.notes?'&#10;'+r.notes:''}&#10;Click to open in Loading">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
-              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${fmt(start)}</span>
-              <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${r.grade}</span>
-            </div>
-            <div style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${r.terminal}</div>
-            <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
-              <span style="color:#fff">${r.grade}&nbsp;${r.qty.toLocaleString()}</span>
-            </div>
-            <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
-              <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
-              ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-
-      <!-- Vessel manifest entries -->
+      <!-- Loading operations + vessel manifest — ONE merged list, sorted by
+           actual clock time rather than shown as two fixed blocks. A
+           Loading's position is keyed off when it FINISHES (endAt): a
+           Loading that finishes before a vessel's ETA sits above that
+           vessel; one that finishes after or overlaps sits below it. Each
+           entry keeps its own card style (solid grade fill for a Loading,
+           bordered light card for a vessel) so they're still easy to tell
+           apart at a glance, just interleaved in true chronological order. -->
       <div style="flex:1;padding:6px;display:flex;flex-direction:column;gap:5px;overflow:visible;background:var(--surface)">
-        ${dayItems.length ? dayItems.map(item => {
-          const calNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item.vQ||0), calNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item.mQ||0);
-          const gc = gradeColor(calNomV, calNomM);
-          const etaTime = fmt(item._etaDate);
-          const loc = item.area || item.anchorage || item.location || '';
-          const barge = item.bargeLabel || '';
-          const hasSno = item.sno !== undefined && item.sno !== null;
-          return `<div style="
-            background:var(--bg);
-            border:1px solid var(--border);
-            border-left:3px solid ${gc.border};
-            border-radius:3px;
-            padding:6px 7px;
-            overflow:hidden;
-            box-sizing:border-box;
-            ${hasSno?'cursor:pointer':'cursor:default'};
-            transition:border-color .12s, transform .12s;
-          " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
-              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
-              ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:''}
-              <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
-            </div>
-            <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${item.name}</div>
-            <div style="display:flex;flex-wrap:wrap;row-gap:2px;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
-              ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${calNomV.toLocaleString()}</span>`:''}
-              ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${calNomM.toLocaleString()}</span>`:''}
-            </div>
-            ${barge||loc?`<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:2px">
-              ${barge?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_BARGE}${barge}</div>`:''}
-              ${loc?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_PIN}${loc}</div>`:''}
-            </div>`:''}
-          </div>`;
-        }).join('') : `<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px 4px;text-align:center">
-          <span style="font-size:9.5px;color:var(--muted);font-weight:600;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.04em">No Supply</span>
-        </div>`}
+        ${(function() {
+          const dayEntries = [
+            ...dayLoadings.map(r => ({ kind: 'loading', sortKey: new Date(r.endAt).getTime(), data: r })),
+            ...dayItems.map(x => ({ kind: 'vessel', sortKey: x._etaDate.getTime(), data: x })),
+          ].sort((a, b) => a.sortKey - b.sortKey);
+
+          if (!dayEntries.length) {
+            return `<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px 4px;text-align:center">
+              <span style="font-size:9.5px;color:var(--muted);font-weight:600;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.04em">No Supply</span>
+            </div>`;
+          }
+
+          return dayEntries.map(function(entry) {
+            if (entry.kind === 'loading') {
+              const r = entry.data;
+              const isM = r.grade === 'LSMGO';
+              const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';       // solid grade color — used as the card's fill
+              const gcBd = isM ? 'var(--fuel-m-bd)' : 'var(--fuel-v-bd)';
+              const start = new Date(r.startAt), end = new Date(r.endAt);
+              return `<div style="
+                background:${gc};
+                border:1px solid ${gcBd};
+                border-radius:4px;
+                padding:6px 7px;
+                overflow:hidden;
+                box-sizing:border-box;
+                cursor:pointer;
+                transition:filter .12s, transform .12s;
+              " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${r.id}')" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+r.surveyor:''}${r.notes?'&#10;'+r.notes:''}&#10;Click to open in Loading">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+                  <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${fmt(start)}</span>
+                  <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${r.grade}</span>
+                </div>
+                <div style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${r.terminal}</div>
+                <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+                  <span style="color:#fff">${r.grade}&nbsp;${r.qty.toLocaleString()}</span>
+                </div>
+                <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
+                  <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
+                  ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
+                </div>
+              </div>`;
+            }
+
+            const item = entry.data;
+            const calNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item.vQ||0), calNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item.mQ||0);
+            const gc = gradeColor(calNomV, calNomM);
+            const etaTime = fmt(item._etaDate);
+            const loc = item.area || item.anchorage || item.location || '';
+            const barge = item.bargeLabel || '';
+            const hasSno = item.sno !== undefined && item.sno !== null;
+            return `<div style="
+              background:var(--bg);
+              border:1px solid var(--border);
+              border-left:3px solid ${gc.border};
+              border-radius:3px;
+              padding:6px 7px;
+              overflow:hidden;
+              box-sizing:border-box;
+              ${hasSno?'cursor:pointer':'cursor:default'};
+              transition:border-color .12s, transform .12s;
+            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
+              <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+                <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
+                ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:''}
+                <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
+              </div>
+              <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${item.name}</div>
+              <div style="display:flex;flex-wrap:wrap;row-gap:2px;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+                ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${calNomV.toLocaleString()}</span>`:''}
+                ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${calNomM.toLocaleString()}</span>`:''}
+              </div>
+              ${barge||loc?`<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:2px">
+                ${barge?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_BARGE}${barge}</div>`:''}
+                ${loc?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_PIN}${loc}</div>`:''}
+              </div>`:''}
+            </div>`;
+          }).join('');
+        })()}
       </div>
     </div>`;
   });
