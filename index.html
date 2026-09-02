@@ -3071,24 +3071,21 @@ function flowWelcomeGo(pageId) {
     <div style="flex-shrink:0;border-top:1px solid #F0A500;background:#0A0A0A;padding:5px 0;overflow:hidden;white-space:nowrap">
       <div id="cc-ticker" style="display:inline-block;font-size:12px;color:#4FD1E8;padding-left:100%"></div>
     </div>
-
-    <!-- "BACK TO OPS" — moved down here per request, below the ticker,
-         instead of sitting up in its own strip above the header. Still
-         the real way out of Command Center on a phone with no browser
-         chrome (e.g. the Android app). -->
-    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:6px 0;background:#000000;border-top:1px solid #2A2A2A">
-      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
-        <span>◄</span> BACK TO OPS
-      </button>
-    </div>
    </div>
+   <!-- "BACK TO OPS" (normal view) — bottom-left, sitting in the empty
+        space under the Barge ROB column rather than centered full-width
+        at the bottom. Positioned absolute within #cc-canvas so it's
+        pinned to that exact spot regardless of panel content height. -->
+   <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="position:absolute;bottom:38px;left:14px;z-index:10;display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
+     <span>◄</span> BACK TO OPS
+   </button>
    <!-- Full-size (never scaled) fullscreen-exit button. It lives outside
         #cc-canvas so it stays a comfortably large, easy-to-tap control on
         a phone even when the 1280×720 canvas is scaled way down — this is
         the one that matters most in true Screen Mode, where there's no
         sidebar/hamburger at all to get back with. Hidden unless the
         wallboard is actually the fullscreen element. -->
-   <button id="cc-fs-back-btn" onclick="_ccBackToOps()" style="display:none;position:absolute;bottom:14px;left:50%;transform:translateX(-50%);z-index:10;align-items:center;gap:7px;background:#000000;border:1.5px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:14px;letter-spacing:.08em;padding:9px 16px;border-radius:2px;cursor:pointer">
+   <button id="cc-fs-back-btn" onclick="_ccBackToOps()" style="display:none;position:absolute;bottom:14px;left:14px;z-index:10;align-items:center;gap:7px;background:#000000;border:1.5px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:14px;letter-spacing:.08em;padding:9px 16px;border-radius:2px;cursor:pointer">
      <span>◄</span> BACK TO OPS
    </button>
   </div>
