@@ -3072,22 +3072,6 @@ function flowWelcomeGo(pageId) {
       <div id="cc-ticker" style="display:inline-block;font-size:12px;color:#4FD1E8;padding-left:100%"></div>
     </div>
    </div>
-   <!-- "BACK TO OPS" (normal view) — bottom-left, sitting in the empty
-        space under the Barge ROB column rather than centered full-width
-        at the bottom. Positioned absolute within #cc-canvas so it's
-        pinned to that exact spot regardless of panel content height. -->
-   <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="position:absolute;bottom:38px;left:14px;z-index:10;display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
-     <span>◄</span> BACK TO OPS
-   </button>
-   <!-- Full-size (never scaled) fullscreen-exit button. It lives outside
-        #cc-canvas so it stays a comfortably large, easy-to-tap control on
-        a phone even when the 1280×720 canvas is scaled way down — this is
-        the one that matters most in true Screen Mode, where there's no
-        sidebar/hamburger at all to get back with. Hidden unless the
-        wallboard is actually the fullscreen element. -->
-   <button id="cc-fs-back-btn" onclick="_ccBackToOps()" style="display:none;position:absolute;bottom:14px;left:14px;z-index:10;align-items:center;gap:7px;background:#000000;border:1.5px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:14px;letter-spacing:.08em;padding:9px 16px;border-radius:2px;cursor:pointer">
-     <span>◄</span> BACK TO OPS
-   </button>
   </div>
   </div>
 </div>
@@ -10313,7 +10297,19 @@ function _ccRefreshData() {
       </div>`;
     }).join('');
     robPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">BARGE ROB</div>' +
-      (rows || '<div style="font-size:12.5px;color:#FFFFFF">No barges configured</div>');
+      (rows || '<div style="font-size:12.5px;color:#FFFFFF">No barges configured</div>') +
+      // "BACK TO OPS" as real in-flow content, not an absolutely-positioned
+      // overlay — that was the actual problem: two separate buttons, each
+      // pinned a fixed distance from the *canvas* bottom regardless of how
+      // tall the ROB content actually was, so it landed right under the
+      // content in one view and floated in a big gap in another (normal vs
+      // Screen Mode) depending on how much empty space happened to be left
+      // over. One button, sitting directly after the content every time,
+      // in every mode, at any scale, fixes that structurally rather than
+      // by tuning another pixel offset.
+      '<div style="margin-top:14px;padding-top:12px;border-top:1px solid #2A2A2A">' +
+      '<button id="cc-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:5px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:\'Courier New\',Courier,monospace;font-weight:700;font-size:10px;letter-spacing:.06em;padding:5px 9px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">' +
+      '<span>◄</span> BACK TO OPS</button></div>';
   }
 
   // ── Vessel Schedule (active vessels only, soonest first, split by barge
@@ -10513,15 +10509,6 @@ function _ccFitCanvas() {
     ? Math.min(wrap.clientWidth / 1280, wrap.clientHeight / 720)
     : wrap.clientWidth / 1280;
   canvas.style.transform = 'scale(' + scale + ')';
-  // In fullscreen ("Screen Mode") show only the one full-size back button —
-  // that's the mode with zero other way back (no sidebar, no browser
-  // chrome on the Android app). Outside fullscreen, only the small
-  // title-bar one is shown. Showing both at once (as before) looked like
-  // two overlapping buttons in the same corner.
-  const fsBtn = document.getElementById('cc-fs-back-btn');
-  const titleBtn = document.getElementById('cc-title-back-btn');
-  if (fsBtn) fsBtn.style.display = isFs ? 'flex' : 'none';
-  if (titleBtn) titleBtn.style.display = isFs ? 'none' : 'flex';
 }
 
 // Explicit way back to Operations from inside the terminal — needed
