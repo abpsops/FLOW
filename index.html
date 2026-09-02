@@ -278,6 +278,8 @@ input,select,textarea{font-family:DM Sans,sans-serif}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes slideInLeft{from{opacity:0;transform:translateX(-8px)}to{opacity:1;transform:translateX(0)}}
 @keyframes ccTickerScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+@keyframes ccNewAlertFlash{0%,100%{background:transparent}50%{background:rgba(229,72,77,.35)}}
+.cc-flash-new{animation:ccNewAlertFlash 0.9s ease-in-out 3}
 
 /* ════════════════════════════════════════
    SYNC BANNER
@@ -3063,10 +3065,17 @@ function flowWelcomeGo(pageId) {
       </div>
     </div>
 
-    <div style="flex:1;min-height:0;display:grid;grid-template-columns:240px 1fr 240px;overflow:hidden">
+    <!-- "Up Next" spotlight — real ops rooms fixate on what's happening
+         right now/next, not the full table, so this gets its own
+         large, unmissable strip instead of just being row 1 of the
+         Schedule panel. -->
+    <div id="cc-upnext" style="flex-shrink:0;padding:9px 18px;background:#0A0A0A;border-bottom:1px solid #2A2A2A"></div>
+
+    <div style="flex:1;min-height:0;display:grid;grid-template-columns:220px 1fr 190px 220px;overflow:hidden">
       <div id="cc-rob-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
       <div id="cc-schedule-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
-      <div id="cc-alerts-panel" style="padding:10px 12px;overflow-y:auto"></div>
+      <div id="cc-alerts-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
+      <div id="cc-activity-panel" style="padding:10px 12px;overflow-y:auto"></div>
     </div>
 
     <div style="flex-shrink:0;border-top:1px solid #F0A500;background:#0A0A0A;padding:5px 0;overflow:hidden;white-space:nowrap">
@@ -6089,6 +6098,28 @@ async function _jbGet() {
 /* ── Status dot ── */
 let _syncStatusTimer = null;
 let _ccClockInterval = null;
+let _ccDataInterval = null;
+let _ccPrevAlertKeys = null; // null = first render, don't flash anything yet
+const CC_ROB_HISTORY_KEY = 'flowops_cc_rob_history_v1'; // operational cache only — fine to lose on reset, unlike the FY archive
+const CC_ROB_SAMPLE_MS = 10 * 60 * 1000; // one sparkline point every ~10min, capped below
+let _ccRobHistory = (function() {
+  try { return JSON.parse(localStorage.getItem(CC_ROB_HISTORY_KEY) || '{}'); } catch(e) { return {}; }
+})();
+function _ccSaveRobHistory() {
+  try { localStorage.setItem(CC_ROB_HISTORY_KEY, JSON.stringify(_ccRobHistory)); } catch(e) {}
+}
+function _ccSparklineSvg(hist) {
+  if (!hist || hist.length < 2) return '';
+  const w = 90, h = 18;
+  const maxV = Math.max(1, ...hist.map(p => p.v));
+  const maxM = Math.max(1, ...hist.map(p => p.m));
+  const ptsV = hist.map((p, i) => `${(i / (hist.length - 1) * w).toFixed(1)},${(h - (p.v / maxV) * h).toFixed(1)}`).join(' ');
+  const ptsM = hist.map((p, i) => `${(i / (hist.length - 1) * w).toFixed(1)},${(h - (p.m / maxM) * h).toFixed(1)}`).join(' ');
+  return `<svg width="${w}" height="${h}" style="display:block;margin-top:5px" viewBox="0 0 ${w} ${h}">
+    <polyline points="${ptsV}" fill="none" stroke="#4FD1E8" stroke-width="1.3"/>
+    <polyline points="${ptsM}" fill="none" stroke="#F0A542" stroke-width="1.3"/>
+  </svg>`;
+}
 function setSyncStatus(state, msg) {
   // Debounce rapid status updates (e.g. during auto-sync polling) to prevent topbar flicker
   if (_syncStatusTimer) clearTimeout(_syncStatusTimer);
@@ -10155,6 +10186,36 @@ function renderCommandCenter() {
   const castBtn = document.getElementById('cc-cast-btn');
   if (castBtn) castBtn.style.display = ('PresentationRequest' in window) ? '' : 'none';
 
+  // Data panels only used to render once, when the page was first opened —
+  // fine for a quick check, wrong for something meant to sit on a TV all
+  // day untouched. Now refreshes on the same 30s cadence as the rest of
+  // the app's auto-sync, so it stays current without anyone touching it.
+  _ccRefreshData();
+  if (_ccDataInterval) clearInterval(_ccDataInterval);
+  _ccDataInterval = setInterval(function() {
+    if (!document.getElementById('cc-clock')) { clearInterval(_ccDataInterval); _ccDataInterval = null; return; }
+    _ccRefreshData();
+  }, 30000);
+
+  // ── Fit the fixed 1920×1080 canvas to whatever size #cc-wallboard actually
+  //    is — a phone screen, a laptop card, or a TV cast full-screen — so the
+  //    layout never collapses/overflows and text is always sharp, since it's
+  //    real DOM text being scaled, not a raster image. ──
+  _ccFitCanvas();
+  if (!_ccListenersBound) {
+    _ccListenersBound = true;
+    window.addEventListener('resize', _ccFitCanvas);
+    document.addEventListener('fullscreenchange', _ccFitCanvas);
+    document.addEventListener('webkitfullscreenchange', _ccFitCanvas);
+    if ('ResizeObserver' in window) {
+      _ccResizeObserver = new ResizeObserver(_ccFitCanvas);
+      const wrap = document.getElementById('cc-wallboard');
+      if (wrap) _ccResizeObserver.observe(wrap);
+    }
+  }
+}
+
+function _ccRefreshData() {
   // ── Vessel Schedule data — computed first so the ROB panel can show a
   //    "to be supplied" total per barge alongside current ROB. ──
   const completedSNOs = new Set((_savedSupplies || []).filter(r => r.supplied).map(r => r.vessel));
@@ -10162,10 +10223,36 @@ function renderCommandCenter() {
     .filter(item => !completedSNOs.has(item.name))
     .sort((a, b) => new Date(a.bargeStart) - new Date(b.bargeStart));
 
+  // ── "Up Next" spotlight — real ops rooms fixate on what's happening
+  //    right now/next, so this gets its own large unmissable line instead
+  //    of just being row 1 of the Schedule table. ──
+  const upNextEl = document.getElementById('cc-upnext');
+  if (upNextEl) {
+    const next = activeItems[0];
+    if (next) {
+      const vQty = next.nomVQ || next.vQ || 0;
+      const mQty = next.nomMQ || next.mQ || 0;
+      const statusColor = next.isDelayed ? '#F0A500' : '#3ECF6E';
+      const statusText = next.isDelayed ? 'DELAYED' : 'ON TIME';
+      upNextEl.innerHTML = `<div style="display:flex;align-items:center;gap:18px;flex-wrap:wrap">
+        <span style="font-size:10.5px;color:#F0A500;letter-spacing:.18em;font-weight:700;flex-shrink:0">UP NEXT</span>
+        <span style="font-size:19px;font-weight:700;color:#FFFFFF">${next.name}</span>
+        <span style="font-size:12.5px;color:#CCC">${next.bargeLabel || ''}</span>
+        <span style="font-size:12.5px;color:#CCC">START ${fmt24(next.bargeStart)}</span>
+        <span style="font-size:12.5px;color:#4FD1E8">VLSFO ${vQty ? vQty.toLocaleString() + ' MT' : '—'}</span>
+        <span style="font-size:12.5px;color:#F0A542">LSMGO ${mQty ? mQty.toLocaleString() + ' MT' : '—'}</span>
+        <span style="font-size:11px;font-weight:700;color:${statusColor};margin-left:auto;flex-shrink:0">${statusText}</span>
+      </div>`;
+    } else {
+      upNextEl.innerHTML = `<div style="font-size:11px;color:#3ECF6E;letter-spacing:.1em;font-weight:700">NO UPCOMING VESSELS</div>`;
+    }
+  }
+
   // ── Barge ROB — current level plus what's still queued to go out
   //    against it from the active schedule, per grade. ──
   const robPanel = document.getElementById('cc-rob-panel');
   const liveROBs = getAllLiveROBs();
+  const _ccNowTs = Date.now();
   if (robPanel) {
     const rows = (_bargeConfig || []).map(function(b) {
       const rob = liveROBs[b.id] || { liveV: 0, liveM: 0 };
@@ -10176,10 +10263,28 @@ function renderCommandCenter() {
       const bItems = activeItems.filter(item => item.bargeLabel === b.name);
       const toSupplyV = bItems.reduce((s, i) => s + (i.nomVQ || i.vQ || 0), 0);
       const toSupplyM = bItems.reduce((s, i) => s + (i.nomMQ || i.mQ || 0), 0);
+      const isFree = bItems.length === 0;
+
+      // ROB trend — one sample every ~10min (gated, not every 30s refresh,
+      // or the array would balloon and the sparkline would be pointlessly
+      // dense) so this is genuinely "trend over the last several hours",
+      // not just noise from the refresh interval itself.
+      const hist = _ccRobHistory[b.id] || (_ccRobHistory[b.id] = []);
+      const lastSample = hist[hist.length - 1];
+      if (!lastSample || (_ccNowTs - lastSample.t) >= CC_ROB_SAMPLE_MS) {
+        hist.push({ t: _ccNowTs, v: rob.liveV || 0, m: rob.liveM || 0 });
+        if (hist.length > 48) hist.shift();
+        _ccSaveRobHistory();
+      }
+
       return `<div style="margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #222">
-        <div style="font-size:13px;font-weight:700;color:#EEE;margin-bottom:6px">${b.name}</div>
+        <div style="font-size:13px;font-weight:700;color:#EEE;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:6px">
+          <span>${b.name}</span>
+          ${isFree ? '<span style="font-size:8px;font-weight:700;color:#3ECF6E;border:1px solid #3ECF6E;padding:1px 5px;border-radius:2px;flex-shrink:0">AVAILABLE</span>' : ''}
+        </div>
         <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:${vColor}">${Math.round(rob.liveV || 0).toLocaleString()} MT (${vPct}%)</span></div>
         <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between;margin-top:3px"><span>LSMGO</span><span style="color:${mColor}">${Math.round(rob.liveM || 0).toLocaleString()} MT (${mPct}%)</span></div>
+        ${_ccSparklineSvg(hist)}
         <div style="margin-top:6px;padding-top:6px;border-top:1px dashed #222">
           <div style="font-size:9.5px;color:#F0A500;letter-spacing:.06em;margin-bottom:3px">TO BE SUPPLIED</div>
           <div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:#4FD1E8">${toSupplyV ? toSupplyV.toLocaleString() + ' MT' : '—'}</span></div>
@@ -10288,10 +10393,73 @@ function renderCommandCenter() {
     if (b.mcap && (rob.liveM || 0) / b.mcap < 0.2) alerts.push({ label: 'LSMGO ROB LOW', sub: b.name, color: '#E5484D' });
   });
   if (alertsPanel) {
+    // Flash any alert that wasn't present on the previous refresh — a
+    // wallboard nobody's staring at constantly needs something that
+    // catches the eye on a walk-by, not just static red text. Skipped on
+    // the very first render (nothing's genuinely "new" the moment the
+    // page opens — everything already there isn't a surprise).
+    const alertKey = a => a.label + '|' + a.sub;
     alertsPanel.innerHTML = `<div style="font-size:11.5px;color:#E5484D;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">ALERTS — ${alerts.length} ACTIVE</div>` +
       (alerts.length
-        ? alerts.map(a => `<div style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#FFFFFF;font-size:12px">${a.sub}</span></div>`).join('')
+        ? alerts.map(function(a) {
+            const isNew = _ccPrevAlertKeys && !_ccPrevAlertKeys.has(alertKey(a));
+            return `<div class="${isNew ? 'cc-flash-new' : ''}" style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#FFFFFF;font-size:12px">${a.sub}</span></div>`;
+          }).join('')
         : '<div style="font-size:11.5px;color:#3ECF6E;padding-top:5px">No active alerts</div>');
+    _ccPrevAlertKeys = new Set(alerts.map(alertKey));
+  }
+
+  // ── Activity — this week's totals (vs last week) + recently completed
+  //    supplies. Turns the wallboard from "what's pending" into "what's
+  //    pending + what just happened", which reads as momentum, not just
+  //    a to-do list. ──
+  const activityPanel = document.getElementById('cc-activity-panel');
+  if (activityPanel) {
+    function ccWeekBounds(d) {
+      const day = d.getDay();
+      const diffToMon = (day === 0 ? -6 : 1) - day;
+      const mon = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMon, 0, 0, 0, 0);
+      const sun = new Date(mon.getTime() + 7 * 86400000 - 1);
+      return [mon, sun];
+    }
+    const _ccNow = new Date();
+    const [thisMon, thisSun] = ccWeekBounds(_ccNow);
+    const [lastMon, lastSun] = ccWeekBounds(new Date(_ccNow.getTime() - 7 * 86400000));
+    let thisV = 0, thisM = 0, lastV = 0, lastM = 0;
+    (_savedSupplies || []).forEach(function(r) {
+      const d = new Date(r.savedAt || 0);
+      if (isNaN(d.getTime())) return;
+      const v = parseFloat(r.vlsfoAct) || parseFloat(r.vlsfoActual) || 0;
+      const m = parseFloat(r.mgoAct) || parseFloat(r.mgoActual) || 0;
+      if (d >= thisMon && d <= thisSun) { thisV += v; thisM += m; }
+      else if (d >= lastMon && d <= lastSun) { lastV += v; lastM += m; }
+    });
+    function ccTrend(cur, prev) {
+      if (cur === prev) return '<span style="color:#AAA">＝</span>';
+      return cur > prev ? '<span style="color:#3ECF6E">▲</span>' : '<span style="color:#E5484D">▼</span>';
+    }
+    const recentCompleted = (_savedSupplies || [])
+      .filter(function(r) { return r.savedAt; })
+      .slice()
+      .sort(function(a, b) { return new Date(b.savedAt) - new Date(a.savedAt); })
+      .slice(0, 6);
+
+    activityPanel.innerHTML =
+      '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">THIS WEEK</div>' +
+      `<div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between"><span>VLSFO</span><span style="color:#4FD1E8">${Math.round(thisV).toLocaleString()} MT ${ccTrend(thisV, lastV)}</span></div>` +
+      `<div style="font-size:12.5px;color:#FFFFFF;display:flex;justify-content:space-between;margin-top:3px;margin-bottom:12px"><span>LSMGO</span><span style="color:#F0A542">${Math.round(thisM).toLocaleString()} MT ${ccTrend(thisM, lastM)}</span></div>` +
+      '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:8px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">RECENTLY COMPLETED</div>' +
+      (recentCompleted.length
+        ? recentCompleted.map(function(r) {
+            const d = new Date(r.savedAt);
+            const v = parseFloat(r.vlsfoAct) || parseFloat(r.vlsfoActual) || 0;
+            const m = parseFloat(r.mgoAct) || parseFloat(r.mgoActual) || 0;
+            return `<div style="padding:5px 0;border-top:1px solid #222">
+              <div style="font-size:11.5px;color:#EEE;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${r.vessel || 'Vessel'}">${r.vessel || 'Vessel'}</div>
+              <div style="font-size:10.5px;color:#3ECF6E;margin-top:2px">${v ? v.toLocaleString() + ' VLSFO ' : ''}${m ? m.toLocaleString() + ' LSMGO' : ''} · ${fmt24(d)}</div>
+            </div>`;
+          }).join('')
+        : '<div style="font-size:11.5px;color:#FFFFFF;padding-top:4px">No completions yet</div>');
   }
 
   // ── Ticker ──
@@ -10305,23 +10473,6 @@ function renderCommandCenter() {
     const line = `${nextText}   •   ACTIVE OPS: ${weekOps}   •   VLSFO ${totalV.toLocaleString()} MT   •   LSMGO ${totalM.toLocaleString()} MT   •   ALERTS: ${alerts.length}`;
     ticker.textContent = line + '          ' + line;
     ticker.style.animation = 'ccTickerScroll 24s linear infinite';
-  }
-
-  // ── Fit the fixed 1920×1080 canvas to whatever size #cc-wallboard actually
-  //    is — a phone screen, a laptop card, or a TV cast full-screen — so the
-  //    layout never collapses/overflows and text is always sharp, since it's
-  //    real DOM text being scaled, not a raster image. ──
-  _ccFitCanvas();
-  if (!_ccListenersBound) {
-    _ccListenersBound = true;
-    window.addEventListener('resize', _ccFitCanvas);
-    document.addEventListener('fullscreenchange', _ccFitCanvas);
-    document.addEventListener('webkitfullscreenchange', _ccFitCanvas);
-    if ('ResizeObserver' in window) {
-      _ccResizeObserver = new ResizeObserver(_ccFitCanvas);
-      const wrap = document.getElementById('cc-wallboard');
-      if (wrap) _ccResizeObserver.observe(wrap);
-    }
   }
 }
 
