@@ -3043,16 +3043,6 @@ function flowWelcomeGo(pageId) {
         scaling, not a raster image. -->
    <div id="cc-canvas" style="position:absolute;top:0;left:0;width:1280px;height:720px;transform-origin:top left;background:#000000;font-family:'Courier New',Courier,monospace;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased">
 
-    <!-- Bloomberg-style command bar — black background, amber terminal
-         text, no macOS chrome. Still houses the real "BACK TO OPS"
-         control so there's always a way out on a phone with no browser
-         chrome (e.g. the Android app). -->
-    <div style="flex-shrink:0;display:flex;align-items:center;padding:6px 14px;background:#000000;border-bottom:1px solid #F0A500">
-      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
-        <span>◄</span> BACK TO OPS
-      </button>
-    </div>
-
     <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#0A0A0A;border-bottom:1px solid #F0A500">
       <div style="display:flex;align-items:center;gap:14px">
         <span style="font-size:17px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</span>
@@ -3080,6 +3070,16 @@ function flowWelcomeGo(pageId) {
 
     <div style="flex-shrink:0;border-top:1px solid #F0A500;background:#0A0A0A;padding:5px 0;overflow:hidden;white-space:nowrap">
       <div id="cc-ticker" style="display:inline-block;font-size:12px;color:#4FD1E8;padding-left:100%"></div>
+    </div>
+
+    <!-- "BACK TO OPS" — moved down here per request, below the ticker,
+         instead of sitting up in its own strip above the header. Still
+         the real way out of Command Center on a phone with no browser
+         chrome (e.g. the Android app). -->
+    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:6px 0;background:#000000;border-top:1px solid #2A2A2A">
+      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
+        <span>◄</span> BACK TO OPS
+      </button>
     </div>
    </div>
    <!-- Full-size (never scaled) fullscreen-exit button. It lives outside
