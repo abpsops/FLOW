@@ -14834,42 +14834,6 @@ function renderWeekCalendar(offsetDays) {
         ${dayTotalM>0?`<span style="font-size:9px;font-weight:700;padding:1px 5px;border:1px solid var(--fuel-m-bd);border-radius:2px;color:var(--fuel-m);font-family:'DM Mono',monospace;font-variant-numeric:tabular-nums">M·${dayTotalM.toLocaleString()}</span>`:''}
       </div>
 
-      <!-- Loading operations overlapping this day — same full card treatment
-           as the vessel entries below, but with a solid grade-tinted fill
-           (fuel-v-lt / fuel-m-lt) instead of a plain background, so a
-           loading ticket reads as its own distinct kind of card at a glance. -->
-      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-bottom:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:5px">
-        ${dayLoadings.map(function(r){
-          const isM = r.grade === 'LSMGO';
-          const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';       // solid grade color — used as the card's fill
-          const gcBd = isM ? 'var(--fuel-m-bd)' : 'var(--fuel-v-bd)';
-          const start = new Date(r.startAt), end = new Date(r.endAt);
-          return `<div style="
-            background:${gc};
-            border:1px solid ${gcBd};
-            border-radius:4px;
-            padding:6px 7px;
-            overflow:hidden;
-            box-sizing:border-box;
-            cursor:pointer;
-            transition:filter .12s, transform .12s;
-          " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${r.id}')" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+r.surveyor:''}${r.notes?'&#10;'+r.notes:''}&#10;Click to open in Loading">
-            <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
-              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${fmt(start)}</span>
-              <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${r.grade}</span>
-            </div>
-            <div style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${r.terminal}</div>
-            <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
-              <span style="color:#fff">${r.grade}&nbsp;${r.qty.toLocaleString()}</span>
-            </div>
-            <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
-              <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
-              ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
-            </div>
-          </div>`;
-        }).join('')}
-      </div>
-
       <!-- Vessel manifest entries -->
       <div style="flex:1;padding:6px;display:flex;flex-direction:column;gap:5px;overflow:visible;background:var(--surface)">
         ${dayItems.length ? dayItems.map(item => {
@@ -14914,6 +14878,42 @@ function renderWeekCalendar(offsetDays) {
         }).join('') : `<div style="flex:1;display:flex;align-items:center;justify-content:center;padding:16px 4px;text-align:center">
           <span style="font-size:9.5px;color:var(--muted);font-weight:600;font-family:'DM Mono',monospace;text-transform:uppercase;letter-spacing:.04em">No Supply</span>
         </div>`}
+      </div>
+
+      <!-- Loading operations overlapping this day — rendered AFTER all vessel
+           cards below, since a loading only happens once the barge has finished
+           that day's vessel supply — regardless of the loading's own clock time,
+           it always comes last in the day's sequence, right after the last vessel. -->
+      <div style="padding:${dayLoadings.length?'6px':'0'} 6px;border-top:${dayLoadings.length?'1px solid var(--border)':'none'};background:var(--surface2);display:flex;flex-direction:column;gap:5px">
+        ${dayLoadings.map(function(r){
+          const isM = r.grade === 'LSMGO';
+          const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';       // solid grade color — used as the card's fill
+          const gcBd = isM ? 'var(--fuel-m-bd)' : 'var(--fuel-v-bd)';
+          const start = new Date(r.startAt), end = new Date(r.endAt);
+          return `<div style="
+            background:${gc};
+            border:1px solid ${gcBd};
+            border-radius:4px;
+            padding:6px 7px;
+            overflow:hidden;
+            box-sizing:border-box;
+            cursor:pointer;
+            transition:filter .12s, transform .12s;
+          " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${r.id}')" title="${r.terminal} — ${r.grade} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+r.surveyor:''}${r.notes?'&#10;'+r.notes:''}&#10;Click to open in Loading">
+            <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${fmt(start)}</span>
+              <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${r.grade}</span>
+            </div>
+            <div style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${r.terminal}</div>
+            <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+              <span style="color:#fff">${r.grade}&nbsp;${r.qty.toLocaleString()}</span>
+            </div>
+            <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
+              <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
+              ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${r.surveyor}</div>`:''}
+            </div>
+          </div>`;
+        }).join('')}
       </div>
     </div>`;
   });
