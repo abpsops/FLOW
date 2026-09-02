@@ -3048,7 +3048,7 @@ function flowWelcomeGo(pageId) {
          control so there's always a way out on a phone with no browser
          chrome (e.g. the Android app). -->
     <div style="flex-shrink:0;display:flex;align-items:center;padding:6px 14px;background:#000000;border-bottom:1px solid #F0A500">
-      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:6px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:11px;letter-spacing:.08em;padding:4px 10px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
+      <button id="cc-title-back-btn" onclick="_ccBackToOps()" style="display:flex;align-items:center;gap:4px;background:#000000;border:1px solid #F0A500;color:#F0A500;font-family:'Courier New',Courier,monospace;font-weight:700;font-size:9px;letter-spacing:.06em;padding:3px 7px;border-radius:2px;cursor:pointer;-webkit-tap-highlight-color:transparent">
         <span>◄</span> BACK TO OPS
       </button>
     </div>
@@ -10367,19 +10367,22 @@ function _ccRefreshData() {
         const vQty = item.nomVQ || item.vQ || 0;
         const mQty = item.nomMQ || item.mQ || 0;
         return `<tr style="border-top:1px solid #222">
-          <td style="padding:5px 4px 5px 0;color:#EEE;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${item.name}">${item.name}</td>
-          <td style="text-align:right;color:#CCC;font-size:11.5px;white-space:nowrap;overflow:hidden">${fmtWB(item.bargeStart)}</td>
-          <td style="text-align:right;color:#4FD1E8;font-size:11.5px;white-space:nowrap;overflow:hidden">${vQty ? vQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;color:#F0A542;font-size:11.5px;white-space:nowrap;overflow:hidden">${mQty ? mQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;color:${statusColor};font-size:11.5px;white-space:nowrap;overflow:hidden">${statusText}</td>
+          <td style="padding:5px 6px 5px 0;color:#EEE;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${item.name}">${item.name}</td>
+          <td style="text-align:right;padding:5px 6px;color:#CCC;font-size:11.5px;white-space:nowrap;overflow:hidden">${fmtWB(item.bargeStart)}</td>
+          <td style="text-align:right;padding:5px 6px;color:#4FD1E8;font-size:11.5px;white-space:nowrap;overflow:hidden">${vQty ? vQty.toLocaleString() : '—'}</td>
+          <td style="text-align:right;padding:5px 6px;color:#F0A542;font-size:11.5px;white-space:nowrap;overflow:hidden">${mQty ? mQty.toLocaleString() : '—'}</td>
+          <td style="text-align:right;padding:5px 0 5px 6px;color:${statusColor};font-size:11.5px;white-space:nowrap;overflow:visible">${statusText}</td>
         </tr>`;
       }).join('');
       // Explicit column widths (not left to the browser's default fixed-layout
       // guess from the header row) — this is what was letting the START
-      // column's text spill visibly into the next column.
+      // column's text spill visibly into the next column. STATUS gets more
+      // room than the others (needed 'ONTIME'/'DELAY' to actually fit
+      // without clipping) and every column now has real padding between
+      // it and its neighbor instead of butting flush against it.
       return '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-        '<colgroup><col style="width:34%"><col style="width:30%"><col style="width:12%"><col style="width:12%"><col style="width:12%"></colgroup>' +
-        '<tr style="color:#FFFFFF;font-size:11.5px"><td>VESSEL</td><td style="text-align:right">START</td><td style="text-align:right">VLSFO</td><td style="text-align:right">LSMGO</td><td style="text-align:right">STATUS</td></tr>' +
+        '<colgroup><col style="width:26%"><col style="width:24%"><col style="width:15%"><col style="width:15%"><col style="width:20%"></colgroup>' +
+        '<tr style="color:#FFFFFF;font-size:11.5px"><td>VESSEL</td><td style="text-align:right;padding:0 6px">START</td><td style="text-align:right;padding:0 6px">VLSFO</td><td style="text-align:right;padding:0 6px">LSMGO</td><td style="text-align:right;padding:0 0 0 6px">STATUS</td></tr>' +
         (rows || '<tr><td colspan="5" style="color:#FFFFFF;font-size:12.5px;padding-top:8px">No active vessels</td></tr>') + '</table>';
     }
 
