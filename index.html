@@ -10352,38 +10352,36 @@ function _ccRefreshData() {
           // rule, monospace, uppercase — reads as "Ops Terminal" signal
           // rather than a flat unfilled row.
           const accent = r.grade === 'LSMGO' ? '#F0A542' : '#4FD1E8';
-          return `<tr style="border-top:1px solid #222">
-            <td colspan="5" style="padding:6px 10px 6px 8px;background:linear-gradient(90deg, ${accent}33, ${accent}0D 65%, transparent);border-left:3px solid ${accent}">
-              <div style="display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em">
-                <span style="color:${accent};font-weight:700;white-space:normal;word-break:break-word">[ LOADING ] ${r.terminal.toUpperCase()}</span>
-                <span style="color:#EAEAEA;white-space:nowrap">${r.grade} · ${r.qty.toLocaleString()} MT · ${fmtWB(entry.t)}</span>
-              </div>
-            </td>
-          </tr>`;
+          return `<div style="padding:6px 10px 6px 8px;border-top:1px solid #222;background:linear-gradient(90deg, ${accent}33, ${accent}0D 65%, transparent);border-left:3px solid ${accent}">
+            <div style="display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em">
+              <span style="color:${accent};font-weight:700;white-space:normal;word-break:break-word">[ LOADING ] ${r.terminal.toUpperCase()}</span>
+              <span style="color:#EAEAEA;white-space:normal;word-break:break-word">${r.grade} · ${r.qty.toLocaleString()} MT · ${fmtWB(entry.t)}</span>
+            </div>
+          </div>`;
         }
         const item = entry.data;
         const statusColor = item.isDelayed ? '#F0A500' : '#3ECF6E';
         const statusText = item.isDelayed ? 'DELAY' : 'ONTIME';
         const vQty = item.nomVQ || item.vQ || 0;
         const mQty = item.nomMQ || item.mQ || 0;
-        return `<tr style="border-top:1px solid #222">
-          <td style="padding:5px 6px 5px 0;color:#EEE;font-size:11.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${item.name}">${item.name}</td>
-          <td style="text-align:right;padding:5px 6px;color:#CCC;font-size:11.5px;white-space:nowrap;overflow:hidden">${fmtWB(item.bargeStart)}</td>
-          <td style="text-align:right;padding:5px 6px;color:#4FD1E8;font-size:11.5px;white-space:nowrap;overflow:hidden">${vQty ? vQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;padding:5px 6px;color:#F0A542;font-size:11.5px;white-space:nowrap;overflow:hidden">${mQty ? mQty.toLocaleString() : '—'}</td>
-          <td style="text-align:right;padding:5px 0 5px 6px;color:${statusColor};font-size:11.5px;white-space:nowrap;overflow:visible">${statusText}</td>
-        </tr>`;
+        // A vessel's full name is never negotiable — it wraps onto a
+        // second line rather than getting cut off with an ellipsis, no
+        // matter how narrow this column gets in split-by-barge view. The
+        // rest of the row's details flow as a wrapping line underneath
+        // instead of fighting for fixed table-column widths that always
+        // eventually clip something in a narrow sub-column.
+        return `<div style="padding:6px 0;border-top:1px solid #222">
+          <div style="color:#EEE;font-size:11.5px;font-weight:700;white-space:normal;word-break:break-word;line-height:1.35">${item.name}</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px;font-size:10.5px">
+            <span style="color:#CCC;white-space:nowrap">${fmtWB(item.bargeStart)}</span>
+            <span style="color:#4FD1E8;white-space:nowrap">V ${vQty ? vQty.toLocaleString() : '—'}</span>
+            <span style="color:#F0A542;white-space:nowrap">M ${mQty ? mQty.toLocaleString() : '—'}</span>
+            <span style="color:${statusColor};font-weight:700;white-space:nowrap;margin-left:auto">${statusText}</span>
+          </div>
+        </div>`;
       }).join('');
-      // Explicit column widths (not left to the browser's default fixed-layout
-      // guess from the header row) — this is what was letting the START
-      // column's text spill visibly into the next column. STATUS gets more
-      // room than the others (needed 'ONTIME'/'DELAY' to actually fit
-      // without clipping) and every column now has real padding between
-      // it and its neighbor instead of butting flush against it.
-      return '<table style="width:100%;border-collapse:collapse;table-layout:fixed">' +
-        '<colgroup><col style="width:26%"><col style="width:24%"><col style="width:15%"><col style="width:15%"><col style="width:20%"></colgroup>' +
-        '<tr style="color:#FFFFFF;font-size:11.5px"><td>VESSEL</td><td style="text-align:right;padding:0 6px">START</td><td style="text-align:right;padding:0 6px">VLSFO</td><td style="text-align:right;padding:0 6px">LSMGO</td><td style="text-align:right;padding:0 0 0 6px">STATUS</td></tr>' +
-        (rows || '<tr><td colspan="5" style="color:#FFFFFF;font-size:12.5px;padding-top:8px">No active vessels</td></tr>') + '</table>';
+      return '<div style="font-size:9.5px;color:#FFFFFF;letter-spacing:.08em;padding-bottom:5px;margin-bottom:2px;border-bottom:1px solid #2A2A2A">SCHEDULE</div>' +
+        (rows || '<div style="color:#FFFFFF;font-size:12.5px;padding-top:8px">No active vessels</div>');
     }
 
     if (barges.length > 1) {
