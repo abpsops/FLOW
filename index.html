@@ -4680,10 +4680,31 @@ function renderDashActivity(records, vessels) {
       const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
       items.push({
         color,
-        title: 'Loading Scheduled',
+        title: `Loading Scheduled — ${r.grade}`,
         detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
         time: dateLbl + ' ' + t,
         onclick: `showPage('loading');editLoadingRecord('${r.id}')`,
+      });
+    });
+  // Recently-completed Loading operations — marking a Loading "Done" used
+  // to just silently drop it from this feed with no record it ever
+  // happened. Show it here instead, tagged by grade, same as the
+  // scheduled ones above.
+  (_loadingRecords || [])
+    .filter(function(r) { return r.completed && r.completedAt; })
+    .sort(function(a, b) { return b.completedAt - a.completedAt; })
+    .slice(0, 5)
+    .forEach(function(r) {
+      const d = new Date(r.completedAt);
+      const t = isNaN(d) ? '—' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+      const dateLbl = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      items.push({
+        color,
+        title: `Loading Completed — ${r.grade}`,
+        detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''}`,
+        time: (dateLbl + ' ' + t).trim() || '—',
+        onclick: `showPage('loading')`,
       });
     });
   // From _savedSupplies (live in-memory — most accurate)
@@ -6697,11 +6718,13 @@ function deleteLoadingRecord(id) {
   _refreshLoadingConsumers();
 }
 
-// Marks a loading as complete — this is what actually removes it from the
-// calendar, Supply Timeline, and dashboard Operational Activity feed. The
-// record itself isn't deleted, just excluded from those "what's still
-// happening" views; it stays visible (greyed, tagged Done) in the Loading
-// page's own list, with an Undo option in case it was marked by mistake.
+// Marks a loading as complete — this removes it from the calendar and
+// Supply Timeline ("what's still happening" views), but it now still
+// appears in the dashboard Operational Activity feed as a completed
+// entry (see renderDashActivity) instead of disappearing silently. The
+// record itself isn't deleted; it stays visible (greyed, tagged Done)
+// in the Loading page's own list, with an Undo option in case it was
+// marked by mistake.
 function markLoadingRecordDone(id) {
   const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
   if (!rec) return;
@@ -14716,9 +14739,15 @@ function renderWeekCalendar(offsetDays) {
   });
   (_savedSupplies || []).forEach(function(r) { if (r.supplied) completedVessels.add(r.vessel); });
 
-  // Gather supply items from _lastSched — match by ETA date, exclude completed
+  // Gather supply items from _lastSched — placed under their ETA date, not
+  // the barge's actual supply-start date. A vessel can be delayed to the
+  // next day if its barge was busy (loading, another vessel, etc.) — but
+  // the calendar is meant to answer "when is this vessel arriving/expected"
+  // per the nominated ETA, not silently move it to whatever day the barge
+  // happened to free up. That "actual start may differ" detail is still
+  // fully visible via the ETC now shown directly on the card (see below).
   const allItems = (_lastSched || []).map(item => {
-    const raw = item.bargeStart || item.eta;
+    const raw = item.eta || item.bargeStart;
     const d = raw ? (raw instanceof Date ? raw : new Date(raw)) : null;
     return { ...item, _etaDate: d };
   }).filter(x => x._etaDate && !isNaN(x._etaDate) && !completedVessels.has(x.name));
@@ -14862,6 +14891,12 @@ function renderWeekCalendar(offsetDays) {
           const calNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item.vQ||0), calNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item.mQ||0);
           const gc = gradeColor(calNomV, calNomM);
           const etaTime = fmt(item._etaDate);
+          const etcDate = item.etc ? (item.etc instanceof Date ? item.etc : new Date(item.etc)) : null;
+          let etcDisplay = '';
+          if (etcDate && !isNaN(etcDate)) {
+            const crossesDay = etcDate.toDateString() !== item._etaDate.toDateString();
+            etcDisplay = fmt(etcDate) + (crossesDay ? ' (' + etcDate.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ')' : '');
+          }
           const loc = item.area || item.anchorage || item.location || '';
           const barge = item.bargeLabel || '';
           const hasSno = item.sno !== undefined && item.sno !== null;
@@ -14875,9 +14910,9 @@ function renderWeekCalendar(offsetDays) {
             box-sizing:border-box;
             ${hasSno?'cursor:pointer':'cursor:default'};
             transition:border-color .12s, transform .12s;
-          " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
+          " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
             <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
-              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
+              <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}${etcDisplay?` <span style="color:var(--sub);font-weight:600">→ ${etcDisplay}</span>`:''}</span>
               ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:''}
               <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
             </div>
