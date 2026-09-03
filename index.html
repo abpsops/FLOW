@@ -5476,16 +5476,19 @@ document.addEventListener('DOMContentLoaded', async () => {
    ═══════════════════════════════════════════════════════════════ */
 
 let ABPS_ROLE = 'operator'; // safe UI default until the real lookup resolves
+let ABPS_UID = null;
 function isTrader() { return ABPS_ROLE === 'trader'; }
 
 const TRADER_ALLOWED_PAGES = ['dashboard', 'nominations', 'bargetracking'];
 
 async function _fetchAndApplyUserRole() {
   ABPS_ROLE = 'operator';
+  ABPS_UID = null;
   try {
     if (supabaseClient) {
       const { data: sessionData } = await supabaseClient.auth.getSession();
       const uid = sessionData && sessionData.session && sessionData.session.user && sessionData.session.user.id;
+      ABPS_UID = uid || null;
       if (uid) {
         const { data, error } = await supabaseClient
           .from('user_roles')
@@ -6924,7 +6927,14 @@ function renderLoadingPage() {
    ══════════════════════════════════════════════════════════════════ */
 let _bargeTrackingReports = [];
 const BTR_BUCKET = 'barge-tracking-reports';
-const BTR_SEEN_KEY = 'flow_seen_tracking_report_ids';
+const BTR_SEEN_KEY_BASE = 'flow_seen_tracking_report_ids';
+// The "seen" list must be scoped to the SIGNED-IN ACCOUNT, not just the
+// browser — this device may be shared between an operator and trader
+// signing in/out of the same browser (exactly how this app gets tested
+// day to day). Keying purely by browser meant one account's dismissal
+// silently carried over to the next account that signed in on the same
+// device, so nobody but the very first person ever saw a banner.
+function _btrSeenKey() { return BTR_SEEN_KEY_BASE + '_' + (ABPS_UID || 'anon'); }
 
 let _btrFromPicker = null, _btrToPicker = null;
 function openBtrFromPicker() {
@@ -6972,7 +6982,7 @@ function renderBargeTrackingReports() {
         <div style="font-size:11px;color:var(--sub);margin-top:1px;word-break:break-all">${(r.fileName || 'report.pdf').replace(/</g,'&lt;')}</div>
       </div>
       <div style="font-size:10.5px;color:var(--muted);text-align:right;min-width:150px">
-        <div>Uploaded by ${(r.uploadedByEmail || 'unknown').replace(/</g,'&lt;')}</div>
+        <div>Uploaded by ${((r.uploadedByRole || 'Operator').charAt(0).toUpperCase() + (r.uploadedByRole || 'Operator').slice(1)).replace(/</g,'&lt;')}</div>
         <div style="margin-top:1px">${uploadedAt}</div>
       </div>
       <div style="display:flex;gap:6px">
@@ -7022,6 +7032,7 @@ async function uploadBargeTrackingReport() {
       fileName: file.name,
       storagePath,
       uploadedByEmail: uploaderEmail,
+      uploadedByRole: ABPS_ROLE,
       uploadedAt: Date.now(),
     };
     _bargeTrackingReports = (_bargeTrackingReports || []).concat([record]);
@@ -7080,12 +7091,12 @@ async function deleteBargeTrackingReport(id) {
    it or opens the report, tracked per-browser via localStorage so
    dismissing it doesn't hide it from anyone else. ── */
 function _getSeenTrackingReportIds() {
-  try { return new Set(JSON.parse(localStorage.getItem(BTR_SEEN_KEY) || '[]')); } catch (e) { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(_btrSeenKey()) || '[]')); } catch (e) { return new Set(); }
 }
 function _markTrackingReportsSeen(ids) {
   const seen = _getSeenTrackingReportIds();
   ids.forEach(function(id) { seen.add(id); });
-  try { localStorage.setItem(BTR_SEEN_KEY, JSON.stringify(Array.from(seen))); } catch (e) {}
+  try { localStorage.setItem(_btrSeenKey(), JSON.stringify(Array.from(seen))); } catch (e) {}
 }
 function _checkNewTrackingReportAlerts() {
   const seen = _getSeenTrackingReportIds();
@@ -7107,8 +7118,9 @@ function _showTrackingReportBanner(unseen) {
     document.body.appendChild(banner);
   }
   const latest = unseen.slice().sort(function(a,b){ return (b.uploadedAt||0)-(a.uploadedAt||0); })[0];
+  const latestRoleLabel = ((latest.uploadedByRole || 'Operator').charAt(0).toUpperCase() + (latest.uploadedByRole || 'Operator').slice(1));
   const msg = unseen.length === 1
-    ? `📄 New Barge Tracking Report uploaded (${(latest.fileName||'report.pdf')}) by ${latest.uploadedByEmail||'a teammate'}`
+    ? `📄 New Barge Tracking Report uploaded (${(latest.fileName||'report.pdf')}) by ${latestRoleLabel}`
     : `📄 ${unseen.length} new Barge Tracking Reports uploaded`;
   banner.innerHTML = `<span>${msg}</span>` +
     `<button onclick="showPage('bargetracking');_dismissTrackingReportAlerts()" style="background:#fff;color:var(--pg-bargetracking);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">View</button>` +
