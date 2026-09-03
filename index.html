@@ -138,6 +138,7 @@ function _chartTextColor() {
   --pg-deliverylog:  #435872;
   --pg-archives:     #514AA0;
   --pg-trash:        #7A3A87;
+  --pg-bargetracking:#0E6E5C;
 
   /* ── Surfaces: crisp, cool, clinical (light theme) ── */
   --bg:        var(--surface2);
@@ -491,6 +492,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 #page-nominations .page-title{color:var(--pg-nominations)}
 #page-schedule .page-title{color:var(--pg-schedule)}
 #page-loading .page-title{color:var(--pg-loading)}
+#page-bargetracking .page-title{color:var(--pg-bargetracking)}
 #page-timeline .page-title{color:var(--pg-timeline)}
 #page-alerts .page-title{color:var(--pg-alerts)}
 #page-bargefleet .page-title{color:var(--pg-bargefleet)}
@@ -2208,6 +2210,11 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Reports &amp; Analytics
   </a>
+  <a class="sidebar-item" onclick="showPage('bargetracking')" id="nav-bargetracking">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
+    Barge Tracking
+    <span class="sidebar-badge amber" id="nav-badge-bargetracking" style="display:none">0</span>
+  </a>
   <a class="sidebar-item" onclick="showPage('commandcenter')" id="nav-commandcenter">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
     Command Center
@@ -3166,6 +3173,53 @@ function flowWelcomeGo(pageId) {
   </div>
   <div id="saved-records-panel" style="background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
     <div id="saved-records-list"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE: BARGE TRACKING REPORTS
+     Upload a PDF tracking report for a date range. It's stored in
+     Supabase Storage (not embedded in the synced JSON state — PDFs are
+     too big for that) and the small metadata record (dates, filename,
+     who/when) syncs through the normal shared-state mechanism, so it
+     shows up for every operator AND trader within the usual ~30s
+     auto-sync poll, with a banner alerting them a new one landed.
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-bargetracking" data-section="reports">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Barge Tracking Reports</div>
+      <div class="page-subtitle">Upload a tracking report PDF for a date range — every operator and trader gets notified</div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm);margin-bottom:16px">
+    <div class="g2" style="margin-bottom:14px">
+      <div class="field"><label>From Date</label>
+        <div class="input-with-cal">
+          <input type="text" id="btr-from" placeholder="01 Jan 2026" autocomplete="off">
+          <button type="button" class="cal-btn" onclick="openBtrFromPicker()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+        </div>
+      </div>
+      <div class="field"><label>To Date</label>
+        <div class="input-with-cal">
+          <input type="text" id="btr-to" placeholder="31 Jan 2026" autocomplete="off">
+          <button type="button" class="cal-btn" onclick="openBtrToPicker()"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:14px">
+      <label>Report (PDF)</label>
+      <input type="file" id="btr-file" accept="application/pdf,.pdf">
+    </div>
+    <button class="btn btn-primary" id="btr-upload-btn" onclick="uploadBargeTrackingReport()">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Upload Report
+    </button>
+  </div>
+
+  <div style="background:var(--surface);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
+    <div id="btr-list"></div>
   </div>
 </div>
 
@@ -4213,6 +4267,7 @@ function showPage(id) {
   if (id === 'records')      renderSavedRecords();
   if (id === 'checklist')    { renderChecklist(_lastSched || []); }
   if (id === 'loading')      { renderLoadingPage(); }
+  if (id === 'bargetracking') { renderBargeTrackingPage(); }
   if (id === 'timeline')     {
     renderLiveROBDashboard();
     if (_lastSched && _lastSched.length && typeof renderBargeTabsAndTL === 'function')
@@ -5419,7 +5474,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 let ABPS_ROLE = 'operator'; // safe UI default until the real lookup resolves
 function isTrader() { return ABPS_ROLE === 'trader'; }
 
-const TRADER_ALLOWED_PAGES = ['dashboard', 'nominations'];
+const TRADER_ALLOWED_PAGES = ['dashboard', 'nominations', 'bargetracking'];
 
 async function _fetchAndApplyUserRole() {
   ABPS_ROLE = 'operator';
@@ -6855,6 +6910,212 @@ function renderLoadingPage() {
   renderLoadingList();
 }
 
+/* ══════════════════════════════════════════════════════════════════
+   BARGE TRACKING REPORTS — upload a PDF for a date range. The file
+   lives in a Supabase Storage bucket ('barge-tracking-reports'); only
+   the small metadata (dates, filename, storage path, who/when) goes
+   through the normal shared-state sync so every operator and trader
+   picks it up. Requires supabase_role_setup.sql's bucket/policy
+   counterpart — see barge_tracking_bucket_setup.sql.
+   ══════════════════════════════════════════════════════════════════ */
+let _bargeTrackingReports = [];
+const BTR_BUCKET = 'barge-tracking-reports';
+const BTR_SEEN_KEY = 'flow_seen_tracking_report_ids';
+
+let _btrFromPicker = null, _btrToPicker = null;
+function openBtrFromPicker() {
+  const inp = document.getElementById('btr-from');
+  if (!inp) return;
+  if (_btrFromPicker) { _btrFromPicker.open(); return; }
+  _btrFromPicker = flatpickr(inp, { dateFormat: 'j M Y', allowInput: false, disableMobile: true, minDate: '2026-01-01', onReady(_,__,fp){ fp.open(); } });
+  _btrFromPicker.open();
+}
+function openBtrToPicker() {
+  const inp = document.getElementById('btr-to');
+  if (!inp) return;
+  if (_btrToPicker) { _btrToPicker.open(); return; }
+  _btrToPicker = flatpickr(inp, { dateFormat: 'j M Y', allowInput: false, disableMobile: true, minDate: '2026-01-01', onReady(_,__,fp){ fp.open(); } });
+  _btrToPicker.open();
+}
+
+function renderBargeTrackingPage() {
+  renderBargeTrackingReports();
+}
+
+function renderBargeTrackingReports() {
+  const el = document.getElementById('btr-list');
+  if (!el) return;
+  const sorted = (_bargeTrackingReports || []).slice().sort(function(a, b) {
+    return new Date(b.dateFrom) - new Date(a.dateFrom);
+  });
+  if (!sorted.length) {
+    el.innerHTML = '<div style="text-align:center;padding:24px;color:var(--muted);font-size:12.5px">No tracking reports uploaded yet.</div>';
+    return;
+  }
+  const canManage = !isTrader(); // traders can view/open; only operators delete
+  el.innerHTML = sorted.map(function(r) {
+    const from = new Date(r.dateFrom), to = new Date(r.dateTo);
+    const fmtD = d => isNaN(d) ? '—' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const uploadedAt = r.uploadedAt ? new Date(r.uploadedAt).toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+    return `<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--pg-bargetracking);color:#fff;font-family:'DM Mono',monospace;letter-spacing:.04em">PDF</span>
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:13px;font-weight:700;color:var(--ink)">${fmtD(from)} → ${fmtD(to)}</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:1px;word-break:break-all">${(r.fileName || 'report.pdf').replace(/</g,'&lt;')}</div>
+      </div>
+      <div style="font-size:10.5px;color:var(--muted);text-align:right;min-width:150px">
+        <div>Uploaded by ${(r.uploadedByEmail || 'unknown').replace(/</g,'&lt;')}</div>
+        <div style="margin-top:1px">${uploadedAt}</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-primary btn-sm" onclick="openBargeTrackingReport('${r.id}')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+          Open
+        </button>
+        ${canManage ? `<button class="btn btn-secondary btn-sm" onclick="deleteBargeTrackingReport('${r.id}')" title="Remove">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function uploadBargeTrackingReport() {
+  const fromInp = document.getElementById('btr-from');
+  const toInp = document.getElementById('btr-to');
+  const fileInp = document.getElementById('btr-file');
+  const btn = document.getElementById('btr-upload-btn');
+  const dateFrom = fromInp && fromInp.value ? new Date(fromInp.value) : null;
+  const dateTo = toInp && toInp.value ? new Date(toInp.value) : null;
+  const file = fileInp && fileInp.files && fileInp.files[0];
+
+  if (!dateFrom || isNaN(dateFrom) || !dateTo || isNaN(dateTo)) { showToast('Pick a From and To date first.', 'warning'); return; }
+  if (!file) { showToast('Choose a PDF file to upload.', 'warning'); return; }
+  if (file.type && file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    showToast('Only PDF files are supported here.', 'warning'); return;
+  }
+  if (!_syncReady()) { showToast('Cloud sync isn\'t set up — can\'t upload a report that reaches your team.', 'error', 0); return; }
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Uploading…'; }
+  try {
+    const { data: sessionData } = await supabaseClient.auth.getSession();
+    const uploaderEmail = (sessionData && sessionData.session && sessionData.session.user && sessionData.session.user.email) || 'unknown';
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const storagePath = `${Date.now()}_${safeName}`;
+    const { error: upErr } = await supabaseClient.storage.from(BTR_BUCKET).upload(storagePath, file, { contentType: 'application/pdf', upsert: false });
+    if (upErr) throw upErr;
+
+    const record = {
+      id: 'btr_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
+      dateFrom: dateFrom.toISOString(),
+      dateTo: dateTo.toISOString(),
+      fileName: file.name,
+      storagePath,
+      uploadedByEmail: uploaderEmail,
+      uploadedAt: Date.now(),
+    };
+    _bargeTrackingReports = (_bargeTrackingReports || []).concat([record]);
+
+    // Mark it as already-seen on THIS browser (the uploader doesn't need
+    // their own banner) before syncing, so the banner only fires for
+    // everyone else who pulls this down.
+    _markTrackingReportsSeen([record.id]);
+
+    await saveSharedState();
+    renderBargeTrackingReports();
+    showToast('Report uploaded — your team will see it shortly.', 'success');
+
+    if (fromInp) fromInp.value = '';
+    if (toInp) toInp.value = '';
+    if (fileInp) fileInp.value = '';
+  } catch (e) {
+    showToast('Upload failed: ' + (e.message || e), 'error', 0);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>Upload Report'; }
+  }
+}
+
+async function openBargeTrackingReport(id) {
+  const r = (_bargeTrackingReports || []).find(function(x) { return x.id === id; });
+  if (!r) return;
+  if (!_syncReady()) { showToast('Cloud sync isn\'t set up.', 'error'); return; }
+  try {
+    const { data, error } = await supabaseClient.storage.from(BTR_BUCKET).createSignedUrl(r.storagePath, 3600);
+    if (error) throw error;
+    window.open(data.signedUrl, '_blank');
+  } catch (e) {
+    showToast('Could not open report: ' + (e.message || e), 'error');
+  }
+}
+
+async function deleteBargeTrackingReport(id) {
+  const r = (_bargeTrackingReports || []).find(function(x) { return x.id === id; });
+  if (!r) return;
+  if (!confirm('Remove this tracking report (' + (r.fileName || '') + ')? This cannot be undone.')) return;
+  try {
+    if (_syncReady()) await supabaseClient.storage.from(BTR_BUCKET).remove([r.storagePath]);
+  } catch (e) { /* even if storage delete fails, still drop it from the list below */ }
+  _bargeTrackingReports = (_bargeTrackingReports || []).filter(function(x) { return x.id !== id; });
+  await saveSharedState();
+  renderBargeTrackingReports();
+  showToast('Report removed.', 'success');
+}
+
+/* ── Cross-user "new report" banner ───────────────────────────────
+   showToast() is local-only and disappears in a few seconds — not
+   enough for "every trader and operator gets notified" about a report
+   uploaded on someone else's device. This banner is unmissable (fixed,
+   top of screen, on every page) and stays until the person dismisses
+   it or opens the report, tracked per-browser via localStorage so
+   dismissing it doesn't hide it from anyone else. ── */
+function _getSeenTrackingReportIds() {
+  try { return new Set(JSON.parse(localStorage.getItem(BTR_SEEN_KEY) || '[]')); } catch (e) { return new Set(); }
+}
+function _markTrackingReportsSeen(ids) {
+  const seen = _getSeenTrackingReportIds();
+  ids.forEach(function(id) { seen.add(id); });
+  try { localStorage.setItem(BTR_SEEN_KEY, JSON.stringify(Array.from(seen))); } catch (e) {}
+}
+function _checkNewTrackingReportAlerts() {
+  const seen = _getSeenTrackingReportIds();
+  const unseen = (_bargeTrackingReports || []).filter(function(r) { return !seen.has(r.id); });
+  const badge = document.getElementById('nav-badge-bargetracking');
+  if (badge) {
+    if (unseen.length > 0) { badge.textContent = unseen.length; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  }
+  if (unseen.length > 0) _showTrackingReportBanner(unseen);
+  else _hideTrackingReportBanner();
+}
+function _showTrackingReportBanner(unseen) {
+  let banner = document.getElementById('btr-alert-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'btr-alert-banner';
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999996;background:var(--pg-bargetracking);color:#fff;font-size:12.5px;font-weight:600;padding:9px 16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:12px;flex-wrap:wrap';
+    document.body.appendChild(banner);
+  }
+  const latest = unseen.slice().sort(function(a,b){ return (b.uploadedAt||0)-(a.uploadedAt||0); })[0];
+  const msg = unseen.length === 1
+    ? `📄 New Barge Tracking Report uploaded (${(latest.fileName||'report.pdf')}) by ${latest.uploadedByEmail||'a teammate'}`
+    : `📄 ${unseen.length} new Barge Tracking Reports uploaded`;
+  banner.innerHTML = `<span>${msg}</span>` +
+    `<button onclick="showPage('bargetracking');_dismissTrackingReportAlerts()" style="background:#fff;color:var(--pg-bargetracking);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">View</button>` +
+    `<button onclick="_dismissTrackingReportAlerts()" style="background:transparent;color:#fff;border:1px solid rgba(255,255,255,.6);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Dismiss</button>`;
+  banner.style.display = 'flex';
+}
+function _hideTrackingReportBanner() {
+  const banner = document.getElementById('btr-alert-banner');
+  if (banner) banner.style.display = 'none';
+}
+function _dismissTrackingReportAlerts() {
+  _markTrackingReportsSeen((_bargeTrackingReports || []).map(function(r) { return r.id; }));
+  _hideTrackingReportBanner();
+  const badge = document.getElementById('nav-badge-bargetracking');
+  if (badge) badge.style.display = 'none';
+}
+
 // Keeps the Loading form's barge dropdown in sync with the configured
 // fleet, preserving whatever is currently selected where possible.
 function _populateLoadingBargeSelect() {
@@ -6993,7 +7254,7 @@ function captureCurrentState() {
     });
   });
 
-  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{} };
+  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[] };
 }
 
 /* ── ANTI-ZERO-RESET GUARD (Fix #1) ──────────────────────────────────
@@ -7167,6 +7428,21 @@ function applyState(state) {
     _loadingRecords = Object.values(localById);
   }
   if (state.loadingConfig) _loadingConfig = Object.assign({}, _loadingConfig, state.loadingConfig);
+
+  // Restore Barge Tracking Reports — merge by id (same reasoning as
+  // Loading records above: never drop an entry another device added).
+  // After merging, check whether any of them are new to THIS browser and,
+  // if so, surface the cross-user alert banner.
+  if (state.bargeTrackingReports && state.bargeTrackingReports.length) {
+    const localById = {};
+    (_bargeTrackingReports || []).forEach(function(r) { localById[r.id] = r; });
+    state.bargeTrackingReports.forEach(function(remote) { localById[remote.id] = remote; });
+    _bargeTrackingReports = Object.values(localById);
+  }
+  if (typeof _checkNewTrackingReportAlerts === 'function') _checkNewTrackingReportAlerts();
+  if (document.getElementById('page-bargetracking')?.classList.contains('active') && typeof renderBargeTrackingReports === 'function') {
+    renderBargeTrackingReports();
+  }
 
   if (state.lastSched && state.lastSched.length) {
     // Restore dates (serialised as strings) back to Date objects.
