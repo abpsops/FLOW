@@ -2215,9 +2215,9 @@ function flowWelcomeGo(pageId) {
     Barge Tracking
     <span class="sidebar-badge amber" id="nav-badge-bargetracking" style="display:none">0</span>
   </a>
-  <a class="sidebar-item" onclick="showPage('commandcenter')" id="nav-commandcenter">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-    Command Center
+  <a class="sidebar-item" onclick="openMonthlyReport()">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    Monthly Report
   </a>
   <a class="sidebar-item" onclick="showPage('checklist')" id="nav-checklist">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
@@ -2227,16 +2227,16 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
     Saved Records
   </a>
-  <a class="sidebar-item" onclick="showPage('deliverylog')" id="nav-deliverylog">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-    Delivery Log
-  </a>
 
   <div class="sidebar-divider"></div>
   <div class="sidebar-section-label">System</div>
-  <a class="sidebar-item" onclick="openMonthlyReport()">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    Monthly Report
+  <a class="sidebar-item" onclick="showPage('commandcenter')" id="nav-commandcenter">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+    Command Center
+  </a>
+  <a class="sidebar-item" onclick="showPage('deliverylog')" id="nav-deliverylog">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    Delivery Log
   </a>
   <a class="sidebar-item" onclick="showPage('archives')" id="nav-archives">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8v13H3V8"/><path d="M1 3h22v5H1z"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
@@ -3029,7 +3029,7 @@ function flowWelcomeGo(pageId) {
 <!-- ══════════════════════════════════════════════════
      PAGE: COMMAND CENTER — live wallboard for a TV/office screen
 ══════════════════════════════════════════════════ -->
-<div class="page" id="page-commandcenter" data-section="reports">
+<div class="page" id="page-commandcenter" data-section="system">
   <div class="page-header-row">
     <div>
       <div class="page-title">Command Center</div>
@@ -3230,7 +3230,7 @@ function flowWelcomeGo(pageId) {
 <!-- ══════════════════════════════════════════════════
      PAGE: DELIVERY LOG
 ══════════════════════════════════════════════════ -->
-<div class="page" id="page-deliverylog" data-section="reports">
+<div class="page" id="page-deliverylog" data-section="system">
   <div class="page-header-row">
     <div>
       <div class="page-title">Delivery Log</div>
