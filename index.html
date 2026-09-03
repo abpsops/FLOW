@@ -3189,11 +3189,11 @@ function flowWelcomeGo(pageId) {
   <div class="page-header-row">
     <div>
       <div class="page-title">Barge Tracking Reports</div>
-      <div class="page-subtitle">Upload a tracking report PDF for a date range — every operator and trader gets notified</div>
+      <div class="page-subtitle">Every operator and trader can view and download — only operators upload or remove reports</div>
     </div>
   </div>
 
-  <div style="background:var(--surface);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm);margin-bottom:16px">
+  <div id="btr-upload-card" style="background:var(--surface);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm);margin-bottom:16px">
     <div class="g2" style="margin-bottom:14px">
       <div class="field"><label>From Date</label>
         <div class="input-with-cal">
@@ -3216,6 +3216,10 @@ function flowWelcomeGo(pageId) {
       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
       Upload Report
     </button>
+  </div>
+  <div id="btr-upload-locked" style="display:none;background:var(--surface2);border-radius:var(--radius);padding:14px 1.5rem;box-shadow:var(--sh-sm);margin-bottom:16px;font-size:12px;color:var(--muted);display:flex;align-items:center;gap:8px">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    Only operators can upload or remove reports here — you can still open and download any report below.
   </div>
 
   <div style="background:var(--surface);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
@@ -6939,6 +6943,10 @@ function openBtrToPicker() {
 }
 
 function renderBargeTrackingPage() {
+  const uploadCard = document.getElementById('btr-upload-card');
+  const lockedNote = document.getElementById('btr-upload-locked');
+  if (uploadCard) uploadCard.style.display = isTrader() ? 'none' : '';
+  if (lockedNote) lockedNote.style.display = isTrader() ? 'flex' : 'none';
   renderBargeTrackingReports();
 }
 
@@ -6981,6 +6989,7 @@ function renderBargeTrackingReports() {
 }
 
 async function uploadBargeTrackingReport() {
+  if (isTrader()) { showToast('Only operators can upload tracking reports.', 'error'); return; }
   const fromInp = document.getElementById('btr-from');
   const toInp = document.getElementById('btr-to');
   const fileInp = document.getElementById('btr-file');
@@ -7050,6 +7059,7 @@ async function openBargeTrackingReport(id) {
 }
 
 async function deleteBargeTrackingReport(id) {
+  if (isTrader()) { showToast('Only operators can remove tracking reports.', 'error'); return; }
   const r = (_bargeTrackingReports || []).find(function(x) { return x.id === id; });
   if (!r) return;
   if (!confirm('Remove this tracking report (' + (r.fileName || '') + ')? This cannot be undone.')) return;
