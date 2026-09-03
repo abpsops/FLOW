@@ -7463,15 +7463,17 @@ function applyState(state) {
   }
   if (state.loadingConfig) _loadingConfig = Object.assign({}, _loadingConfig, state.loadingConfig);
 
-  // Restore Barge Tracking Reports — merge by id (same reasoning as
-  // Loading records above: never drop an entry another device added).
+  // Restore Barge Tracking Reports — adopt the incoming list as
+  // authoritative, unlike the union-merge used for Loading records above.
+  // Reports are only uploaded/deleted by operators, rarely, so there's no
+  // real concurrent-edit race to protect against here — and unlike a
+  // union merge, this lets an operator's deletion actually reach every
+  // other device instead of the report staying stuck in everyone else's
+  // list forever (a union merge can only ever add, never remove).
   // After merging, check whether any of them are new to THIS browser and,
   // if so, surface the cross-user alert banner.
-  if (state.bargeTrackingReports && state.bargeTrackingReports.length) {
-    const localById = {};
-    (_bargeTrackingReports || []).forEach(function(r) { localById[r.id] = r; });
-    state.bargeTrackingReports.forEach(function(remote) { localById[remote.id] = remote; });
-    _bargeTrackingReports = Object.values(localById);
+  if (state.bargeTrackingReports) {
+    _bargeTrackingReports = state.bargeTrackingReports.slice();
   }
   if (typeof _checkNewTrackingReportAlerts === 'function') _checkNewTrackingReportAlerts();
   if (document.getElementById('page-bargetracking')?.classList.contains('active') && typeof renderBargeTrackingReports === 'function') {
