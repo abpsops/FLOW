@@ -6982,7 +6982,7 @@ function renderBargeTrackingReports() {
         <div style="font-size:11px;color:var(--sub);margin-top:1px;word-break:break-all">${(r.fileName || 'report.pdf').replace(/</g,'&lt;')}</div>
       </div>
       <div style="font-size:10.5px;color:var(--muted);text-align:right;min-width:150px">
-        <div>Uploaded by ${((r.uploadedByRole || 'Operator').charAt(0).toUpperCase() + (r.uploadedByRole || 'Operator').slice(1)).replace(/</g,'&lt;')}</div>
+        <div>Uploaded by ${r.uploadedByRole === 'operator' ? 'Operator' : (r.uploadedByEmail || 'unknown').replace(/</g,'&lt;')}</div>
         <div style="margin-top:1px">${uploadedAt}</div>
       </div>
       <div style="display:flex;gap:6px">
@@ -7032,7 +7032,11 @@ async function uploadBargeTrackingReport() {
       fileName: file.name,
       storagePath,
       uploadedByEmail: uploaderEmail,
-      uploadedByRole: ABPS_ROLE,
+      // Only operators ever reach this point (traders are blocked at the
+      // top of this function), so this is always accurate — no lookup
+      // needed, and safe under RLS (which only lets each user read their
+      // own row in user_roles, not everyone else's).
+      uploadedByRole: 'operator',
       uploadedAt: Date.now(),
     };
     _bargeTrackingReports = (_bargeTrackingReports || []).concat([record]);
@@ -7118,9 +7122,8 @@ function _showTrackingReportBanner(unseen) {
     document.body.appendChild(banner);
   }
   const latest = unseen.slice().sort(function(a,b){ return (b.uploadedAt||0)-(a.uploadedAt||0); })[0];
-  const latestRoleLabel = ((latest.uploadedByRole || 'Operator').charAt(0).toUpperCase() + (latest.uploadedByRole || 'Operator').slice(1));
   const msg = unseen.length === 1
-    ? `📄 New Barge Tracking Report uploaded (${(latest.fileName||'report.pdf')}) by ${latestRoleLabel}`
+    ? `📄 New Barge Tracking Report uploaded (${(latest.fileName||'report.pdf')}) by Operator`
     : `📄 ${unseen.length} new Barge Tracking Reports uploaded`;
   banner.innerHTML = `<span>${msg}</span>` +
     `<button onclick="showPage('bargetracking');_dismissTrackingReportAlerts()" style="background:#fff;color:var(--pg-bargetracking);border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">View</button>` +
