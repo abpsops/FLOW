@@ -6359,8 +6359,8 @@ function _showSyncWarningBanner(errMsg) {
   // without having to go dig through code every time it happens.
   const m = (errMsg || '').toLowerCase();
   let friendly = errMsg ? `(${errMsg})` : '';
-  if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401')) {
-    friendly = "(Your sign-in session expired — click Retry, or refresh the page if that doesn't clear it.)";
+  if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401') || m.includes('row-level security') || m.includes('row level security')) {
+    friendly = "(Your sign-in session isn't valid right now — click Retry, or sign out and back in if that doesn't clear it.)";
   } else if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network')) {
     friendly = '(Could not reach the server — check your internet connection.)';
   }
@@ -6375,6 +6375,15 @@ function _clearSyncWarningBanner() {
 }
 async function _retrySyncNow() {
   setSyncStatus('syncing', 'Retrying…');
+  // Don't just re-run the same save against whatever session is already
+  // cached — that's exactly why Retry could fail over and over with the
+  // identical error even right after a fresh launch. Force an actual new
+  // token from Supabase first; only fall through to the save once that's
+  // done (or clearly not possible), so Retry has a real chance of fixing
+  // a bad session instead of repeating it.
+  if (supabaseClient) {
+    try { await supabaseClient.auth.refreshSession(); } catch (e) { /* fall through — the save below will surface the real error if this didn't help */ }
+  }
   await saveSharedState();
 }
 
