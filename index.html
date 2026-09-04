@@ -11107,12 +11107,22 @@ function _getBargeTimeline(bargeId, bargeName) {
 /* ─── Free Windows — inverts a barge's committed schedule (vessel supply
    + Loading, which _getBargeTimeline alone doesn't include) into the
    gaps between commitments, with an estimated max deliverable quantity
-   per gap using the same configured MT/hour rate already used for
-   Loading duration estimates. Answers "what's actually open, and how
-   much could I commercially nominate into it without disrupting
-   anything already planned" — the same question as a hand-built
-   availability sheet, just computed from the live schedule instead of
-   maintained by hand. ─── */
+   per gap. Uses the same vessel-SUPPLY pump rate and hose-up overhead
+   already used by the real scheduling engine (calcETC / split-supply —
+   vtph/mtph, default 300/100 MT/h, plus _calcParams.hoseHrs, default 6h)
+   — NOT _loadingConfig's rate, which is the much faster TERMINAL loading
+   rate (how fast the barge itself fills up at VOPAK etc.), a different
+   number for a different operation. The estimate is also capped by what
+   the barge can actually hold: the very next window (nothing busy
+   between now and it) is capped by ROB actually onboard right now; any
+   later window is capped by tank capacity instead, since a Loading in
+   between could top it back up and we're not simulating that whole
+   chain — capacity is the honest upper bound either way, instead of an
+   unbounded rate×hours figure that can run far past what any barge could
+   physically carry. Answers "what's actually open, and how much could I
+   commercially nominate into it without disrupting anything already
+   planned" — the same question as a hand-built availability sheet, just
+   computed from the live schedule instead of maintained by hand. ─── */
 function computeFreeWindows(bargeId, bargeName, horizonDays) {
   var now = new Date();
   var horizonEnd = new Date(now.getTime() + (horizonDays || 21) * 86400000);
@@ -11139,15 +11149,32 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
   // while still being labeled as ongoing/open-ended.
   windows.push({ status: 'free', start: cursor, end: null, openEnded: true });
 
+  var barge = (_bargeConfig || []).find(function(x) { return x.id === bargeId || x.name === bargeName; }) || {};
+  var vtph = barge.vtph || 300;
+  var mtph = barge.mtph || 100;
+  var hoseHrs = (_calcParams && _calcParams.hoseHrs) || 6;
+
+  var liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
+  var liveRob = liveROBs[bargeId] || Object.values(liveROBs).find(function(r) { return r.bargeName === bargeName; }) || {};
+  var vcap = liveRob.vcap || 0, mcap = liveRob.mcap || 0;
+  var liveV = liveRob.liveV || 0, liveM = liveRob.liveM || 0;
+
+  var seenFree = false;
   return windows.map(function(w) {
     if (w.status === 'busy') return w;
     var endForCalc = w.end || horizonEnd;
     var hrs = Math.max(0, (endForCalc - w.start) / 3600000);
-    return Object.assign({}, w, {
-      hrs: hrs,
-      estV: Math.round(hrs * (_loadingConfig.rateVLSFO || 0)),
-      estM: Math.round(hrs * (_loadingConfig.rateLSMGO || 0))
-    });
+    // The fixed hook-up/mobilization overhead (the same hoseHrs used for
+    // every real supply job) eats into the window before any pumping
+    // happens — a window shorter than that isn't actually usable.
+    var pumpHrs = Math.max(0, hrs - hoseHrs);
+    var estV = Math.round(pumpHrs * vtph);
+    var estM = Math.round(pumpHrs * mtph);
+    var isFirst = !seenFree;
+    seenFree = true;
+    estV = Math.min(estV, isFirst ? liveV : vcap);
+    estM = Math.min(estM, isFirst ? liveM : mcap);
+    return Object.assign({}, w, { hrs: hrs, estV: Math.max(0, estV), estM: Math.max(0, estM) });
   });
 }
 
@@ -11172,8 +11199,16 @@ function renderFreeWindowsPanel() {
   var fmtDT = function(d) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
+  var liveROBsAll = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var cols = barges.map(function(b) {
     var windows = computeFreeWindows(b.id, b.name, 21);
+    var liveRob = liveROBsAll[b.id] || {};
+    var vtph = b.vtph || 300, mtph = b.mtph || 100;
+    var robLine = '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' +
+      'ROB now: <span style="color:var(--fuel-v);font-weight:700">' + Math.round(liveRob.liveV || 0).toLocaleString() + '</span>/' + Math.round(liveRob.vcap || 0).toLocaleString() + ' MT VLSFO' +
+      ' · <span style="color:var(--fuel-m);font-weight:700">' + Math.round(liveRob.liveM || 0).toLocaleString() + '</span>/' + Math.round(liveRob.mcap || 0).toLocaleString() + ' MT LSMGO' +
+      ' &nbsp;·&nbsp; Supply rate: ' + vtph + '/' + mtph + ' MT/h' +
+    '</div>';
     var rows = windows.map(function(w) {
       if (w.status === 'busy') {
         return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--red-lt);border-left:3px solid var(--red);border-radius:4px;margin-bottom:5px">' +
@@ -11193,13 +11228,14 @@ function renderFreeWindowsPanel() {
       '</div>';
     }).join('');
     return '<div style="flex:1;min-width:240px">' +
-      '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:8px">' + (b.name || '').replace(/</g, '&lt;') + '</div>' +
+      '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:4px">' + (b.name || '').replace(/</g, '&lt;') + '</div>' +
+      robLine +
       rows +
     '</div>';
   }).join('');
 
   panel.innerHTML =
-    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">Free windows (green) are gaps in the schedule below — vessel supply and Loading both count as busy. Estimated deliverable quantity uses your configured Loading rate (' + (_loadingConfig.rateVLSFO || 0) + ' MT/h VLSFO, ' + (_loadingConfig.rateLSMGO || 0) + ' MT/h LSMGO). Purely informational — nothing here books anything.</div>' +
+    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">Free windows (green) are gaps in the schedule below — vessel supply and Loading both count as busy. Estimated deliverable quantity uses each barge\'s vessel-supply rate plus the ' + ((_calcParams && _calcParams.hoseHrs) || 6) + 'h hook-up time (same numbers the scheduler itself uses), capped at what\'s actually onboard or the tank capacity — never more than the barge could physically carry. Purely informational — nothing here books anything.</div>' +
     '<div style="display:flex;gap:16px;flex-wrap:wrap">' + cols + '</div>';
 }
 
