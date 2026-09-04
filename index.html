@@ -100,11 +100,13 @@ function _chartTextColor() {
   /* ── Danger red — deep brick ── */
   --red:       #AE3A2E;
   --red-lt:    #FAEAE8;
+  --red-lt2:   #F3CCC5;   /* more intense tint — used where red needs to stand out more (e.g. Free Windows busy blocks) */
   --red-bd:    #E3ACA4;
 
   /* ── Operational green — forest emerald ── */
   --green:     #147A58;
   --green-lt:  #E2F2EB;
+  --green-lt2: #C4E9D9;   /* more intense tint — used where green needs to stand out more (e.g. Free Windows free blocks) */
   --green-bd:  #8ECDB2;
 
   /* ── Purple — refined indigo ── */
@@ -212,10 +214,12 @@ html[data-theme="dark"] {
 
   --red:       #E2685A;
   --red-lt:    rgba(226,104,90,.14);
+  --red-lt2:   rgba(226,104,90,.30);
   --red-bd:    rgba(226,104,90,.36);
 
   --green:     #3FBF8F;
   --green-lt:  rgba(63,191,143,.14);
+  --green-lt2: rgba(63,191,143,.30);
   --green-bd:  rgba(63,191,143,.36);
 
   --purple:    #9089E0;
@@ -11128,10 +11132,10 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
   var horizonEnd = new Date(now.getTime() + (horizonDays || 7) * 86400000);
 
   var busy = _getBargeTimeline(bargeId, bargeName).map(function(op) {
-    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel };
+    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel, kind: 'vessel' };
   });
   (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
-    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal') });
+    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal'), kind: 'loading', grade: r.grade });
   });
   busy.sort(function(a, b) { return a.start - b.start; });
 
@@ -11153,7 +11157,7 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
       start = runningCursor;
       end = new Date(start.getTime() + Math.max(0, dur));
     }
-    mergedBusy.push({ start: start, end: end, label: b.label });
+    mergedBusy.push({ start: start, end: end, label: b.label, kind: b.kind, grade: b.grade });
     if (!runningCursor || end > runningCursor) runningCursor = end;
   });
 
@@ -11163,7 +11167,7 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
     if (b.start > cursor) {
       windows.push({ status: 'free', start: cursor, end: b.start });
     }
-    windows.push({ status: 'busy', start: b.start, end: b.end, label: b.label });
+    windows.push({ status: 'busy', start: b.start, end: b.end, label: b.label, kind: b.kind, grade: b.grade });
     if (b.end > cursor) cursor = b.end;
   });
   // Open-ended tail beyond the last known commitment — real, but not
@@ -11233,15 +11237,24 @@ function renderFreeWindowsPanel() {
     '</div>';
     var rows = windows.map(function(w) {
       if (w.status === 'busy') {
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--red-lt);border-left:3px solid var(--red);border-radius:4px;margin-bottom:5px">' +
-          '<div style="font-size:11.5px;font-weight:700;color:var(--red)">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
-          '<div style="font-size:10.5px;color:var(--red);text-align:right">Busy — ' + (w.label || '').replace(/</g, '&lt;') + '</div>' +
+        // Loading gets its own grade color (matching how the rest of the
+        // app already colors VLSFO/LSMGO) instead of being lumped in with
+        // vessel-busy red — makes it obvious at a glance which kind of
+        // "busy" this is. Vessel-busy keeps red, just a more intense tint
+        // (red-lt2) than the app's default pale red-lt, per request.
+        var isLoading = w.kind === 'loading';
+        var isM = isLoading && w.grade === 'LSMGO';
+        var busyColor = isLoading ? (isM ? 'var(--fuel-m)' : 'var(--fuel-v)') : 'var(--red)';
+        var busyBg = isLoading ? (isM ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)') : 'var(--red-lt2)';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:' + busyBg + ';border-left:3px solid ' + busyColor + ';border-radius:4px;margin-bottom:5px">' +
+          '<div style="font-size:11.5px;font-weight:700;color:' + busyColor + '">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
+          '<div style="font-size:10.5px;color:' + busyColor + ';text-align:right">Busy — ' + (w.label || '').replace(/</g, '&lt;') + '</div>' +
         '</div>';
       }
       var rangeText = w.openEnded ? (fmtDT(w.start) + ' onwards') : (fmtDT(w.start) + ' → ' + fmtDT(w.end));
       var capText = w.openEnded ? '' :
         '<div style="font-size:10px;color:var(--green)">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max</div>';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--green-lt);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px;gap:8px;flex-wrap:wrap">' +
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--green-lt2);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px;gap:8px;flex-wrap:wrap">' +
         '<div>' +
           '<div style="font-size:11.5px;font-weight:700;color:var(--green)">' + rangeText + '</div>' +
           (w.openEnded ? '' : '<div style="font-size:10px;color:var(--green)">' + Math.round(w.hrs) + 'h free</div>') +
