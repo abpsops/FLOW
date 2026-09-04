@@ -11125,7 +11125,7 @@ function _getBargeTimeline(bargeId, bargeName) {
    computed from the live schedule instead of maintained by hand. ─── */
 function computeFreeWindows(bargeId, bargeName, horizonDays) {
   var now = new Date();
-  var horizonEnd = new Date(now.getTime() + (horizonDays || 21) * 86400000);
+  var horizonEnd = new Date(now.getTime() + (horizonDays || 7) * 86400000);
 
   var busy = _getBargeTimeline(bargeId, bargeName).map(function(op) {
     return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel };
@@ -11135,9 +11135,31 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
   });
   busy.sort(function(a, b) { return a.start - b.start; });
 
+  // A single barge can't physically be doing two things at once — but the
+  // underlying vessel-supply and Loading records are entered independently
+  // of each other, so two windows for the same barge can end up overlapping
+  // on paper (e.g. a Loading logged before the prior one's ETC). Rather
+  // than display that as two "busy" blocks happening at the same time,
+  // sequence the later one to start right when the earlier one actually
+  // finishes — same duration, just pushed to after the first one's ETC —
+  // so Free Windows always reflects what the barge could really do next,
+  // not a physically-impossible double-booking.
+  var mergedBusy = [];
+  var runningCursor = null;
+  busy.forEach(function(b) {
+    var start = b.start, end = b.end;
+    if (runningCursor && start < runningCursor) {
+      var dur = end - start;
+      start = runningCursor;
+      end = new Date(start.getTime() + Math.max(0, dur));
+    }
+    mergedBusy.push({ start: start, end: end, label: b.label });
+    if (!runningCursor || end > runningCursor) runningCursor = end;
+  });
+
   var windows = [];
   var cursor = now;
-  busy.forEach(function(b) {
+  mergedBusy.forEach(function(b) {
     if (b.start > cursor) {
       windows.push({ status: 'free', start: cursor, end: b.start });
     }
@@ -11201,7 +11223,7 @@ function renderFreeWindowsPanel() {
   };
   var liveROBsAll = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var cols = barges.map(function(b) {
-    var windows = computeFreeWindows(b.id, b.name, 21);
+    var windows = computeFreeWindows(b.id, b.name, 7);
     var liveRob = liveROBsAll[b.id] || {};
     var vtph = b.vtph || 300, mtph = b.mtph || 100;
     var robLine = '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' +
