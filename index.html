@@ -2121,6 +2121,16 @@ function flowWelcomeGo(pageId) {
   </div>
   <div class="topbar-spacer"></div>
   <div style="display:flex;align-items:center;gap:8px;flex-shrink:0">
+    <div id="global-alerts-wrap" style="position:relative">
+      <button id="global-alerts-btn" onclick="toggleGlobalAlertsPanel(event)" aria-label="Alerts" title="Alerts" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;cursor:pointer;position:relative" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.12)'">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        <span id="global-alerts-badge" style="display:none;position:absolute;top:-4px;right:-4px;min-width:15px;height:15px;padding:0 3px;border-radius:8px;background:var(--red);color:#fff;font-size:9px;font-weight:700;line-height:15px;text-align:center;border:1.5px solid var(--pg-dashboard, #0F6B5C)">0</span>
+      </button>
+      <div id="global-alerts-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:290px;max-height:360px;overflow-y:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lg);z-index:9900;padding:8px">
+        <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;padding:4px 6px 8px">Alerts</div>
+        <div id="global-alerts-list"></div>
+      </div>
+    </div>
     <div id="topbar-menu-wrap" style="position:relative">
       <button id="topbar-menu-btn" onclick="toggleTopbarMenu(event)" aria-label="More actions" title="More actions" style="display:flex;align-items:center;justify-content:center;width:30px;height:30px;background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.4);color:#fff;border-radius:7px;cursor:pointer" onmouseover="this.style.background='rgba(255,255,255,.28)'" onmouseout="this.style.background='rgba(255,255,255,.12)'">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
@@ -5478,6 +5488,77 @@ document.addEventListener('DOMContentLoaded', async () => {
 let ABPS_ROLE = 'operator'; // safe UI default until the real lookup resolves
 function isTrader() { return ABPS_ROLE === 'trader'; }
 
+/* ─── Global in-app alerts (topbar bell) ─────────────────────────────
+   Single shared source of truth for "what counts as an alert" — ROB
+   below 20% per grade per barge, and any active vessel outside its
+   nominated laycan. Lives in the topbar (not Command Center, which
+   traders can't even open — see TRADER_ALLOWED_PAGES above) so both
+   roles see it, on every page, without needing OS-level push
+   permissions — this is what was actually meant by "in-app" alerts. */
+let _globalAlertsPrevKeys = null; // null = first computation, don't toast anything yet
+function computeGlobalAlerts() {
+  const alerts = [];
+  const completedSNOs = new Set((_savedSupplies || []).filter(r => r.supplied).map(r => r.vessel));
+  (_lastSched || []).forEach(function(item) {
+    if (completedSNOs.has(item.name)) return;
+    if (item.isDelayed) alerts.push({ key: 'laycan|' + item.name, label: 'Outside laycan', sub: item.name, severity: 'warning' });
+  });
+  const liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
+  (_bargeConfig || []).forEach(function(b) {
+    const rob = liveROBs[b.id] || { liveV: 0, liveM: 0 };
+    if (b.vcap && (rob.liveV || 0) / b.vcap < 0.2) alerts.push({ key: 'vrob|' + b.name, label: 'VLSFO ROB low', sub: b.name, severity: 'error' });
+    if (b.mcap && (rob.liveM || 0) / b.mcap < 0.2) alerts.push({ key: 'mrob|' + b.name, label: 'LSMGO ROB low', sub: b.name, severity: 'error' });
+  });
+  return alerts;
+}
+
+function toggleGlobalAlertsPanel(evt) {
+  if (evt) evt.stopPropagation();
+  const dd = document.getElementById('global-alerts-dropdown');
+  if (!dd) return;
+  dd.style.display = (dd.style.display === 'none' || !dd.style.display) ? 'block' : 'none';
+}
+document.addEventListener('click', function(evt) {
+  const wrap = document.getElementById('global-alerts-wrap');
+  const dd = document.getElementById('global-alerts-dropdown');
+  if (dd && dd.style.display === 'block' && wrap && !wrap.contains(evt.target)) dd.style.display = 'none';
+});
+
+function _refreshGlobalAlertsBell() {
+  const badge = document.getElementById('global-alerts-badge');
+  const list = document.getElementById('global-alerts-list');
+  if (!badge && !list) return; // topbar not in DOM yet (e.g. login gate)
+  const alerts = computeGlobalAlerts();
+
+  if (badge) {
+    if (alerts.length) { badge.textContent = alerts.length > 9 ? '9+' : alerts.length; badge.style.display = ''; }
+    else badge.style.display = 'none';
+  }
+  if (list) {
+    list.innerHTML = alerts.length
+      ? alerts.map(function(a) {
+          const color = a.severity === 'error' ? 'var(--red)' : 'var(--amber)';
+          return `<div style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px">
+            <div style="font-weight:700;color:${color}">${a.label}</div>
+            <div style="color:var(--sub);font-size:11px;margin-top:1px">${a.sub}</div>
+          </div>`;
+        }).join('')
+      : '<div style="padding:14px 6px;text-align:center;color:var(--muted);font-size:12px">No active alerts</div>';
+  }
+
+  // Toast any alert that's genuinely new since the last check — skipped on
+  // the very first computation after page load, since nothing already
+  // there when you open the app is a "new" surprise.
+  if (_globalAlertsPrevKeys) {
+    alerts.forEach(function(a) {
+      if (!_globalAlertsPrevKeys.has(a.key)) {
+        showToast(`${a.label} — ${a.sub}`, a.severity, 5000);
+      }
+    });
+  }
+  _globalAlertsPrevKeys = new Set(alerts.map(a => a.key));
+}
+
 const TRADER_ALLOWED_PAGES = ['dashboard', 'nominations', 'bargetracking'];
 
 async function _fetchAndApplyUserRole() {
@@ -6972,7 +7053,7 @@ function renderBargeTrackingReports() {
         <div style="font-size:11px;color:var(--sub);margin-top:1px;word-break:break-all">${(r.fileName || 'report.pdf').replace(/</g,'&lt;')}</div>
       </div>
       <div style="font-size:10.5px;color:var(--muted);text-align:right;min-width:150px">
-        <div>Uploaded by ${r.uploadedByRole === 'operator' ? 'Operator' : (r.uploadedByEmail || 'unknown').replace(/</g,'&lt;')}</div>
+        <div>Uploaded by ${(r.uploadedByRole || 'operator') === 'operator' ? 'Operator' : (r.uploadedByEmail || 'unknown').replace(/</g,'&lt;')}</div>
         <div style="margin-top:1px">${uploadedAt}</div>
       </div>
       <div style="display:flex;gap:6px">
@@ -7196,7 +7277,13 @@ function startAutoSync() {
       }
     } catch(e) {} // silent polling
     _isSyncing = false;
+    // Runs every tick regardless of whether a remote pull happened —
+    // covers both "a colleague changed something" and "I changed
+    // something locally on this device" without needing to hook into
+    // every single state-mutating function individually.
+    _refreshGlobalAlertsBell();
   }, 30000);
+  _refreshGlobalAlertsBell(); // show the correct count immediately, don't wait for the first 30s tick
 }
 
 // A background/minimized tab routinely has its timers throttled or fully
@@ -10707,16 +10794,13 @@ function _ccRefreshData() {
     }
   }
 
-  // ── Alerts (delayed vessels + low-ROB barges) ──
+  // ── Alerts — now the same computeGlobalAlerts() the topbar bell uses,
+  //    so Command Center and the bell can never drift out of sync with
+  //    two separately-maintained definitions of "what counts as an
+  //    alert". Mapped to this panel's own uppercase terminal labels. ──
   const alertsPanel = document.getElementById('cc-alerts-panel');
-  const alerts = [];
-  activeItems.forEach(function(item) {
-    if (item.isDelayed) alerts.push({ label: 'OUTSIDE LAYCAN', sub: item.name, color: '#F0A500' });
-  });
-  (_bargeConfig || []).forEach(function(b) {
-    const rob = liveROBs[b.id] || { liveV: 0, liveM: 0 };
-    if (b.vcap && (rob.liveV || 0) / b.vcap < 0.2) alerts.push({ label: 'VLSFO ROB LOW', sub: b.name, color: '#E5484D' });
-    if (b.mcap && (rob.liveM || 0) / b.mcap < 0.2) alerts.push({ label: 'LSMGO ROB LOW', sub: b.name, color: '#E5484D' });
+  const alerts = computeGlobalAlerts().map(function(a) {
+    return { key: a.key, label: a.label.toUpperCase(), sub: a.sub, color: a.severity === 'error' ? '#E5484D' : '#F0A500' };
   });
   if (alertsPanel) {
     // Flash any alert that wasn't present on the previous refresh — a
@@ -10724,15 +10808,14 @@ function _ccRefreshData() {
     // catches the eye on a walk-by, not just static red text. Skipped on
     // the very first render (nothing's genuinely "new" the moment the
     // page opens — everything already there isn't a surprise).
-    const alertKey = a => a.label + '|' + a.sub;
     alertsPanel.innerHTML = `<div style="font-size:11.5px;color:#E5484D;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">ALERTS — ${alerts.length} ACTIVE</div>` +
       (alerts.length
         ? alerts.map(function(a) {
-            const isNew = _ccPrevAlertKeys && !_ccPrevAlertKeys.has(alertKey(a));
+            const isNew = _ccPrevAlertKeys && !_ccPrevAlertKeys.has(a.key);
             return `<div class="${isNew ? 'cc-flash-new' : ''}" style="font-size:11.5px;color:${a.color};padding:5px 0;border-top:1px solid #222">${a.label}<br><span style="color:#FFFFFF;font-size:12px">${a.sub}</span></div>`;
           }).join('')
         : '<div style="font-size:11.5px;color:#3ECF6E;padding-top:5px">No active alerts</div>');
-    _ccPrevAlertKeys = new Set(alerts.map(alertKey));
+    _ccPrevAlertKeys = new Set(alerts.map(a => a.key));
   }
 
   // ── Activity — this week's totals (vs last week) + recently completed
