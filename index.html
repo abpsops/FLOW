@@ -2371,6 +2371,7 @@ function flowWelcomeGo(pageId) {
         </div>
         <div style="display:flex;gap:6px;align-items:center">
           <span id="week-cal-label" style="font-size:11.5px;font-weight:700;color:var(--sub);font-family:'DM Mono',monospace;margin-right:4px"></span>
+          <button onclick="toggleFreeWindowsPanel()" class="week-nav-btn-today" id="free-windows-toggle-btn" title="Free/busy windows per barge, with estimated deliverable quantity per gap">Free Windows</button>
           <button onclick="shiftWeekCal(-7)" class="week-nav-btn" title="Previous week">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
           </button>
@@ -2381,6 +2382,7 @@ function flowWelcomeGo(pageId) {
         </div>
       </div>
       <div id="week-calendar" style="min-height:220px"></div>
+      <div id="free-windows-panel" style="display:none;margin-top:14px"></div>
     </div>
     <div class="chart-card" style="display:flex;flex-direction:column">
       <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
@@ -11100,6 +11102,105 @@ function _getBargeTimeline(bargeId, bargeName) {
       };
     })
     .sort(function (a, b) { return a.start - b.start; });
+}
+
+/* ─── Free Windows — inverts a barge's committed schedule (vessel supply
+   + Loading, which _getBargeTimeline alone doesn't include) into the
+   gaps between commitments, with an estimated max deliverable quantity
+   per gap using the same configured MT/hour rate already used for
+   Loading duration estimates. Answers "what's actually open, and how
+   much could I commercially nominate into it without disrupting
+   anything already planned" — the same question as a hand-built
+   availability sheet, just computed from the live schedule instead of
+   maintained by hand. ─── */
+function computeFreeWindows(bargeId, bargeName, horizonDays) {
+  var now = new Date();
+  var horizonEnd = new Date(now.getTime() + (horizonDays || 21) * 86400000);
+
+  var busy = _getBargeTimeline(bargeId, bargeName).map(function(op) {
+    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel };
+  });
+  (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
+    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal') });
+  });
+  busy.sort(function(a, b) { return a.start - b.start; });
+
+  var windows = [];
+  var cursor = now;
+  busy.forEach(function(b) {
+    if (b.start > cursor) {
+      windows.push({ status: 'free', start: cursor, end: b.start });
+    }
+    windows.push({ status: 'busy', start: b.start, end: b.end, label: b.label });
+    if (b.end > cursor) cursor = b.end;
+  });
+  // Open-ended tail beyond the last known commitment — real, but not
+  // infinitely quotable, so it's capped at the horizon for the estimate
+  // while still being labeled as ongoing/open-ended.
+  windows.push({ status: 'free', start: cursor, end: null, openEnded: true });
+
+  return windows.map(function(w) {
+    if (w.status === 'busy') return w;
+    var endForCalc = w.end || horizonEnd;
+    var hrs = Math.max(0, (endForCalc - w.start) / 3600000);
+    return Object.assign({}, w, {
+      hrs: hrs,
+      estV: Math.round(hrs * (_loadingConfig.rateVLSFO || 0)),
+      estM: Math.round(hrs * (_loadingConfig.rateLSMGO || 0))
+    });
+  });
+}
+
+function toggleFreeWindowsPanel() {
+  var panel = document.getElementById('free-windows-panel');
+  var btn = document.getElementById('free-windows-toggle-btn');
+  if (!panel) return;
+  var showing = panel.style.display !== 'none';
+  panel.style.display = showing ? 'none' : 'block';
+  if (btn) btn.classList.toggle('active', !showing);
+  if (!showing) renderFreeWindowsPanel();
+}
+
+function renderFreeWindowsPanel() {
+  var panel = document.getElementById('free-windows-panel');
+  if (!panel) return;
+  var barges = _bargeConfig || [];
+  if (!barges.length) {
+    panel.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No barges configured.</div>';
+    return;
+  }
+  var fmtDT = function(d) {
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+  };
+  var cols = barges.map(function(b) {
+    var windows = computeFreeWindows(b.id, b.name, 21);
+    var rows = windows.map(function(w) {
+      if (w.status === 'busy') {
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--red-lt);border-left:3px solid var(--red);border-radius:4px;margin-bottom:5px">' +
+          '<div style="font-size:11.5px;font-weight:700;color:var(--red)">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
+          '<div style="font-size:10.5px;color:var(--red);text-align:right">Busy — ' + (w.label || '').replace(/</g, '&lt;') + '</div>' +
+        '</div>';
+      }
+      var rangeText = w.openEnded ? (fmtDT(w.start) + ' onwards') : (fmtDT(w.start) + ' → ' + fmtDT(w.end));
+      var capText = w.openEnded ? '' :
+        '<div style="font-size:10px;color:var(--green)">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max</div>';
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--green-lt);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px;gap:8px;flex-wrap:wrap">' +
+        '<div>' +
+          '<div style="font-size:11.5px;font-weight:700;color:var(--green)">' + rangeText + '</div>' +
+          (w.openEnded ? '' : '<div style="font-size:10px;color:var(--green)">' + Math.round(w.hrs) + 'h free</div>') +
+        '</div>' +
+        capText +
+      '</div>';
+    }).join('');
+    return '<div style="flex:1;min-width:240px">' +
+      '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:8px">' + (b.name || '').replace(/</g, '&lt;') + '</div>' +
+      rows +
+    '</div>';
+  }).join('');
+
+  panel.innerHTML =
+    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">Free windows (green) are gaps in the schedule below — vessel supply and Loading both count as busy. Estimated deliverable quantity uses your configured Loading rate (' + (_loadingConfig.rateVLSFO || 0) + ' MT/h VLSFO, ' + (_loadingConfig.rateLSMGO || 0) + ' MT/h LSMGO). Purely informational — nothing here books anything.</div>' +
+    '<div style="display:flex;gap:16px;flex-wrap:wrap">' + cols + '</div>';
 }
 
 /* ─────────────────────────────────────────────────────────────────────
