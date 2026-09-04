@@ -5486,6 +5486,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    ═══════════════════════════════════════════════════════════════ */
 
 let ABPS_ROLE = 'operator'; // safe UI default until the real lookup resolves
+let ABPS_UID = null;
 function isTrader() { return ABPS_ROLE === 'trader'; }
 
 /* ─── Global in-app alerts (topbar bell) ─────────────────────────────
@@ -5563,10 +5564,12 @@ const TRADER_ALLOWED_PAGES = ['dashboard', 'nominations', 'bargetracking'];
 
 async function _fetchAndApplyUserRole() {
   ABPS_ROLE = 'operator';
+  ABPS_UID = null;
   try {
     if (supabaseClient) {
       const { data: sessionData } = await supabaseClient.auth.getSession();
       const uid = sessionData && sessionData.session && sessionData.session.user && sessionData.session.user.id;
+      ABPS_UID = uid || null;
       if (uid) {
         const { data, error } = await supabaseClient
           .from('user_roles')
@@ -6437,8 +6440,8 @@ function _showSyncWarningBanner(errMsg) {
   // without having to go dig through code every time it happens.
   const m = (errMsg || '').toLowerCase();
   let friendly = errMsg ? `(${errMsg})` : '';
-  if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401')) {
-    friendly = "(Your sign-in session expired — click Retry, or refresh the page if that doesn't clear it.)";
+  if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401') || m.includes('row-level security') || m.includes('row level security')) {
+    friendly = "(Your sign-in session isn't valid right now — click Retry, or sign out and back in if that doesn't clear it.)";
   } else if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network')) {
     friendly = '(Could not reach the server — check your internet connection.)';
   }
@@ -6453,6 +6456,15 @@ function _clearSyncWarningBanner() {
 }
 async function _retrySyncNow() {
   setSyncStatus('syncing', 'Retrying…');
+  // Don't just re-run the same save against whatever session is already
+  // cached — that's exactly why Retry could fail over and over with the
+  // identical error even right after a fresh launch. Force an actual new
+  // token from Supabase first; only fall through to the save once that's
+  // done (or clearly not possible), so Retry has a real chance of fixing
+  // a bad session instead of repeating it.
+  if (supabaseClient) {
+    try { await supabaseClient.auth.refreshSession(); } catch (e) { /* fall through — the save below will surface the real error if this didn't help */ }
+  }
   await saveSharedState();
 }
 
@@ -7005,7 +7017,14 @@ function renderLoadingPage() {
    ══════════════════════════════════════════════════════════════════ */
 let _bargeTrackingReports = [];
 const BTR_BUCKET = 'barge-tracking-reports';
-const BTR_SEEN_KEY = 'flow_seen_tracking_report_ids';
+const BTR_SEEN_KEY_BASE = 'flow_seen_tracking_report_ids';
+// The "seen" list must be scoped to the SIGNED-IN ACCOUNT, not just the
+// browser — this device may be shared between an operator and trader
+// signing in/out of the same browser (exactly how this app gets tested
+// day to day). Keying purely by browser meant one account's dismissal
+// silently carried over to the next account that signed in on the same
+// device, so nobody but the very first person ever saw a banner.
+function _btrSeenKey() { return BTR_SEEN_KEY_BASE + '_' + (ABPS_UID || 'anon'); }
 
 let _btrFromPicker = null, _btrToPicker = null;
 function openBtrFromPicker() {
@@ -7166,12 +7185,12 @@ async function deleteBargeTrackingReport(id) {
    it or opens the report, tracked per-browser via localStorage so
    dismissing it doesn't hide it from anyone else. ── */
 function _getSeenTrackingReportIds() {
-  try { return new Set(JSON.parse(localStorage.getItem(BTR_SEEN_KEY) || '[]')); } catch (e) { return new Set(); }
+  try { return new Set(JSON.parse(localStorage.getItem(_btrSeenKey()) || '[]')); } catch (e) { return new Set(); }
 }
 function _markTrackingReportsSeen(ids) {
   const seen = _getSeenTrackingReportIds();
   ids.forEach(function(id) { seen.add(id); });
-  try { localStorage.setItem(BTR_SEEN_KEY, JSON.stringify(Array.from(seen))); } catch (e) {}
+  try { localStorage.setItem(_btrSeenKey(), JSON.stringify(Array.from(seen))); } catch (e) {}
 }
 function _checkNewTrackingReportAlerts() {
   const seen = _getSeenTrackingReportIds();
@@ -7531,15 +7550,17 @@ function applyState(state) {
   }
   if (state.loadingConfig) _loadingConfig = Object.assign({}, _loadingConfig, state.loadingConfig);
 
-  // Restore Barge Tracking Reports — merge by id (same reasoning as
-  // Loading records above: never drop an entry another device added).
+  // Restore Barge Tracking Reports — adopt the incoming list as
+  // authoritative, unlike the union-merge used for Loading records above.
+  // Reports are only uploaded/deleted by operators, rarely, so there's no
+  // real concurrent-edit race to protect against here — and unlike a
+  // union merge, this lets an operator's deletion actually reach every
+  // other device instead of the report staying stuck in everyone else's
+  // list forever (a union merge can only ever add, never remove).
   // After merging, check whether any of them are new to THIS browser and,
   // if so, surface the cross-user alert banner.
-  if (state.bargeTrackingReports && state.bargeTrackingReports.length) {
-    const localById = {};
-    (_bargeTrackingReports || []).forEach(function(r) { localById[r.id] = r; });
-    state.bargeTrackingReports.forEach(function(remote) { localById[remote.id] = remote; });
-    _bargeTrackingReports = Object.values(localById);
+  if (state.bargeTrackingReports) {
+    _bargeTrackingReports = state.bargeTrackingReports.slice();
   }
   if (typeof _checkNewTrackingReportAlerts === 'function') _checkNewTrackingReportAlerts();
   if (document.getElementById('page-bargetracking')?.classList.contains('active') && typeof renderBargeTrackingReports === 'function') {
