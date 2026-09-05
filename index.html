@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>FLOW — Bunker Planning System</title>
+<title>FLOW — Bunker Planning System (Demo)</title>
 <link rel="manifest" href="./manifest.json">
 <meta name="theme-color" content="#0F1E30">
 <link rel="apple-touch-icon" href="./icon-192.png">
@@ -5311,6 +5311,58 @@ function permanentlyDeleteFromTrash(idx) { if(typeof permanentDeleteFromTrash===
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
+   DEMO SEED DATA — runs once, before the app's own login/init
+   scripts below. If this browser has never opened the demo before
+   (no local state saved yet), pre-loads a small, entirely fictional
+   set of barges, vessel nominations, agents and a loading record so
+   it looks like a live, working operation the first time it's
+   opened — instead of a completely blank screen. Every name below
+   is made up; none of it is real company data. Dates are computed
+   relative to whenever this actually loads, so it always looks
+   current whenever it's demoed, not stuck on a fixed past date.
+   ═══════════════════════════════════════════════════════════════ */
+(function seedDemoDataIfEmpty() {
+  var LS_KEY = 'flow_state_202606290803'; // must match _FLOW_BUILD_ID's key below
+  try {
+    if (localStorage.getItem(LS_KEY)) return; // already seeded/used — leave it alone
+  } catch(e) { return; }
+
+  var MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  function pad(n) { return String(n).padStart(2,'0'); }
+  function fmtDate(d) { return pad(d.getDate()) + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+  function inHours(h) { return new Date(Date.now() + h*3600000); }
+  function isoInHours(h) { return inHours(h).toISOString(); }
+
+  var seedState = {
+    barges: [
+      { id: 1, name: 'Barge Alpha', vcap: 5000, mcap: 1000, vrob: 3200, mrob: 650, vbuf: 500, mbuf: 150, vtph: 300, mtph: 100 },
+      { id: 2, name: 'Barge Bravo', vcap: 4000, mcap: 800,  vrob: 1800, mrob: 300, vbuf: 500, mbuf: 150, vtph: 300, mtph: 100 },
+    ],
+    vessels: [
+      { nomUid:'demo1', name:'MV ATLANTIC STAR',  imo:'9123456', area:'FUJ-A', type:'VLSFO', qty:1200, mgo:150, spec:'ISO 8217:2017 RMG380', agent:'Falcon Shipping Agency', manifold:'PORT',  remarks:'', lc:'', eta: fmtDate(inHours(18)),  paq:'yes', bargeId:'Barge Alpha' },
+      { nomUid:'demo2', name:'MV PACIFIC DAWN',   imo:'9234567', area:'FUJ-A', type:'VLSFO', qty:900,  mgo:0,   spec:'ISO 8217:2017 RMG380', agent:'Horizon Marine Agents', manifold:'STBD', remarks:'', lc:'', eta: fmtDate(inHours(30)),  paq:'no',  bargeId:'Barge Bravo' },
+      { nomUid:'demo3', name:'MV NORTHERN LIGHT', imo:'9345678', area:'FUJ-B', type:'VLSFO', qty:1500, mgo:200, spec:'ISO 8217:2017 RMG380', agent:'Falcon Shipping Agency', manifold:'PORT',  remarks:'', lc:'', eta: fmtDate(inHours(52)),  paq:'yes', bargeId:'' },
+      { nomUid:'demo4', name:'MV SOUTHERN CROSS', imo:'9456789', area:'FUJ-A', type:'VLSFO', qty:800,  mgo:100, spec:'ISO 8217:2017 RMG380', agent:'Horizon Marine Agents', manifold:'STBD', remarks:'', lc:'', eta: fmtDate(inHours(76)),  paq:'no',  bargeId:'' },
+      { nomUid:'demo5', name:'MV CORAL VOYAGER',  imo:'9567890', area:'FUJ-A', type:'VLSFO', qty:1100, mgo:0,   spec:'ISO 8217:2017 RMG380', agent:'Falcon Shipping Agency', manifold:'PORT',  remarks:'', lc:'', eta: fmtDate(inHours(100)), paq:'yes', bargeId:'' },
+    ],
+    agents: [
+      { id: 1, name:'Falcon Shipping Agency',  emails:'ops@falcon-demo.example' },
+      { id: 2, name:'Horizon Marine Agents',    emails:'bunkers@horizon-demo.example' },
+    ],
+    loadingRecords: [
+      { id:'demo_ld_1', barge:'Barge Alpha', terminal:'Demo Fuel Terminal', grade:'VLSFO', qty:4000, startAt: isoInHours(40), endAt: isoInHours(53), surveyor:'Demo Surveyors Ltd', completed:false, notes:'' },
+    ],
+    checklist: {}, manualROB: {}, calcParams: { hoseHrs: 6, travelHrs: 1 }, lastSched: [],
+    checklistRecords: {}, archives: {}, deliveryLog: {}, loadingConfig: {}, bargeTrackingReports: [],
+    version: Date.now()
+  };
+
+  try { localStorage.setItem(LS_KEY, JSON.stringify(seedState)); } catch(e) {}
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
    OPERATOR ACCESS — Supabase Auth, single shared team account
    ─────────────────────────────────────────────────────────────
    One shared email + password (created once in the Supabase
@@ -5323,29 +5375,21 @@ function permanentlyDeleteFromTrash(idx) { if(typeof permanentDeleteFromTrash===
 const SUPABASE_URL      = 'https://siqntfkpdstikrqffmep.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNpcW50ZmtwZHN0aWtycWZmbWVwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMDAxODgsImV4cCI6MjA5OTU3NjE4OH0.mYrfXA7H4KmeY0EckwLXPnUQX5Ou1wLLnXNK-wwDSbU';
 
-// If the Supabase CDN script failed to load (network hiccup, ad-blocker,
-// CDN outage), window.supabase would be undefined and calling
-// .createClient() on it would throw — which, as a top-level statement in
-// this script block, would stop EVERY function below from being defined,
-// breaking the entire sync/auth module (and anything that calls into it)
-// even though the rest of the app has nothing to do with Supabase. Guard
-// against that so a CDN failure degrades to "sync unavailable" instead of
-// silently breaking unrelated functionality.
+// ══════════════════════════════════════════════════════════════════════
+// DEMO BUILD — this clone intentionally never connects to any backend.
+// The app already treats "no cloud configured" as a normal, expected,
+// fully-supported mode (see saveSharedState()'s `else` branch below —
+// "no cloud configured — local-only save is the expected outcome"), so
+// forcing supabaseClient to stay null here is enough to get a completely
+// working, self-contained demo: everything lives in this browser's
+// localStorage only, seeded with fake sample data (see the seed script
+// right before the Operator Access module). No real company data from
+// the production app can ever reach this build, and nothing entered here
+// can ever reach the production database — there is no network path
+// between them at all.
+// ══════════════════════════════════════════════════════════════════════
 let supabaseClient = null;
-let _supabaseLoadError = null;
-try {
-  if (!window.supabase) throw new Error('Supabase library failed to load from CDN');
-  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      persistSession: true,    // keep the session in localStorage across browser restarts
-      autoRefreshToken: true,  // proactively refresh the JWT before it expires
-      detectSessionInUrl: false
-    }
-  });
-} catch(e) {
-  _supabaseLoadError = e.message;
-  console.error('Supabase client setup failed:', e.message);
-}
+let _supabaseLoadError = 'Demo build — cloud sync intentionally disabled';
 
 function _normEmail(s) { return (s || '').trim().toLowerCase(); }
 
@@ -5450,17 +5494,13 @@ async function _startAppAfterLogin() {
   if (typeof showFlowWelcomeRadar === 'function') showFlowWelcomeRadar();
 }
 
-// If this device already has a valid Supabase session, skip the gate entirely
+// DEMO BUILD: no backend to authenticate against, and no reason to make
+// an investor sign in at all — skip the gate unconditionally and go
+// straight into the app.
 document.addEventListener('DOMContentLoaded', async () => {
-  const valid = await _operatorSessionValid();
-  if (valid) {
-    const gate = document.getElementById('operator-gate');
-    if (gate) gate.style.display = 'none';
-    _startAppAfterLogin();
-  } else {
-    // Focus the email field for a fast keyboard-first login
-    setTimeout(() => document.getElementById('og-email')?.focus(), 100);
-  }
+  const gate = document.getElementById('operator-gate');
+  if (gate) gate.style.display = 'none';
+  _startAppAfterLogin();
 });
 
 </script>
@@ -13401,7 +13441,7 @@ function openBunkerMsgModal(sno) {
   }
 
   // Barge name — use preferred/saved barge or vessel's assigned barge
-  document.getElementById('bm-barge-input').value = item.bargeLabel || 'FNSA 10';
+  document.getElementById('bm-barge-input').value = item.bargeLabel || 'Barge Alpha';
 
   // Pre-fill the ETA Nomination Mail tab from the same schedule item so it's
   // ready to review/copy the moment the operator switches tabs.
@@ -13434,7 +13474,7 @@ function _bunkerMsgToggleSeq() {
 }
 
 function _generateBunkerMsg(item, fuelType, seqType, timeWindow, bargeName) {
-  var barge = (bargeName || (item ? item.bargeLabel : '') || 'FNSA 10').trim();
+  var barge = (bargeName || (item ? item.bargeLabel : '') || 'Barge Alpha').trim();
   var gbmNomV=(item&&item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item?item.vQ:0), gbmNomM=(item&&item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item?item.mQ:0);
   var vQty  = item && gbmNomV > 0 ? gbmNomV.toLocaleString() : null;
   var mQty  = item && gbmNomM > 0 ? gbmNomM.toLocaleString() : null;
@@ -16818,7 +16858,7 @@ async function init() {
       </div>
       <div style="display:flex;flex-direction:column;gap:5px">
         <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Barge Name</label>
-        <input type="text" id="bm-barge-input" placeholder="e.g. FNSA 10" oninput="_bunkerMsgUpdatePreview()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none">
+        <input type="text" id="bm-barge-input" placeholder="e.g. Barge Alpha" oninput="_bunkerMsgUpdatePreview()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none">
       </div>
     </div>
 
