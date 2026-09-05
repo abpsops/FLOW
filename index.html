@@ -11224,6 +11224,7 @@ function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd) {
     }
     windows.push({
       status: 'busy', start: bStart, end: bEnd, label: b.label, kind: b.kind, grade: b.grade,
+      nomV: b.nomV, nomM: b.nomM,
       beforeV: beforeV, beforeM: beforeM, afterV: simV, afterM: simM
     });
     cursor = bEnd;
@@ -11300,6 +11301,31 @@ async function downloadFreeWindowsReport(btnEl) {
     var rowIdx = 5;
     barges.forEach(function(b) {
       var windows = computeFreeWindows(b.id, b.name, range.weekStart, range.weekEnd);
+
+      // Summary row: total quantity this barge is already committed to
+      // supply within this week — same figure shown in the on-screen
+      // panel, so the download isn't missing context the panel has.
+      var toSupplyV = 0, toSupplyM = 0;
+      windows.forEach(function(w) {
+        if (w.status === 'busy' && w.kind === 'vessel') {
+          toSupplyV += (w.nomV || 0);
+          toSupplyM += (w.nomM || 0);
+        }
+      });
+      var sumRow = ws.getRow(rowIdx++);
+      ws.mergeCells('A' + sumRow.number + ':F' + sumRow.number);
+      var sumCell = sumRow.getCell(1);
+      sumCell.value = b.name + ' — To be supplied this week';
+      sumCell.font = { bold:true, italic:true, color:{argb:'FF0D1B2A'} };
+      sumRow.getCell(7).value = Math.round(toSupplyV);
+      sumRow.getCell(8).value = Math.round(toSupplyM);
+      for (var sc = 1; sc <= 8; sc++) {
+        var sCell = sumRow.getCell(sc);
+        sCell.border = border;
+        sCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF0F2F5'} };
+        if (sc === 7 || sc === 8) { sCell.font = { bold:true }; sCell.alignment = { horizontal:'right' }; }
+      }
+
       windows.forEach(function(w) {
         var row = ws.getRow(rowIdx++);
         var isLoading = w.status === 'busy' && w.kind === 'loading';
@@ -11368,10 +11394,25 @@ function renderFreeWindowsPanel() {
     var windows = computeFreeWindows(b.id, b.name, weekStart, weekEnd);
     var liveRob = liveROBsAll[b.id] || {};
     var vtph = b.vtph || 300, mtph = b.mtph || 100;
+    // Total quantity this barge is already committed to supply within THIS
+    // week — sums every vessel-busy block's nominated quantity from the
+    // windows just computed, same "to be supplied" figure shown elsewhere
+    // (e.g. the Command Center ROB panel), just scoped to the week being
+    // viewed here instead of unbounded. Matters because ROB "onboard now"
+    // overstates real spare capacity if most of it is already spoken for.
+    var toSupplyV = 0, toSupplyM = 0;
+    windows.forEach(function(w) {
+      if (w.status === 'busy' && w.kind === 'vessel') {
+        toSupplyV += (w.nomV || 0);
+        toSupplyM += (w.nomM || 0);
+      }
+    });
     var robLine = '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' +
       'ROB now: <span style="color:var(--fuel-v);font-weight:700">' + Math.round(liveRob.liveV || 0).toLocaleString() + '</span>/' + Math.round(liveRob.vcap || 0).toLocaleString() + ' MT VLSFO' +
       ' · <span style="color:var(--fuel-m);font-weight:700">' + Math.round(liveRob.liveM || 0).toLocaleString() + '</span>/' + Math.round(liveRob.mcap || 0).toLocaleString() + ' MT LSMGO' +
       ' &nbsp;·&nbsp; Supply rate: ' + vtph + '/' + mtph + ' MT/h' +
+      '<br>To be supplied this week: <span style="color:var(--fuel-v);font-weight:700">' + Math.round(toSupplyV).toLocaleString() + ' MT VLSFO</span>' +
+      ' · <span style="color:var(--fuel-m);font-weight:700">' + Math.round(toSupplyM).toLocaleString() + ' MT LSMGO</span>' +
     '</div>';
     var rows = windows.length ? windows.map(function(w) {
       if (w.status === 'busy') {
