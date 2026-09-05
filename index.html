@@ -5614,6 +5614,15 @@ function _applyRoleUIRestrictions() {
     if (el) el.style.display = 'none';
   });
 
+  // Free Windows is an operator planning/commercial tool (nominating into
+  // open capacity) — not part of what a trader needs, so hide the toggle
+  // button entirely rather than let them open a panel meant for the other
+  // role.
+  const freeWinBtn = document.getElementById('free-windows-toggle-btn');
+  if (freeWinBtn) freeWinBtn.style.display = 'none';
+  const freeWinPanel = document.getElementById('free-windows-panel');
+  if (freeWinPanel) freeWinPanel.style.display = 'none';
+
   // Belt-and-braces: if a trader ever lands on a restricted page (deep link,
   // stale hash, leftover code path), bounce them back to Dashboard instead
   // of silently rendering a page they shouldn't be on.
@@ -11127,15 +11136,18 @@ function _getBargeTimeline(bargeId, bargeName) {
    commercially nominate into it without disrupting anything already
    planned" — the same question as a hand-built availability sheet, just
    computed from the live schedule instead of maintained by hand. ─── */
-function computeFreeWindows(bargeId, bargeName, horizonDays) {
+function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd) {
   var now = new Date();
-  var horizonEnd = new Date(now.getTime() + (horizonDays || 7) * 86400000);
+  // Never start before "now" — even if the given range begins earlier,
+  // there's nothing free before this exact moment.
+  var cursor = (rangeStart && rangeStart > now) ? rangeStart : now;
+  var horizonEnd = rangeEnd || new Date(cursor.getTime() + 7 * 86400000);
 
   var busy = _getBargeTimeline(bargeId, bargeName).map(function(op) {
-    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel, kind: 'vessel' };
+    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel, kind: 'vessel', nomV: op.vQ || 0, nomM: op.mQ || 0 };
   });
   (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
-    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal'), kind: 'loading', grade: r.grade });
+    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal'), kind: 'loading', grade: r.grade, qty: r.qty || 0 });
   });
   busy.sort(function(a, b) { return a.start - b.start; });
 
@@ -11157,23 +11169,9 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
       start = runningCursor;
       end = new Date(start.getTime() + Math.max(0, dur));
     }
-    mergedBusy.push({ start: start, end: end, label: b.label, kind: b.kind, grade: b.grade });
+    mergedBusy.push({ start: start, end: end, label: b.label, kind: b.kind, grade: b.grade, nomV: b.nomV, nomM: b.nomM, qty: b.qty });
     if (!runningCursor || end > runningCursor) runningCursor = end;
   });
-
-  var windows = [];
-  var cursor = now;
-  mergedBusy.forEach(function(b) {
-    if (b.start > cursor) {
-      windows.push({ status: 'free', start: cursor, end: b.start });
-    }
-    windows.push({ status: 'busy', start: b.start, end: b.end, label: b.label, kind: b.kind, grade: b.grade });
-    if (b.end > cursor) cursor = b.end;
-  });
-  // Open-ended tail beyond the last known commitment — real, but not
-  // infinitely quotable, so it's capped at the horizon for the estimate
-  // while still being labeled as ongoing/open-ended.
-  windows.push({ status: 'free', start: cursor, end: null, openEnded: true });
 
   var barge = (_bargeConfig || []).find(function(x) { return x.id === bargeId || x.name === bargeName; }) || {};
   var vtph = barge.vtph || 300;
@@ -11183,25 +11181,66 @@ function computeFreeWindows(bargeId, bargeName, horizonDays) {
   var liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var liveRob = liveROBs[bargeId] || Object.values(liveROBs).find(function(r) { return r.bargeName === bargeName; }) || {};
   var vcap = liveRob.vcap || 0, mcap = liveRob.mcap || 0;
-  var liveV = liveRob.liveV || 0, liveM = liveRob.liveM || 0;
+  // Running simulated ROB as we walk the timeline chronologically — starts
+  // at what's actually onboard right now, depletes through each vessel
+  // supply, tops back up (capped at tank capacity) through each Loading.
+  // This is what lets a free window's deliverable estimate reflect what
+  // would ACTUALLY be onboard by the time that window arrives (instead of
+  // a blanket "now vs capacity" guess), and gives each Loading block a real
+  // before/after ROB figure per grade.
+  var simV = liveRob.liveV || 0, simM = liveRob.liveM || 0;
 
-  var seenFree = false;
-  return windows.map(function(w) {
-    if (w.status === 'busy') return w;
-    var endForCalc = w.end || horizonEnd;
-    var hrs = Math.max(0, (endForCalc - w.start) / 3600000);
+  // Clip everything to [cursor, horizonEnd] — this is the piece that was
+  // actually missing before: horizonEnd was only ever used to size the
+  // LAST window's duration estimate, never to stop the list itself, so it
+  // kept listing every future op regardless of the stated horizon (e.g.
+  // still showing next week's ops under "this week"'s Free Windows).
+  var windows = [];
+  function pushFree(start, end) {
+    var hrs = Math.max(0, (end - start) / 3600000);
     // The fixed hook-up/mobilization overhead (the same hoseHrs used for
     // every real supply job) eats into the window before any pumping
     // happens — a window shorter than that isn't actually usable.
     var pumpHrs = Math.max(0, hrs - hoseHrs);
-    var estV = Math.round(pumpHrs * vtph);
-    var estM = Math.round(pumpHrs * mtph);
-    var isFirst = !seenFree;
-    seenFree = true;
-    estV = Math.min(estV, isFirst ? liveV : vcap);
-    estM = Math.min(estM, isFirst ? liveM : mcap);
-    return Object.assign({}, w, { hrs: hrs, estV: Math.max(0, estV), estM: Math.max(0, estM) });
+    var estV = Math.min(Math.round(pumpHrs * vtph), Math.max(0, simV));
+    var estM = Math.min(Math.round(pumpHrs * mtph), Math.max(0, simM));
+    windows.push({ status: 'free', start: start, end: end, hrs: hrs, estV: estV, estM: estM });
+  }
+
+  mergedBusy.forEach(function(b) {
+    if (b.start >= horizonEnd) return; // entirely beyond this range — drop
+    var bStart = b.start < cursor ? cursor : b.start;
+    var bEnd = b.end > horizonEnd ? horizonEnd : b.end;
+    if (bEnd <= bStart) return; // clipped away to nothing
+    if (bStart > cursor) pushFree(cursor, bStart);
+
+    var beforeV = simV, beforeM = simM;
+    if (b.kind === 'vessel') {
+      simV = Math.max(0, simV - (b.nomV || 0));
+      simM = Math.max(0, simM - (b.nomM || 0));
+    } else if (b.kind === 'loading') {
+      if (b.grade === 'LSMGO') simM = mcap ? Math.min(mcap, simM + (b.qty || 0)) : (simM + (b.qty || 0));
+      else simV = vcap ? Math.min(vcap, simV + (b.qty || 0)) : (simV + (b.qty || 0));
+    }
+    windows.push({
+      status: 'busy', start: bStart, end: bEnd, label: b.label, kind: b.kind, grade: b.grade,
+      beforeV: beforeV, beforeM: beforeM, afterV: simV, afterM: simM
+    });
+    cursor = bEnd;
   });
+  if (cursor < horizonEnd) pushFree(cursor, horizonEnd);
+
+  return windows;
+}
+
+// Shared by both the panel render and the Excel download — the week Free
+// Windows covers always matches whatever week the Weekly Planned Supply
+// calendar above it is currently showing (respects _calWeekOffset).
+function _freeWindowsWeekRange() {
+  var today = new Date(); today.setHours(0,0,0,0);
+  var weekStart = new Date(today.getTime() + (_calWeekOffset || 0) * 86400000);
+  var weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
+  return { weekStart: weekStart, weekEnd: weekEnd };
 }
 
 function toggleFreeWindowsPanel() {
@@ -11212,6 +11251,93 @@ function toggleFreeWindowsPanel() {
   panel.style.display = showing ? 'none' : 'block';
   if (btn) btn.classList.toggle('active', !showing);
   if (!showing) renderFreeWindowsPanel();
+}
+
+async function downloadFreeWindowsReport(btnEl) {
+  var barges = _bargeConfig || [];
+  if (!barges.length) { alert('No barges configured.'); return; }
+  var origLabel = btnEl ? btnEl.innerHTML : '';
+  if (btnEl) { btnEl.disabled = true; btnEl.innerHTML = 'Preparing…'; }
+  await new Promise(function(r) { setTimeout(r, 0); });
+  try {
+    var range = _freeWindowsWeekRange();
+    var weekLabel = range.weekStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + '-' +
+      new Date(range.weekEnd.getTime()-1).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+    var fmtDT = function(d) {
+      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+    };
+
+    var ExcelJS = await _loadExcelJS();
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet('Free Windows');
+    ws.columns = [{width:14},{width:10},{width:16},{width:16},{width:8},{width:32},{width:14},{width:14}];
+
+    ws.mergeCells('A1:H1');
+    var titleCell = ws.getCell('A1');
+    titleCell.value = 'FLOW Free Windows — Week of ' + weekLabel;
+    titleCell.font = { bold:true, size:13, color:{argb:'FF0D1B2A'} };
+    ws.mergeCells('A2:H2');
+    var subCell = ws.getCell('A2');
+    subCell.value = 'Generated ' + fmt24(new Date()) + ' · Purely informational — nothing here books anything';
+    subCell.font = { size:9, color:{argb:'FF8A9BAC'} };
+    ws.getRow(1).height = 20; ws.getRow(2).height = 15;
+
+    var thinBorder = { style:'thin', color:{argb:'FFD8E0E8'} };
+    var border = { top:thinBorder, bottom:thinBorder, left:thinBorder, right:thinBorder };
+
+    var headers = ['Barge','Status','Start','End','Hours','Detail','Est. VLSFO (MT)','Est. LSMGO (MT)'];
+    var headerRow = ws.getRow(4);
+    headers.forEach(function(h, i) {
+      var cell = headerRow.getCell(i+1);
+      cell.value = h;
+      cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF0D1B2A'} };
+      cell.alignment = { horizontal:'center', vertical:'middle' };
+      cell.border = border;
+    });
+    headerRow.height = 20;
+
+    var rowIdx = 5;
+    barges.forEach(function(b) {
+      var windows = computeFreeWindows(b.id, b.name, range.weekStart, range.weekEnd);
+      windows.forEach(function(w) {
+        var row = ws.getRow(rowIdx++);
+        var isLoading = w.status === 'busy' && w.kind === 'loading';
+        var isM = isLoading && w.grade === 'LSMGO';
+        var detail = w.status === 'busy'
+          ? (w.label || '') + (isLoading ? ' — ROB ' + Math.round(isM ? w.beforeM : w.beforeV).toLocaleString() + ' → ' + Math.round(isM ? w.afterM : w.afterV).toLocaleString() + ' MT ' + w.grade : '')
+          : Math.round(w.hrs) + 'h free';
+        var vals = [
+          b.name,
+          w.status === 'busy' ? 'Busy' : 'Free',
+          fmtDT(w.start),
+          fmtDT(w.end),
+          Math.round((w.end - w.start) / 3600000),
+          detail,
+          w.status === 'free' ? w.estV : '',
+          w.status === 'free' ? w.estM : '',
+        ];
+        var fillColor = w.status === 'free' ? 'FFE2F2EB' : (isLoading ? (isM ? 'FFFFF6EC' : 'FFEFF5FF') : 'FFFAEAE8');
+        var textColor = w.status === 'free' ? 'FF147A58' : (isLoading ? (isM ? 'FFC2570A' : 'FF1D4ED8') : 'FFAE3A2E');
+        vals.forEach(function(v, c) {
+          var cell = row.getCell(c+1);
+          cell.value = v;
+          cell.border = border;
+          cell.alignment = { vertical:'middle', horizontal: (c===6||c===7) ? 'right' : 'left' };
+          cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: fillColor} };
+          if (c === 1) cell.font = { bold:true, color:{argb: textColor} };
+        });
+      });
+    });
+
+    var buf = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buf], { type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    await _flowSaveOrShareBlob(blob, 'FLOW_Free_Windows_' + weekLabel.replace(/\s+/g,'') + '.xlsx');
+  } catch (err) {
+    alert('Could not generate the Excel file: ' + err.message);
+  } finally {
+    if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = origLabel; }
+  }
 }
 
 function renderFreeWindowsPanel() {
@@ -11225,9 +11351,21 @@ function renderFreeWindowsPanel() {
   var fmtDT = function(d) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
   };
+  // Match the SAME week the Weekly Planned Supply calendar above is
+  // currently showing (respects _calWeekOffset, so paging the calendar
+  // forward/back also moves Free Windows with it) — this used to just be
+  // "now + 7 raw days," which doesn't line up with the calendar's actual
+  // displayed week and was letting entries from the following week bleed
+  // in under what was labeled as "this week."
+  var today = new Date(); today.setHours(0,0,0,0);
+  var range = _freeWindowsWeekRange();
+  var weekStart = range.weekStart, weekEnd = range.weekEnd;
+  var weekLabel = weekStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' – ' +
+    new Date(weekEnd.getTime() - 1).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+
   var liveROBsAll = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var cols = barges.map(function(b) {
-    var windows = computeFreeWindows(b.id, b.name, 7);
+    var windows = computeFreeWindows(b.id, b.name, weekStart, weekEnd);
     var liveRob = liveROBsAll[b.id] || {};
     var vtph = b.vtph || 300, mtph = b.mtph || 100;
     var robLine = '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' +
@@ -11235,7 +11373,7 @@ function renderFreeWindowsPanel() {
       ' · <span style="color:var(--fuel-m);font-weight:700">' + Math.round(liveRob.liveM || 0).toLocaleString() + '</span>/' + Math.round(liveRob.mcap || 0).toLocaleString() + ' MT LSMGO' +
       ' &nbsp;·&nbsp; Supply rate: ' + vtph + '/' + mtph + ' MT/h' +
     '</div>';
-    var rows = windows.map(function(w) {
+    var rows = windows.length ? windows.map(function(w) {
       if (w.status === 'busy') {
         // Loading gets its own grade color (matching how the rest of the
         // app already colors VLSFO/LSMGO) instead of being lumped in with
@@ -11246,22 +11384,37 @@ function renderFreeWindowsPanel() {
         var isM = isLoading && w.grade === 'LSMGO';
         var busyColor = isLoading ? (isM ? 'var(--fuel-m)' : 'var(--fuel-v)') : 'var(--red)';
         var busyBg = isLoading ? (isM ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)') : 'var(--red-lt2)';
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:' + busyBg + ';border-left:3px solid ' + busyColor + ';border-radius:4px;margin-bottom:5px">' +
-          '<div style="font-size:11.5px;font-weight:700;color:' + busyColor + '">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
-          '<div style="font-size:10.5px;color:' + busyColor + ';text-align:right">Busy — ' + (w.label || '').replace(/</g, '&lt;') + '</div>' +
+        // For a Loading block specifically, show what's onboard right
+        // before it starts and what that grade will be once it's done —
+        // the whole point of a Loading is to top the barge back up, so
+        // seeing the before/after figure right there is more useful than
+        // just knowing the terminal and quantity.
+        var robChangeText = '';
+        if (isLoading) {
+          var beforeVal = isM ? w.beforeM : w.beforeV;
+          var afterVal = isM ? w.afterM : w.afterV;
+          robChangeText = '<div style="font-size:10px;color:' + busyColor + ';margin-top:2px">' +
+            'ROB ' + Math.round(beforeVal || 0).toLocaleString() + ' → ' + Math.round(afterVal || 0).toLocaleString() + ' MT ' + w.grade +
+          '</div>';
+        }
+        return '<div style="padding:7px 10px;background:' + busyBg + ';border-left:3px solid ' + busyColor + ';border-radius:4px;margin-bottom:5px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center">' +
+            '<div style="font-size:11.5px;font-weight:700;color:' + busyColor + '">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
+            '<div style="font-size:10.5px;color:' + busyColor + ';text-align:right">Busy — ' + (w.label || '').replace(/</g, '&lt;') + '</div>' +
+          '</div>' +
+          robChangeText +
         '</div>';
       }
-      var rangeText = w.openEnded ? (fmtDT(w.start) + ' onwards') : (fmtDT(w.start) + ' → ' + fmtDT(w.end));
-      var capText = w.openEnded ? '' :
-        '<div style="font-size:10px;color:var(--green)">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max</div>';
+      var rangeText = fmtDT(w.start) + ' → ' + fmtDT(w.end);
+      var capText = '<div style="font-size:10px;color:var(--green)">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max</div>';
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--green-lt2);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px;gap:8px;flex-wrap:wrap">' +
         '<div>' +
           '<div style="font-size:11.5px;font-weight:700;color:var(--green)">' + rangeText + '</div>' +
-          (w.openEnded ? '' : '<div style="font-size:10px;color:var(--green)">' + Math.round(w.hrs) + 'h free</div>') +
+          '<div style="font-size:10px;color:var(--green)">' + Math.round(w.hrs) + 'h free</div>' +
         '</div>' +
         capText +
       '</div>';
-    }).join('');
+    }).join('') : '<div style="font-size:11px;color:var(--muted);padding:8px 0">Fully busy this week.</div>';
     return '<div style="flex:1;min-width:240px">' +
       '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:4px">' + (b.name || '').replace(/</g, '&lt;') + '</div>' +
       robLine +
@@ -11270,6 +11423,13 @@ function renderFreeWindowsPanel() {
   }).join('');
 
   panel.innerHTML =
+    '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--ink)">Week of ' + weekLabel + '</div>' +
+      '<button class="btn btn-secondary btn-sm" id="free-windows-download-btn" onclick="downloadFreeWindowsReport(this)">' +
+        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-2px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
+        'Download' +
+      '</button>' +
+    '</div>' +
     '<div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">Free windows (green) are gaps in the schedule below — vessel supply and Loading both count as busy. Estimated deliverable quantity uses each barge\'s vessel-supply rate plus the ' + ((_calcParams && _calcParams.hoseHrs) || 6) + 'h hook-up time (same numbers the scheduler itself uses), capped at what\'s actually onboard or the tank capacity — never more than the barge could physically carry. Purely informational — nothing here books anything.</div>' +
     '<div style="display:flex;gap:16px;flex-wrap:wrap">' + cols + '</div>';
 }
@@ -15277,6 +15437,13 @@ let _calWeekOffset = 0; // days offset from today
 function shiftWeekCal(days) {
   _calWeekOffset = (days === 0) ? 0 : _calWeekOffset + days;
   renderWeekCalendar(_calWeekOffset);
+  // Keep Free Windows in sync with whatever week is now showing, if it's
+  // currently open — otherwise paging the calendar would silently leave
+  // it stuck showing the previous week's availability.
+  var fwPanel = document.getElementById('free-windows-panel');
+  if (fwPanel && fwPanel.style.display !== 'none' && typeof renderFreeWindowsPanel === 'function') {
+    renderFreeWindowsPanel();
+  }
 }
 
 function renderWeekCalendar(offsetDays) {
