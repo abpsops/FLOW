@@ -5311,6 +5311,55 @@ function permanentlyDeleteFromTrash(idx) { if(typeof permanentDeleteFromTrash===
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
+   DEMO SELF-EXPIRY — this is a fully client-side demo (no backend
+   to enforce anything server-side), so the 48-hour window is
+   anchored to whenever THIS BROWSER first opens the link, not a
+   fixed calendar date. That means testing it yourself doesn't burn
+   any of the investor's window — their device starts its own
+   independent 48 hours the moment THEY first open it. Runs
+   synchronously, before anything else, so an expired link never
+   even flashes the app before killing itself.
+   ═══════════════════════════════════════════════════════════════ */
+(function checkDemoExpiry() {
+  var FIRST_OPEN_KEY = 'flow_demo_first_open';
+  var EXPIRY_HOURS = 48;
+  var firstOpen;
+  try {
+    firstOpen = localStorage.getItem(FIRST_OPEN_KEY);
+    if (!firstOpen) {
+      firstOpen = Date.now().toString();
+      localStorage.setItem(FIRST_OPEN_KEY, firstOpen);
+    }
+  } catch(e) { firstOpen = Date.now().toString(); }
+
+  var elapsedMs = Date.now() - parseInt(firstOpen, 10);
+  window._flowDemoFirstOpen = parseInt(firstOpen, 10);
+  window._flowDemoExpiryHours = EXPIRY_HOURS;
+
+  if (elapsedMs >= EXPIRY_HOURS * 3600000) {
+    window._flowDemoExpired = true;
+    // Wipe every trace of the demo on this device once it's expired —
+    // nothing lingers around for anyone to keep poking at afterwards.
+    try {
+      Object.keys(localStorage).forEach(function(k) {
+        if (k.indexOf('flow_') === 0) localStorage.removeItem(k);
+      });
+    } catch(e) {}
+    document.addEventListener('DOMContentLoaded', function() {
+      document.title = 'FLOW Demo — Expired';
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#0A1420;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;font-family:\'DM Sans\',sans-serif;color:#D6E0EA;text-align:center;padding:24px">' +
+          '<div style="font-size:26px;font-weight:700;color:#F0A500">FLOW</div>' +
+          '<div style="font-size:15px;font-weight:600">This demo link has expired</div>' +
+          '<div style="font-size:12.5px;color:rgba(214,224,234,.65);max-width:340px">It was only valid for 48 hours after it was first opened. Get in touch for a fresh link.</div>' +
+        '</div>';
+    });
+  }
+})();
+</script>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════
    DEMO SEED DATA — runs once, before the app's own login/init
    scripts below. If this browser has never opened the demo before
    (no local state saved yet), pre-loads a small, entirely fictional
@@ -5322,6 +5371,7 @@ function permanentlyDeleteFromTrash(idx) { if(typeof permanentDeleteFromTrash===
    current whenever it's demoed, not stuck on a fixed past date.
    ═══════════════════════════════════════════════════════════════ */
 (function seedDemoDataIfEmpty() {
+  if (window._flowDemoExpired) return; // link is dead — don't bother seeding
   var LS_KEY = 'flow_state_202606290803'; // must match _FLOW_BUILD_ID's key below
   try {
     if (localStorage.getItem(LS_KEY)) return; // already seeded/used — leave it alone
@@ -5502,6 +5552,7 @@ async function _startAppAfterLogin() {
 // buttons), and remember the choice via a small always-visible switcher
 // so it can be flipped mid-demo without reloading through devtools.
 document.addEventListener('DOMContentLoaded', async () => {
+  if (window._flowDemoExpired) return; // the expiry script already replaced the whole page
   const gate = document.getElementById('operator-gate');
   if (gate) gate.style.display = 'none';
   _showDemoRolePicker();
@@ -5550,7 +5601,12 @@ function _renderDemoRoleSwitcher() {
   let role = 'operator';
   try { role = localStorage.getItem('flow_demo_role') || 'operator'; } catch(e) {}
   const otherRole = role === 'operator' ? 'trader' : 'operator';
-  el.innerHTML = 'Viewing as <b style="color:#F0A500;text-transform:capitalize">' + role + '</b>' +
+  let remainingText = '';
+  if (window._flowDemoFirstOpen) {
+    const hoursLeft = Math.max(0, Math.ceil(window._flowDemoExpiryHours - (Date.now() - window._flowDemoFirstOpen) / 3600000));
+    remainingText = ' <span style="opacity:.55">· expires in ' + hoursLeft + 'h</span>';
+  }
+  el.innerHTML = 'Viewing as <b style="color:#F0A500;text-transform:capitalize">' + role + '</b>' + remainingText +
     '<button onclick="_switchDemoRole(\'' + otherRole + '\')" style="margin-left:6px;padding:4px 9px;border-radius:5px;border:none;background:#F0A500;color:#0A1420;font-weight:700;font-size:10.5px;cursor:pointer">Switch to ' + (otherRole.charAt(0).toUpperCase()+otherRole.slice(1)) + '</button>';
 }
 
