@@ -5494,14 +5494,70 @@ async function _startAppAfterLogin() {
   if (typeof showFlowWelcomeRadar === 'function') showFlowWelcomeRadar();
 }
 
-// DEMO BUILD: no backend to authenticate against, and no reason to make
-// an investor sign in at all — skip the gate unconditionally and go
-// straight into the app.
+// DEMO BUILD: no backend to authenticate against, so no real password —
+// but the whole point of this demo is being able to show BOTH the
+// operator's full view and the trader's restricted view in one sitting,
+// so instead of skipping straight in as a hardcoded role, show a simple
+// "which view do you want to see" picker (no email/password, just two
+// buttons), and remember the choice via a small always-visible switcher
+// so it can be flipped mid-demo without reloading through devtools.
 document.addEventListener('DOMContentLoaded', async () => {
   const gate = document.getElementById('operator-gate');
   if (gate) gate.style.display = 'none';
-  _startAppAfterLogin();
+  _showDemoRolePicker();
 });
+
+function _showDemoRolePicker() {
+  let existing = null;
+  try { existing = localStorage.getItem('flow_demo_role'); } catch(e) {}
+  if (existing === 'operator' || existing === 'trader') {
+    _startAppAfterLogin();
+    _renderDemoRoleSwitcher();
+    return;
+  }
+  const overlay = document.createElement('div');
+  overlay.id = 'demo-role-picker';
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#0A1420;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;font-family:"DM Sans",sans-serif';
+  overlay.innerHTML =
+    '<div style="font-size:26px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</div>' +
+    '<div style="font-size:13px;color:rgba(214,224,234,.75);margin-bottom:6px;text-align:center;max-width:340px">Demo build — choose which view to open. This is just for this demo; nothing here needs a real sign-in.</div>' +
+    '<div style="display:flex;gap:14px;flex-wrap:wrap;justify-content:center">' +
+      '<button onclick="_pickDemoRole(\'operator\')" style="padding:14px 26px;border-radius:8px;border:none;background:#F0A500;color:#0A1420;font-weight:700;font-size:14px;cursor:pointer;min-width:170px">Operator View<div style="font-size:11px;font-weight:500;opacity:.75;margin-top:3px">Full access</div></button>' +
+      '<button onclick="_pickDemoRole(\'trader\')" style="padding:14px 26px;border-radius:8px;border:1px solid rgba(214,224,234,.4);background:transparent;color:#D6E0EA;font-weight:700;font-size:14px;cursor:pointer;min-width:170px">Trader View<div style="font-size:11px;font-weight:500;opacity:.6;margin-top:3px">Dashboard + Nominations only</div></button>' +
+    '</div>';
+  document.body.appendChild(overlay);
+}
+
+function _pickDemoRole(role) {
+  try { localStorage.setItem('flow_demo_role', role); } catch(e) {}
+  const overlay = document.getElementById('demo-role-picker');
+  if (overlay) overlay.remove();
+  _startAppAfterLogin();
+  _renderDemoRoleSwitcher();
+}
+
+// A small always-visible control so the role can be flipped mid-demo —
+// e.g. show the operator's full Command Center, then flip to trader to
+// show how much simpler and safer that view is, in the same sitting.
+function _renderDemoRoleSwitcher() {
+  let el = document.getElementById('demo-role-switcher');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'demo-role-switcher';
+    el.style.cssText = 'position:fixed;bottom:14px;right:14px;z-index:999998;background:#0A1420;color:#D6E0EA;border-radius:8px;padding:8px 12px;font-family:"DM Sans",sans-serif;font-size:11.5px;box-shadow:0 2px 10px rgba(0,0,0,.35);display:flex;align-items:center;gap:8px';
+    document.body.appendChild(el);
+  }
+  let role = 'operator';
+  try { role = localStorage.getItem('flow_demo_role') || 'operator'; } catch(e) {}
+  const otherRole = role === 'operator' ? 'trader' : 'operator';
+  el.innerHTML = 'Viewing as <b style="color:#F0A500;text-transform:capitalize">' + role + '</b>' +
+    '<button onclick="_switchDemoRole(\'' + otherRole + '\')" style="margin-left:6px;padding:4px 9px;border-radius:5px;border:none;background:#F0A500;color:#0A1420;font-weight:700;font-size:10.5px;cursor:pointer">Switch to ' + (otherRole.charAt(0).toUpperCase()+otherRole.slice(1)) + '</button>';
+}
+
+function _switchDemoRole(role) {
+  try { localStorage.setItem('flow_demo_role', role); } catch(e) {}
+  location.reload();
+}
 
 </script>
 
@@ -5626,6 +5682,12 @@ async function _fetchAndApplyUserRole() {
           ABPS_ROLE = 'trader';
         }
       }
+    } else {
+      // DEMO BUILD: no backend to look a role up against — use whichever
+      // role was picked on the demo's role-picker screen instead.
+      let demoRole = null;
+      try { demoRole = localStorage.getItem('flow_demo_role'); } catch(e) {}
+      if (demoRole === 'trader') ABPS_ROLE = 'trader';
     }
   } catch(e) {
     console.warn('ABPS: role lookup failed, defaulting this session to operator view:', e.message);
