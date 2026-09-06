@@ -5311,32 +5311,24 @@ function permanentlyDeleteFromTrash(idx) { if(typeof permanentDeleteFromTrash===
 
 <script>
 /* ═══════════════════════════════════════════════════════════════
-   DEMO SELF-EXPIRY — this is a fully client-side demo (no backend
-   to enforce anything server-side), so the 48-hour window is
-   anchored to whenever THIS BROWSER first opens the link, not a
-   fixed calendar date. That means testing it yourself doesn't burn
-   any of the investor's window — their device starts its own
-   independent 48 hours the moment THEY first open it. Runs
-   synchronously, before anything else, so an expired link never
-   even flashes the app before killing itself.
+   DEMO SELF-EXPIRY — a fixed deadline baked directly into the code,
+   NOT tied to "first time this browser opened it." A per-browser
+   timer can be defeated just by clearing cookies or opening in a
+   private window; a hardcoded deadline can't — every visitor, every
+   device, every incognito window all hit the exact same wall clock
+   time. Runs synchronously, before anything else, so an expired
+   link never even flashes the app before killing itself.
+
+   DEMO_EXPIRES_AT: 2026-09-08T10:20:17.755Z (48h from when this was
+   set — 08 Sep 2026, ~14:20 Fujairah time). To extend or renew the
+   demo, this is the one line that needs to change — ask to have it
+   moved out rather than editing it directly.
    ═══════════════════════════════════════════════════════════════ */
 (function checkDemoExpiry() {
-  var FIRST_OPEN_KEY = 'flow_demo_first_open';
-  var EXPIRY_HOURS = 48;
-  var firstOpen;
-  try {
-    firstOpen = localStorage.getItem(FIRST_OPEN_KEY);
-    if (!firstOpen) {
-      firstOpen = Date.now().toString();
-      localStorage.setItem(FIRST_OPEN_KEY, firstOpen);
-    }
-  } catch(e) { firstOpen = Date.now().toString(); }
+  var DEMO_EXPIRES_AT = 1788862817755; // 2026-09-08T10:20:17.755Z
+  window._flowDemoExpiresAt = DEMO_EXPIRES_AT;
 
-  var elapsedMs = Date.now() - parseInt(firstOpen, 10);
-  window._flowDemoFirstOpen = parseInt(firstOpen, 10);
-  window._flowDemoExpiryHours = EXPIRY_HOURS;
-
-  if (elapsedMs >= EXPIRY_HOURS * 3600000) {
+  if (Date.now() >= DEMO_EXPIRES_AT) {
     window._flowDemoExpired = true;
     // Wipe every trace of the demo on this device once it's expired —
     // nothing lingers around for anyone to keep poking at afterwards.
@@ -5602,8 +5594,8 @@ function _renderDemoRoleSwitcher() {
   try { role = localStorage.getItem('flow_demo_role') || 'operator'; } catch(e) {}
   const otherRole = role === 'operator' ? 'trader' : 'operator';
   let remainingText = '';
-  if (window._flowDemoFirstOpen) {
-    const hoursLeft = Math.max(0, Math.ceil(window._flowDemoExpiryHours - (Date.now() - window._flowDemoFirstOpen) / 3600000));
+  if (window._flowDemoExpiresAt) {
+    const hoursLeft = Math.max(0, Math.ceil((window._flowDemoExpiresAt - Date.now()) / 3600000));
     remainingText = ' <span style="opacity:.55">· expires in ' + hoursLeft + 'h</span>';
   }
   el.innerHTML = 'Viewing as <b style="color:#F0A500;text-transform:capitalize">' + role + '</b>' + remainingText +
