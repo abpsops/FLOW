@@ -7852,8 +7852,8 @@ function renderLiveROBDashboard() {
     const b = _bargeConfig.find(function(x) { return x.name === rob.bargeName; });
     if (!b) return;
 
-    const vPct = Math.min(100, Math.round((rob.liveV / rob.vcap) * 100));
-    const mPct = Math.min(100, Math.round((rob.liveM / rob.mcap) * 100));
+    const vPct = rob.vcap > 0 ? Math.min(100, Math.round((rob.liveV / rob.vcap) * 100)) : 0;
+    const mPct = rob.mcap > 0 ? Math.min(100, Math.round((rob.liveM / rob.mcap) * 100)) : 0;
     const vCol = vPct < 15 ? 'var(--red)' : vPct < 30 ? 'var(--amber)' : 'var(--fuel-v)';
     const mCol = mPct < 15 ? 'var(--red)' : mPct < 30 ? 'var(--amber)' : 'var(--fuel-m)';
     const hasManual = Object.keys(_manualROB).some(function(k) { return k.startsWith(b.id + '_'); });
