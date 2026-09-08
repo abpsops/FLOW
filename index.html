@@ -2562,6 +2562,11 @@ function flowWelcomeGo(pageId) {
     <div style="font-size:12px;color:var(--muted);text-align:center;padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius)">Generate the schedule to see Barge ROB Summary.</div>
   </div>
 
+  <!-- Per-barge Excel downloads — only shown when there's more than one
+       barge (populated by generateSchedule()/clearAll() etc.); each button
+       exports that specific barge's schedule via downloadExcelForBarge(). -->
+  <span id="per-barge-dl-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem"></span>
+
   <!-- Sum cards -->
   <div class="sum-grid" id="sum-cards"></div>
 
@@ -3402,6 +3407,7 @@ function flowWelcomeGo(pageId) {
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
         Refresh Now
       </button>
+      <span id="reminder-last-check" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
     </div>
   </div>
 </div>
@@ -10310,7 +10316,7 @@ function renderOutput(sched, totV, totM, vAl, mAl, barges, bargeState) {
 
   const dlSpan = document.getElementById('per-barge-dl-btns');
   if (dlSpan && barges.length > 1) {
-    dlSpan.innerHTML = barges.map(b => `<button class="btn-xl" onclick="downloadExcelForBarge(${b.id})">⬇ ${b.name}</button>`).join('');
+    dlSpan.innerHTML = barges.map(b => `<button class="btn btn-secondary btn-sm" onclick="downloadExcelForBarge(${b.id})">⬇ ${b.name}</button>`).join('');
   } else if (dlSpan) { dlSpan.innerHTML = ''; }
 
   // Barge ROB Summary is now rendered by renderLiveROBDashboard via renderBargeROBSummaryFromLive
@@ -13652,9 +13658,14 @@ function _tryBrowserNotification(vessels) {
 function startReminderAutoRefresh() {
   if (_reminderInterval) clearInterval(_reminderInterval);
   _reminderInterval = setInterval(() => {
-    const chk = document.getElementById('reminder-auto-check');
+    // NOTE: the actual checkbox on the Alerts page is #alerts-reminder-auto
+    // (see "Barge Schedule Reminders" section) — this used to check a
+    // differently-named #reminder-auto-check that was never added anywhere,
+    // so toggling the visible checkbox silently had no effect on this timer.
+    const chk = document.getElementById('alerts-reminder-auto');
     if (chk && chk.checked && _lastSched.length) {
       renderScheduleReminders();
+      if (typeof renderAlertsReminders === 'function') renderAlertsReminders();
     }
   }, 5 * 60 * 1000); // every 5 minutes
 }
