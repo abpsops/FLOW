@@ -4723,6 +4723,17 @@ function refreshDashboard() {
   renderDashActivity(savedRecs, []);
 }
 
+let _fuelingInitiated = {}; // { [sno]: { initiatedAt: <ms> } } — operator-confirmed, not time-derived
+
+function initiateFueling(sno) {
+  if (isTrader()) return; // operator-only action — traders can view this widget but not confirm physical fueling start
+  const key = String(sno);
+  if (_fuelingInitiated[key]) return; // already initiated
+  _fuelingInitiated[key] = { initiatedAt: Date.now() };
+  saveSharedState();
+  renderDashFuelingStatus();
+}
+
 function renderDashFuelingStatus() {
   const el = document.getElementById('dash-fueling-status');
   if (!el) return;
@@ -4736,7 +4747,17 @@ function renderDashFuelingStatus() {
   items.forEach(function(item) {
     const start = new Date(item.bargeStart), end = new Date(item.etc);
     if (isNaN(start) || isNaN(end)) return;
-    if (now < start) waiting.push(item);
+    const key = item.sno !== undefined && item.sno !== null ? String(item.sno) : null;
+    const initiated = key && _fuelingInitiated[key];
+    // "In Progress" now requires an operator to have actually clicked
+    // Initiate — the scheduled start time passing on its own no longer
+    // counts as fueling having begun, since the plan and the physical
+    // reality don't always line up. Not-yet-initiated stays in Waiting
+    // even if its scheduled start has already passed, which is itself
+    // useful signal (something that should have started but hasn't been
+    // confirmed). Completion still follows the scheduled ETC once
+    // initiated, since only initiation was asked to become manual.
+    if (!initiated) waiting.push(item);
     else if (now < end) inProgress.push(item);
     else completed.push(item);
   });
@@ -4752,14 +4773,23 @@ function renderDashFuelingStatus() {
     return parts.join(' · ');
   }
 
-  function col(title, color, bg, list, emptyText, timeFn) {
+  function col(title, color, bg, list, emptyText, timeFn, showInitiateBtn) {
+    const canInitiate = showInitiateBtn && !isTrader();
     const rows = list.slice(0, 6).map(function(item) {
       const hasSno = item.sno !== undefined && item.sno !== null;
-      return '<div ' + (hasSno ? 'onclick="_globalSearchGoSchedule(' + JSON.stringify(String(item.sno)) + ')" style="cursor:pointer"' : '') + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
-        '<div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (item.name || '').replace(/</g,'&lt;') + '</div>' +
-        '<div style="font-size:10.5px;color:var(--muted);margin-top:2px;display:flex;justify-content:space-between;gap:6px">' +
-          '<span>' + (item.bargeLabel || 'Unassigned') + ' · ' + timeFn(item) + '</span>' +
-          '<span style="font-family:\'DM Mono\',monospace;font-weight:700">' + fmtQty(item) + '</span>' +
+      const isOverdue = showInitiateBtn && now >= new Date(item.bargeStart);
+      const openHandler = hasSno ? 'onclick="_globalSearchGoSchedule(' + JSON.stringify(String(item.sno)) + ')" style="cursor:pointer"' : '';
+      const initiateBtn = (canInitiate && hasSno)
+        ? '<button onclick="event.stopPropagation();initiateFueling(' + JSON.stringify(String(item.sno)) + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
+        : '';
+      return '<div ' + openHandler + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">' +
+          '<div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (item.name || '').replace(/</g,'&lt;') + '</div>' +
+          initiateBtn +
+        '</div>' +
+        '<div style="font-size:10.5px;color:' + (isOverdue ? 'var(--amber)' : 'var(--muted)') + ';margin-top:2px;display:flex;justify-content:space-between;gap:6px">' +
+          '<span>' + (item.bargeLabel || 'Unassigned') + ' · ' + (isOverdue ? 'Ready to start' : timeFn(item)) + '</span>' +
+          '<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:var(--muted)">' + fmtQty(item) + '</span>' +
         '</div>' +
       '</div>';
     }).join('');
@@ -4776,8 +4806,8 @@ function renderDashFuelingStatus() {
   }
 
   el.innerHTML =
-    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }) +
-    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }) +
+    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true) +
+    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false) +
     col('Completed', 'var(--azure)', '', completed, 'None completed yet', function(item) { return 'Finished ' + fmt24(item.etc); });
 }
 
@@ -7471,7 +7501,7 @@ function captureCurrentState() {
     });
   });
 
-  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[] };
+  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{} };
 }
 
 /* ── ANTI-ZERO-RESET GUARD (Fix #1) ──────────────────────────────────
@@ -7661,6 +7691,20 @@ function applyState(state) {
   if (typeof _checkNewTrackingReportAlerts === 'function') _checkNewTrackingReportAlerts();
   if (document.getElementById('page-bargetracking')?.classList.contains('active') && typeof renderBargeTrackingReports === 'function') {
     renderBargeTrackingReports();
+  }
+
+  // Restore manually-confirmed Fueling Status — union merge (never drop a
+  // key), same reasoning as Loading records: two operators could each
+  // initiate a different vessel around the same time before either has
+  // pulled the other's change, and this is purely additive (a vessel never
+  // gets "un-initiated"), so a plain union is both safe and sufficient —
+  // no need for the authoritative-replace treatment Tracking Reports needed
+  // for deletions.
+  if (state.fuelingInitiated) {
+    _fuelingInitiated = Object.assign({}, _fuelingInitiated || {}, state.fuelingInitiated);
+  }
+  if (typeof renderDashFuelingStatus === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) {
+    renderDashFuelingStatus();
   }
 
   if (state.lastSched && state.lastSched.length) {
