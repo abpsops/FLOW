@@ -4734,6 +4734,15 @@ function initiateFueling(sno) {
   renderDashFuelingStatus();
 }
 
+function undoInitiateFueling(sno) {
+  if (isTrader()) return; // same operator-only gate as initiating
+  const key = String(sno);
+  if (!_fuelingInitiated[key]) return;
+  delete _fuelingInitiated[key];
+  saveSharedState();
+  renderDashFuelingStatus();
+}
+
 function renderDashFuelingStatus() {
   const el = document.getElementById('dash-fueling-status');
   if (!el) return;
@@ -4771,8 +4780,9 @@ function renderDashFuelingStatus() {
     return parts.join(' · ');
   }
 
-  function col(title, color, bg, list, emptyText, timeFn, showInitiateBtn) {
+  function col(title, color, bg, list, emptyText, timeFn, showInitiateBtn, showUndoBtn) {
     const canInitiate = showInitiateBtn && !isTrader();
+    const canUndo = showUndoBtn && !isTrader();
     const rows = list.slice(0, 6).map(function(item) {
       const hasSno = item.sno !== undefined && item.sno !== null;
       const isOverdue = showInitiateBtn && now >= new Date(item.bargeStart);
@@ -4787,10 +4797,15 @@ function renderDashFuelingStatus() {
       const initiateBtn = (canInitiate && hasSno)
         ? '<button onclick="event.stopPropagation();initiateFueling(' + snoJs + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
         : '';
+      // In case Initiate was clicked by mistake — same operator-only gate,
+      // just moves the item straight back to Still Waiting.
+      const undoBtn = (canUndo && hasSno)
+        ? '<button onclick="event.stopPropagation();undoInitiateFueling(' + snoJs + ')" title="Move back to Still Waiting" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;white-space:nowrap;margin-left:6px">Undo</button>'
+        : '';
       return '<div ' + openHandler + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">' +
           '<div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (item.name || '').replace(/</g,'&lt;') + '</div>' +
-          initiateBtn +
+          initiateBtn + undoBtn +
         '</div>' +
         '<div style="font-size:10.5px;color:' + (isOverdue ? 'var(--amber)' : 'var(--muted)') + ';margin-top:2px;display:flex;justify-content:space-between;gap:6px">' +
           '<span>' + (item.bargeLabel || 'Unassigned') + ' · ' + (isOverdue ? 'Ready to start' : timeFn(item)) + '</span>' +
@@ -4811,8 +4826,8 @@ function renderDashFuelingStatus() {
   }
 
   el.innerHTML =
-    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true) +
-    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false);
+    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true, false) +
+    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false, true);
 }
 
 function renderDashFleetStatus() {
