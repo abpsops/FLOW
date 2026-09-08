@@ -1197,8 +1197,9 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   .topbar{padding:0 1rem;gap:10px}
   .topbar-clock{display:none}
   .topbar-page-title{display:none}
+  #dash-fueling-status{grid-template-columns:1fr 1fr!important}
 }
-@media(max-width:500px){.g2{grid-template-columns:1fr}.g3{grid-template-columns:1fr}.kpi-grid-2{grid-template-columns:1fr}}
+@media(max-width:500px){.g2{grid-template-columns:1fr}.g3{grid-template-columns:1fr}.kpi-grid-2{grid-template-columns:1fr}#dash-fueling-status{grid-template-columns:1fr!important}}
 
 /* ════════════════════════════════════════
    PRINT
@@ -2360,6 +2361,21 @@ function flowWelcomeGo(pageId) {
     <div class="kpi-chip kpi-chip-ink" onclick="showPage('reports')">
       <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
       <div class="kpi-chip-body"><span class="kpi-chip-value" style="font-size:13px;line-height:1.35" id="kpi-monthly">—</span><span class="kpi-chip-label" id="kpi-monthly-sub">VLSFO this month</span></div>
+    </div>
+  </div>
+
+  <!-- Fueling Status — live view of every scheduled vessel supply, bucketed
+       by whether it's still waiting to start, actively fueling right now,
+       or completed. Placed right after the KPI strip (the "at a glance"
+       zone) and before the detailed Weekly Calendar, since "is fueling
+       happening right now" is usually the first thing to check after
+       scanning alerts — derived entirely from _lastSched's own
+       bargeStart/etc times, no new data needed. -->
+  <div class="chart-card" style="margin-bottom:14px">
+    <div class="chart-title">Fueling Status</div>
+    <div class="chart-subtitle" style="margin-bottom:10px">Live view of vessel supply — waiting, in progress, completed</div>
+    <div id="dash-fueling-status" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px;grid-column:1/-1">Generate schedule to see fueling status.</div>
     </div>
   </div>
 
@@ -4702,8 +4718,67 @@ function refreshDashboard() {
   }
 
   renderDashCharts(savedRecs, []);
+  renderDashFuelingStatus();
   renderDashFleetStatus();
   renderDashActivity(savedRecs, []);
+}
+
+function renderDashFuelingStatus() {
+  const el = document.getElementById('dash-fueling-status');
+  if (!el) return;
+  const items = _lastSched || [];
+  if (!items.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:24px;grid-column:1/-1">Generate schedule to see fueling status.</div>';
+    return;
+  }
+  const now = new Date();
+  const waiting = [], inProgress = [], completed = [];
+  items.forEach(function(item) {
+    const start = new Date(item.bargeStart), end = new Date(item.etc);
+    if (isNaN(start) || isNaN(end)) return;
+    if (now < start) waiting.push(item);
+    else if (now < end) inProgress.push(item);
+    else completed.push(item);
+  });
+  waiting.sort(function(a,b){ return new Date(a.bargeStart) - new Date(b.bargeStart); });
+  inProgress.sort(function(a,b){ return new Date(a.etc) - new Date(b.etc); });
+  completed.sort(function(a,b){ return new Date(b.etc) - new Date(a.etc); }); // most recent first
+
+  function fmtQty(item) {
+    const v = item.nomVQ || item.vQ || 0, m = item.nomMQ || item.mQ || 0;
+    const parts = [];
+    if (v > 0) parts.push('<span style="color:var(--fuel-v)">' + v.toLocaleString() + ' V</span>');
+    if (m > 0) parts.push('<span style="color:var(--fuel-m)">' + m.toLocaleString() + ' M</span>');
+    return parts.join(' · ');
+  }
+
+  function col(title, color, bg, list, emptyText, timeFn) {
+    const rows = list.slice(0, 6).map(function(item) {
+      const hasSno = item.sno !== undefined && item.sno !== null;
+      return '<div ' + (hasSno ? 'onclick="_globalSearchGoSchedule(' + JSON.stringify(String(item.sno)) + ')" style="cursor:pointer"' : '') + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
+        '<div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (item.name || '').replace(/</g,'&lt;') + '</div>' +
+        '<div style="font-size:10.5px;color:var(--muted);margin-top:2px;display:flex;justify-content:space-between;gap:6px">' +
+          '<span>' + (item.bargeLabel || 'Unassigned') + ' · ' + timeFn(item) + '</span>' +
+          '<span style="font-family:\'DM Mono\',monospace;font-weight:700">' + fmtQty(item) + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+    const more = list.length > 6 ? '<div style="font-size:10px;color:var(--muted);text-align:center;padding-top:2px">+' + (list.length - 6) + ' more</div>' : '';
+    return '<div>' +
+      '<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;padding-bottom:6px;border-bottom:2px solid ' + color + '">' +
+        '<span style="width:8px;height:8px;border-radius:50%;background:' + color + '"></span>' +
+        '<span style="font-size:10.5px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.05em">' + title + '</span>' +
+        '<span style="font-size:10.5px;font-weight:700;color:' + color + ';margin-left:auto">' + list.length + '</span>' +
+      '</div>' +
+      (rows || '<div style="font-size:11px;color:var(--muted);text-align:center;padding:14px 4px">' + emptyText + '</div>') +
+      more +
+    '</div>';
+  }
+
+  el.innerHTML =
+    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }) +
+    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }) +
+    col('Completed', 'var(--azure)', '', completed, 'None completed yet', function(item) { return 'Finished ' + fmt24(item.etc); });
 }
 
 function renderDashFleetStatus() {
