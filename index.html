@@ -4776,9 +4776,16 @@ function renderDashFuelingStatus() {
     const rows = list.slice(0, 6).map(function(item) {
       const hasSno = item.sno !== undefined && item.sno !== null;
       const isOverdue = showInitiateBtn && now >= new Date(item.bargeStart);
-      const openHandler = hasSno ? 'onclick="_globalSearchGoSchedule(' + JSON.stringify(String(item.sno)) + ')" style="cursor:pointer"' : '';
+      // JSON.stringify() wraps a string in DOUBLE quotes — embedding that
+      // directly inside an onclick="..." attribute (itself double-quoted)
+      // breaks the HTML mid-attribute at the first inner quote, silently
+      // truncating the handler to invalid JS. Use a single-quoted JS
+      // string literal instead, with any single quotes in the value
+      // itself escaped, since it's going inside single-quoted JS.
+      const snoJs = hasSno ? "'" + String(item.sno).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'" : "''";
+      const openHandler = hasSno ? 'onclick="_globalSearchGoSchedule(' + snoJs + ')" style="cursor:pointer"' : '';
       const initiateBtn = (canInitiate && hasSno)
-        ? '<button onclick="event.stopPropagation();initiateFueling(' + JSON.stringify(String(item.sno)) + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
+        ? '<button onclick="event.stopPropagation();initiateFueling(' + snoJs + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
         : '';
       return '<div ' + openHandler + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">' +
