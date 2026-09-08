@@ -2374,7 +2374,7 @@ function flowWelcomeGo(pageId) {
   <div class="chart-card" style="margin-bottom:14px">
     <div class="chart-title">Fueling Status</div>
     <div class="chart-subtitle" style="margin-bottom:10px">Live view of vessel supply — waiting, in progress, completed</div>
-    <div id="dash-fueling-status" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px">
+    <div id="dash-fueling-status" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
       <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px;grid-column:1/-1">Generate schedule to see fueling status.</div>
     </div>
   </div>
@@ -4743,27 +4743,25 @@ function renderDashFuelingStatus() {
     return;
   }
   const now = new Date();
-  const waiting = [], inProgress = [], completed = [];
+  const waiting = [], inProgress = [];
   items.forEach(function(item) {
     const start = new Date(item.bargeStart), end = new Date(item.etc);
     if (isNaN(start) || isNaN(end)) return;
     const key = item.sno !== undefined && item.sno !== null ? String(item.sno) : null;
     const initiated = key && _fuelingInitiated[key];
-    // "In Progress" now requires an operator to have actually clicked
-    // Initiate — the scheduled start time passing on its own no longer
-    // counts as fueling having begun, since the plan and the physical
-    // reality don't always line up. Not-yet-initiated stays in Waiting
-    // even if its scheduled start has already passed, which is itself
-    // useful signal (something that should have started but hasn't been
-    // confirmed). Completion still follows the scheduled ETC once
-    // initiated, since only initiation was asked to become manual.
+    // "In Progress" requires an operator to have actually clicked Initiate
+    // — the scheduled start time passing on its own doesn't count as
+    // fueling having begun, since the plan and the physical reality don't
+    // always line up. Not-yet-initiated stays in Waiting even past its
+    // scheduled start (itself useful signal — something that should have
+    // started but hasn't been confirmed). No separate Completed bucket —
+    // once it's past its ETC it simply drops off this widget rather than
+    // needing its own section here.
     if (!initiated) waiting.push(item);
     else if (now < end) inProgress.push(item);
-    else completed.push(item);
   });
   waiting.sort(function(a,b){ return new Date(a.bargeStart) - new Date(b.bargeStart); });
   inProgress.sort(function(a,b){ return new Date(a.etc) - new Date(b.etc); });
-  completed.sort(function(a,b){ return new Date(b.etc) - new Date(a.etc); }); // most recent first
 
   function fmtQty(item) {
     const v = item.nomVQ || item.vQ || 0, m = item.nomMQ || item.mQ || 0;
@@ -4807,8 +4805,7 @@ function renderDashFuelingStatus() {
 
   el.innerHTML =
     col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true) +
-    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false) +
-    col('Completed', 'var(--azure)', '', completed, 'None completed yet', function(item) { return 'Finished ' + fmt24(item.etc); });
+    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false);
 }
 
 function renderDashFleetStatus() {
