@@ -4724,7 +4724,6 @@ function refreshDashboard() {
 }
 
 let _fuelingInitiated = {}; // { [sno]: { initiatedAt: <ms> } } — operator-confirmed, not time-derived
-let _fuelingStatusLiveInterval = null;
 
 function initiateFueling(sno) {
   if (isTrader()) return; // operator-only action — traders can view this widget but not confirm physical fueling start
@@ -4781,7 +4780,7 @@ function renderDashFuelingStatus() {
     return parts.join(' · ');
   }
 
-  function col(title, color, bg, list, emptyText, timeFn, showInitiateBtn, showUndoBtn, showProgress) {
+  function col(title, color, bg, list, emptyText, timeFn, showInitiateBtn, showUndoBtn) {
     const canInitiate = showInitiateBtn && !isTrader();
     const canUndo = showUndoBtn && !isTrader();
     const rows = list.slice(0, 6).map(function(item) {
@@ -4803,28 +4802,6 @@ function renderDashFuelingStatus() {
       const undoBtn = (canUndo && hasSno)
         ? '<button onclick="event.stopPropagation();undoInitiateFueling(' + snoJs + ')" title="Move back to Still Waiting" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;white-space:nowrap;margin-left:6px">Undo</button>'
         : '';
-      // Live progress — from the moment Initiate was actually clicked
-      // (_fuelingInitiated[key].initiatedAt), climbing to 100% right as
-      // the scheduled ETC arrives. Re-rendered on the interval below so
-      // it visibly creeps forward, not a one-off snapshot at open time.
-      let progressBar = '';
-      if (showProgress && hasSno) {
-        const key = String(item.sno);
-        const rec = _fuelingInitiated[key];
-        const etcTime = new Date(item.etc).getTime();
-        if (rec && rec.initiatedAt && !isNaN(etcTime)) {
-          const span = etcTime - rec.initiatedAt;
-          const pct = span > 0 ? Math.min(100, Math.max(0, Math.round((Date.now() - rec.initiatedAt) / span * 100))) : 100;
-          const barColor = pct >= 100 ? 'var(--green)' : pct >= 75 ? 'var(--amber)' : 'var(--azure)';
-          progressBar =
-            '<div style="margin-top:6px">' +
-              '<div style="height:5px;border-radius:3px;background:var(--border2);overflow:hidden">' +
-                '<div style="height:100%;width:' + pct + '%;background:' + barColor + ';transition:width 1s linear"></div>' +
-              '</div>' +
-              '<div style="font-size:9px;color:var(--muted);text-align:right;margin-top:2px;font-family:\'DM Mono\',monospace">' + pct + '%</div>' +
-            '</div>';
-        }
-      }
       return '<div ' + openHandler + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">' +
           '<div style="font-size:12px;font-weight:700;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (item.name || '').replace(/</g,'&lt;') + '</div>' +
@@ -4834,7 +4811,6 @@ function renderDashFuelingStatus() {
           '<span>' + (item.bargeLabel || 'Unassigned') + ' · ' + (isOverdue ? 'Ready to start' : timeFn(item)) + '</span>' +
           '<span style="font-family:\'DM Mono\',monospace;font-weight:700;color:var(--muted)">' + fmtQty(item) + '</span>' +
         '</div>' +
-        progressBar +
       '</div>';
     }).join('');
     const more = list.length > 6 ? '<div style="font-size:10px;color:var(--muted);text-align:center;padding-top:2px">+' + (list.length - 6) + ' more</div>' : '';
@@ -4850,19 +4826,8 @@ function renderDashFuelingStatus() {
   }
 
   el.innerHTML =
-    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true, false, false) +
-    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false, true, true);
-
-  // Keep the progress bars actually moving — a full re-render is cheap
-  // here (the list is small) and reuses the exact same rendering path,
-  // so there's no separate "just update the bar width" code to drift out
-  // of sync with the real computation above.
-  if (!_fuelingStatusLiveInterval) {
-    _fuelingStatusLiveInterval = setInterval(function() {
-      if (!document.getElementById('dash-fueling-status')) { clearInterval(_fuelingStatusLiveInterval); _fuelingStatusLiveInterval = null; return; }
-      renderDashFuelingStatus();
-    }, 15000);
-  }
+    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true, false) +
+    col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false, true);
 }
 
 function renderDashFleetStatus() {
