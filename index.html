@@ -18163,7 +18163,7 @@ var _EMAIL_BODY_FUJ = [
 'We are nominated bunker supplier for the subject vessel at {{LOCATION}}, request you please keep us posted with her firm and consistent ETA notices basis 96/72/48/36/24/12 HRS to our common mail ID at operations@gpsbunkers.com',
 '',
 'NOMINATED DATE OF SUPPLY – On {{LAYCAN}}.',
-'NOMINATED QUANTITY - {{VLSFO_QTY}} MT LSFO / {{MGO_QTY}} MT LSMGO',
+'NOMINATED QUANTITY - {{QTY_LINE}}',
 '',
 'Attached is calling instructions and pre arrival bunkering questionnaire form to be passed on to vessel\u2019s master asking him to confirm his understanding over content of calling instruction by acknowledging it with his sign and vessel\u2019s stamp.',
 '',
@@ -18188,7 +18188,9 @@ var _EMAIL_BODY_FUJ = [
 'd) In case berthing not on arrival, can we plan to arrange bunkers subject to have enough window for bunkering before her berthing.',
 '',
 '',
-'PLEASE KEEP OUR COMMON E MAIL ID - operations@gpsbunkers.com IN CC FOR ALL COMMUNICATION - WHICH IS MONITORED 24 HRS.'
+'PLEASE KEEP OUR COMMON E MAIL ID - operations@gpsbunkers.com IN CC FOR ALL COMMUNICATION - WHICH IS MONITORED 24 HRS.',
+'',
+'Thanks & Best Regards'
 ].join('\n');
 
 var _EMAIL_BODY_KFK = [
@@ -18201,7 +18203,7 @@ var _EMAIL_BODY_KFK = [
 'We are nominated bunker supplier for the subject vessel at {{LOCATION}}, request you please keep us posted with her firm and consistent ETA notices basis 96/72/48/36/24/12 HRS to our common mail ID at operations@gpsbunkers.com',
 '',
 'NOMINATED DATE OF SUPPLY – On {{LAYCAN}}.',
-'NOMINATED QUANTITY - {{VLSFO_QTY}} MT LSFO / {{MGO_QTY}} MT LSMGO',
+'NOMINATED QUANTITY - {{QTY_LINE}}',
 '',
 'Attached is calling instructions and pre arrival bunkering questionnaire form to be passed on to vessel\u2019s master asking him to confirm his understanding over content of calling instruction by acknowledging it with his sign and vessel\u2019s stamp.',
 '',
@@ -18226,16 +18228,26 @@ var _EMAIL_BODY_KFK = [
 'd) In case berthing not on arrival, can we plan to arrange bunkers subject to have enough window for bunkering before her berthing.',
 '',
 '',
-'PLEASE KEEP OUR COMMON E MAIL ID - operations@gpsbunkers.com IN CC FOR ALL COMMUNICATION - WHICH IS MONITORED 24 HRS.'
+'PLEASE KEEP OUR COMMON E MAIL ID - operations@gpsbunkers.com IN CC FOR ALL COMMUNICATION - WHICH IS MONITORED 24 HRS.',
+'',
+'Thanks & Best Regards'
 ].join('\n');
 
 function _emailApply(tpl, ctx) {
   var v = Number(ctx.vlsfoQty) || 0;
   var m = Number(ctx.lsmgoQty) || 0;
+  // Build the quantity line to match how it's actually written by hand:
+  // only the grade(s) genuinely nominated appear at all — no dangling
+  // "/ — MT LSMGO" when a vessel only takes VLSFO (or vice versa).
+  var qtyParts = [];
+  if (v > 0) qtyParts.push(v.toLocaleString() + ' MT LSFO');
+  if (m > 0) qtyParts.push(m.toLocaleString() + ' MT LSMGO');
+  var qtyLine = qtyParts.length ? qtyParts.join(' / ') : '—';
   return tpl
     .split('{{AGENT}}').join(ctx.agent || '')
     .split('{{LOCATION}}').join(ctx.location || '')
     .split('{{LAYCAN}}').join(ctx.laycan || '')
+    .split('{{QTY_LINE}}').join(qtyLine)
     .split('{{VLSFO_QTY}}').join(v > 0 ? v.toLocaleString() : '—')
     .split('{{MGO_QTY}}').join(m > 0 ? m.toLocaleString() : '—')
     .split('{{VESSEL_NAME}}').join(ctx.vessel || '');
