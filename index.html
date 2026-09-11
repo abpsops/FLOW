@@ -18290,9 +18290,13 @@ function _emailLineToHtml(line, colorOverride) {
     return '<strong style="font-weight:700;text-decoration:underline;color:' + textColor + '">' + escHtml(line) + '</strong>';
   }
 
-  // Bold NOMINATED DATE / NOMINATED QUANTITY lines
+  // Bold NOMINATED DATE / NOMINATED QUANTITY lines — always plain black,
+  // never the blue block color, even though they now sit inside the blue
+  // range (between the intro paragraph and "Attached is..."). These are
+  // the two administrative data lines the manual template keeps visually
+  // distinct from the surrounding instructional text.
   if (/^NOMINATED (DATE OF SUPPLY|QUANTITY)/i.test(trimmed)) {
-    return '<strong style="font-weight:700;color:' + textColor + '">' + escHtml(line) + '</strong>';
+    return '<strong style="font-weight:700;color:#000000">' + escHtml(line) + '</strong>';
   }
 
   // Bold final CC instruction line (same size as the rest of the body — bold
@@ -18310,11 +18314,14 @@ function _emailLineToHtml(line, colorOverride) {
 
 function _emailBodyToHtml(body) {
   // "Dark Blue, Text 2, Lighter 10%" — Word's default-theme Text 2 (1F497D)
-  // tinted 10% toward white. Applies to the calling-instructions / pre-arrival
-  // questionnaire block only (from "Attached is calling instructions…" through
-  // the last "d) In case berthing not on arrival…" line) — nothing else in the
-  // email changes color, and bold/underline headers inside the block still work.
-  var COLOR_BLOCK_START = /^Attached is calling instructions/i;
+  // tinted 10% toward white. Applies to the whole informational body — from
+  // the "We are nominated bunker supplier…" intro paragraph through the
+  // last "d) In case berthing not on arrival…" line — matching the manual
+  // template exactly. The ATTN header block and the two bold NOMINATED
+  // lines stay outside this range (and outside the color) either way, by
+  // virtue of coming before the intro paragraph / being caught by their
+  // own bold-black branches in _emailLineToHtml.
+  var COLOR_BLOCK_START = /^We are nominated bunker supplier/i;
   var COLOR_BLOCK_END   = /^d\)\s*In case berthing not on arrival/i;
   var BLOCK_COLOR = '#355B8A';
   var inColorBlock = false;
