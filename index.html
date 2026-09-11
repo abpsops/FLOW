@@ -4725,19 +4725,36 @@ function refreshDashboard() {
 
 let _fuelingInitiated = {}; // { [sno]: { initiatedAt: <ms> } } — operator-confirmed, not time-derived
 
-function initiateFueling(sno) {
+// Fueling Status tracks initiation against a vessel's *nomination*, not
+// its position in that day's generated schedule. sno (i+1 in
+// generateSchedule) is purely positional and gets reassigned every time
+// the schedule regenerates — e.g. the moment a completed supply is
+// filtered out of the input, everything after it shifts down by one.
+// A stale _fuelingInitiated["2"] entry left over from a now-completed
+// vessel would then silently attach itself to whichever *different*
+// vessel happens to land on sno=2 next — showing as "already initiated"
+// the moment the app reloads (login, logout/back in, a fresh generate)
+// without anyone touching it. nomUid is the nomination's permanent,
+// never-reassigned identity, so it's what initiation state is actually
+// keyed on now; sno is kept purely as a last-resort fallback for any
+// stray item that somehow lacks a nomUid.
+function _fuelKey(item) {
+  if (item.nomUid) return 'nom_' + item.nomUid;
+  if (item.sno !== undefined && item.sno !== null) return 'sno_' + item.sno;
+  return null;
+}
+
+function initiateFueling(key) {
   if (isTrader()) return; // operator-only action — traders can view this widget but not confirm physical fueling start
-  const key = String(sno);
-  if (_fuelingInitiated[key]) return; // already initiated
+  if (!key || _fuelingInitiated[key]) return; // already initiated
   _fuelingInitiated[key] = { initiatedAt: Date.now() };
   saveSharedState();
   renderDashFuelingStatus();
 }
 
-function undoInitiateFueling(sno) {
+function undoInitiateFueling(key) {
   if (isTrader()) return; // same operator-only gate as initiating
-  const key = String(sno);
-  if (!_fuelingInitiated[key]) return;
+  if (!key || !_fuelingInitiated[key]) return;
   delete _fuelingInitiated[key];
   saveSharedState();
   renderDashFuelingStatus();
@@ -4756,7 +4773,7 @@ function renderDashFuelingStatus() {
   items.forEach(function(item) {
     const start = new Date(item.bargeStart), end = new Date(item.etc);
     if (isNaN(start) || isNaN(end)) return;
-    const key = item.sno !== undefined && item.sno !== null ? String(item.sno) : null;
+    const key = _fuelKey(item);
     const initiated = key && _fuelingInitiated[key];
     // "In Progress" requires an operator to have actually clicked Initiate
     // — the scheduled start time passing on its own doesn't count as
@@ -4794,13 +4811,19 @@ function renderDashFuelingStatus() {
       // itself escaped, since it's going inside single-quoted JS.
       const snoJs = hasSno ? "'" + String(item.sno).replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'" : "''";
       const openHandler = hasSno ? 'onclick="_globalSearchGoSchedule(' + snoJs + ')" style="cursor:pointer"' : '';
-      const initiateBtn = (canInitiate && hasSno)
-        ? '<button onclick="event.stopPropagation();initiateFueling(' + snoJs + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
+      // Initiate/Undo are keyed on the stable nomUid-based key (_fuelKey),
+      // NOT sno — sno is fine for _globalSearchGoSchedule above (pure
+      // in-session navigation, never persisted) but would silently
+      // misattribute initiation state across reloads, see _fuelKey's note.
+      const fuelKey = _fuelKey(item);
+      const fuelKeyJs = fuelKey ? "'" + fuelKey.replace(/\\/g, '\\\\').replace(/'/g, "\\'") + "'" : "''";
+      const initiateBtn = (canInitiate && fuelKey)
+        ? '<button onclick="event.stopPropagation();initiateFueling(' + fuelKeyJs + ')" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:none;background:var(--green);color:#fff;cursor:pointer;white-space:nowrap;margin-left:6px">Initiate</button>'
         : '';
       // In case Initiate was clicked by mistake — same operator-only gate,
       // just moves the item straight back to Still Waiting.
-      const undoBtn = (canUndo && hasSno)
-        ? '<button onclick="event.stopPropagation();undoInitiateFueling(' + snoJs + ')" title="Move back to Still Waiting" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;white-space:nowrap;margin-left:6px">Undo</button>'
+      const undoBtn = (canUndo && fuelKey)
+        ? '<button onclick="event.stopPropagation();undoInitiateFueling(' + fuelKeyJs + ')" title="Move back to Still Waiting" style="font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid var(--border2);background:var(--surface);color:var(--sub);cursor:pointer;white-space:nowrap;margin-left:6px">Undo</button>'
         : '';
       return '<div ' + openHandler + ' class="fs-row" style="padding:8px 10px;border-radius:6px;background:var(--surface);border:1px solid var(--border2);margin-bottom:6px">' +
         '<div style="display:flex;align-items:center;justify-content:space-between;gap:6px">' +
@@ -10388,7 +10411,7 @@ function calculate() {
       cursor = etc;
     }
 
-    sched.push({sno:i+1, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot});
+    sched.push({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot});
     bs.rv=rva; bs.rm=rma;
     totV+=sv; totM+=sm;
   }
