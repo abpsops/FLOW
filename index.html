@@ -4898,7 +4898,7 @@ function renderDashActivity(records, vessels) {
   // how other supply gets planned).
   const _ldNow = new Date();
   (_loadingRecords || [])
-    .filter(function(r) { return !r.completed && new Date(r.endAt) >= _ldNow; })
+    .filter(function(r) { return !r.deletedAt && !r.completed && new Date(r.endAt) >= _ldNow; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
     .slice(0, 5)
     .forEach(function(r) {
@@ -4919,7 +4919,7 @@ function renderDashActivity(records, vessels) {
   // happened. Show it here instead, tagged by grade, same as the
   // scheduled ones above.
   (_loadingRecords || [])
-    .filter(function(r) { return r.completed && r.completedAt; })
+    .filter(function(r) { return !r.deletedAt && r.completed && r.completedAt; })
     .sort(function(a, b) { return b.completedAt - a.completedAt; })
     .slice(0, 5)
     .forEach(function(r) {
@@ -6945,6 +6945,7 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   // buffer needed since both events are on the same barge already)
   (_loadingRecords || []).forEach(function(r) {
     if (r.id === excludeLoadingId) return;
+    if (r.deletedAt) return;
     if (r.barge !== bargeName) return;
     const rStart = new Date(r.startAt), rEnd = new Date(r.endAt);
     if (jobStart < rEnd && jobEnd > rStart) {
@@ -7031,7 +7032,21 @@ function cancelLoadingEdit() {
 
 function deleteLoadingRecord(id) {
   if (!confirm('Remove this loading from the schedule?')) return;
-  _loadingRecords = _loadingRecords.filter(function(r) { return r.id !== id; });
+  // Soft-delete (tombstone), not a physical removal from the array. The
+  // sync merge in applyState() for loading records is additive-only — it
+  // can only ever ADD or UPDATE an entry, it has no way to know "this id
+  // is gone on purpose" versus "this device just hasn't synced it yet".
+  // A physically-removed record looks identical to the second case to
+  // that merge, so it gets silently resurrected the next time an older
+  // local cache or a remote copy that still has it gets merged back in —
+  // which is exactly what was being reported. Marking it deleted instead
+  // means the deletion itself is a real, timestamped fact that travels
+  // through the same merge (newer updatedAt wins) instead of an absence
+  // the merge can't represent at all.
+  const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  if (!rec) return;
+  rec.deletedAt = Date.now();
+  rec.updatedAt = Date.now();
   saveLoadingRecords();
   if (_loadingEditingId === id) cancelLoadingEdit();
   renderLoadingList();
@@ -7078,7 +7093,7 @@ function _refreshLoadingConsumers() {
 function _refreshLoadingTerminalDatalist() {
   const dl = document.getElementById('ld-terminal-list');
   if (!dl) return;
-  const known = Array.from(new Set((_loadingRecords || []).map(function(r) { return r.terminal; }).filter(Boolean)));
+  const known = Array.from(new Set((_loadingRecords || []).filter(function(r) { return !r.deletedAt; }).map(function(r) { return r.terminal; }).filter(Boolean)));
   dl.innerHTML = known.map(function(t) { return '<option value="' + t.replace(/"/g,'&quot;') + '">'; }).join('');
 }
 
@@ -7089,7 +7104,7 @@ function renderLoadingList() {
   // Active loadings first (chronological), completed ones after — so the
   // list stays focused on what's still happening, while completed records
   // remain visible (not deleted) further down for reference.
-  const sorted = (_loadingRecords || []).slice().sort(function(a, b) {
+  const sorted = (_loadingRecords || []).filter(function(r) { return !r.deletedAt; }).sort(function(a, b) {
     if (!!a.completed !== !!b.completed) return a.completed ? 1 : -1;
     return new Date(a.startAt) - new Date(b.startAt);
   });
@@ -7417,7 +7432,7 @@ function _populateLoadingBargeSelect() {
 function _loadingsForBargeName(name) {
   const now = new Date();
   return (_loadingRecords || []).filter(function(r) {
-    return !r.completed && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+    return !r.deletedAt && !r.completed && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
   });
 }
 
@@ -10995,7 +11010,7 @@ function _ccRefreshData() {
         `<div style="display:flex;margin:0 -10px">${cols}</div>`;
     } else {
       const singleBargeLoadings = (typeof _loadingsForBargeName === 'function')
-        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.completed && new Date(r.endAt) >= new Date(); }))
+        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.deletedAt && !r.completed && new Date(r.endAt) >= new Date(); }))
         : [];
       schedPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">VESSEL SCHEDULE</div>' +
         scheduleTableHtml(activeItems, singleBargeLoadings);
@@ -15828,7 +15843,7 @@ function renderWeekCalendar(offsetDays) {
     // technically still overlaps today/future days.
     const dayEnd = new Date(day.getTime() + 86400000);
     const dayLoadings = (_loadingRecords || []).filter(function(r) {
-      if (r.completed) return false;
+      if (r.deletedAt || r.completed) return false;
       const s = new Date(r.startAt), e = new Date(r.endAt);
       return s < dayEnd && e >= day;
     }).sort(function(a,b) { return new Date(a.startAt) - new Date(b.startAt); });
