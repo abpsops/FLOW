@@ -2881,7 +2881,8 @@ function flowWelcomeGo(pageId) {
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
       <div class="field">
         <label>Vessel Name</label>
-        <input type="text" id="nsc-vessel-name" placeholder="e.g. MV PACIFIC GLORY" style="text-transform:uppercase">
+        <input type="text" id="nsc-vessel-name" placeholder="e.g. MV PACIFIC GLORY" style="text-transform:uppercase" oninput="clearTimeout(window._nscTrEl);window._nscTrEl=setTimeout(function(){renderVesselTrackRecordBanner('nsc-vessel-name','nsc-vessel-track-record')},400)">
+        <div id="nsc-vessel-track-record"></div>
       </div>
       <div class="field">
         <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
@@ -10112,7 +10113,7 @@ function addVessel(def = {}) {
     </div>
   </div>
   <div class="g4 mb10">
-    <div class="field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${name}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500)"></div>
+    <div class="field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${name}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400)"><div id="v${id}-track-record"></div></div>
     <div class="field"><label>IMO Number <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="v${id}-imo" value="${imo}" placeholder="e.g. 9873022" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500)"></div>
     <div class="field">
       <label>Anchorage / Berth</label>
@@ -10217,6 +10218,10 @@ function addVessel(def = {}) {
   tQ(id);
   if (lc || eta) upd(id);
   populateBargeDropdowns();
+  // Show the track record immediately for a restored/existing nomination
+  // too, not just when someone types a new name — a card can load with a
+  // vessel name already filled in from saved state.
+  if (name) renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record');
   // Fix #3: if this card is being restored from saved state and its
   // nomination already has emailSent=true in the (already-loaded) local
   // log cache, lock the button immediately so it never flashes as
@@ -14328,6 +14333,65 @@ function _dlMonthLabel(key) {
 function _dlEnsureMonth(key) {
   if (!_deliveryLog[key]) _deliveryLog[key] = { timely: [], delayed: [], disputes: [] };
   return _deliveryLog[key];
+}
+
+/* ─── Counterparty Track Record Intelligence ─────────────────────────
+   A smart layer over the Delivery Log FLOW already builds automatically
+   on every completed supply — no new data entry, no separate report to
+   go looking for. Surfaces a vessel's own history (laycan compliance,
+   past disputes) at the exact moment it's useful: while nominating it
+   again. Per request, only counts history from September 2026 onward —
+   anything before that month is ignored entirely, both for the
+   timely/delayed rate and for disputes. Needs a minimum of 2 past
+   completed supplies to say anything at all — a vessel supplied only
+   once doesn't have a "track record" yet, it has one data point. */
+const TRACK_RECORD_START_MONTH = '2026-09';
+
+function computeVesselTrackRecord(vesselName) {
+  const name = (vesselName || '').trim().toLowerCase();
+  if (!name) return null;
+  let timely = 0, delayed = 0;
+  const disputes = [];
+  Object.keys(_deliveryLog || {}).sort().forEach(function(monthKey) {
+    if (monthKey < TRACK_RECORD_START_MONTH) return;
+    const month = _deliveryLog[monthKey];
+    (month.timely || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) timely++; });
+    (month.delayed || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) delayed++; });
+    (month.disputes || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) disputes.push(e); });
+  });
+  const total = timely + delayed;
+  if (total < 2) return null; // not enough history yet to mean anything
+  return { total, timely, delayed, disputes };
+}
+
+// Renders the banner into a given container id, reading the vessel name
+// from a given input id — kept generic so the same function drives both
+// the live Nomination card (id-suffixed per card) and the Availability
+// Checker's single vessel-name field.
+function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
+  const nameEl = document.getElementById(nameInputId);
+  const bannerEl = document.getElementById(bannerElId);
+  if (!nameEl || !bannerEl) return;
+  const tr = computeVesselTrackRecord(nameEl.value);
+  if (!tr) { bannerEl.innerHTML = ''; return; }
+  const delayPct = Math.round((tr.delayed / tr.total) * 100);
+  const rows = [];
+  if (tr.delayed > 0) {
+    rows.push('Outside laycan in <strong>' + tr.delayed + ' of its last ' + tr.total + '</strong> nominations (' + delayPct + '%) since Sep 2026.');
+  } else {
+    rows.push('Within laycan on all <strong>' + tr.total + '</strong> nominations since Sep 2026.');
+  }
+  if (tr.disputes.length) {
+    rows.push('<strong>' + tr.disputes.length + '</strong> past dispute' + (tr.disputes.length > 1 ? 's' : '') + ' recorded — see Delivery Log for details.');
+  }
+  const severe = tr.delayed > 0 || tr.disputes.length > 0;
+  const bg = severe ? 'var(--amber-lt)' : 'var(--green-lt)';
+  const border = severe ? 'var(--amber-bd)' : 'var(--green-bd)';
+  const color = severe ? 'var(--amber)' : 'var(--green)';
+  bannerEl.innerHTML = '<div style="margin-top:8px;padding:8px 12px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;font-size:11.5px;color:' + color + ';line-height:1.5">' +
+    '<div style="font-weight:700;margin-bottom:2px">Track Record — ' + (nameEl.value || '').trim().replace(/</g,'&lt;') + '</div>' +
+    rows.join('<br>') +
+  '</div>';
 }
 
 // Called from saveChecklistRecord() at the exact moment a supply is saved —
