@@ -2379,6 +2379,23 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
+  <!-- Track Record Watchlist — the standing, passive version of Counterparty
+       Track Record Intelligence. The per-nomination banner only shows when
+       you're actively typing/viewing a specific vessel's name, which
+       means a vessel with a genuinely bad pattern stays invisible unless
+       you happen to go looking for it. This surfaces every vessel that's
+       actually built up enough history (2+ completed deliveries since
+       Sep 2026) right on the Dashboard, without needing anyone to type
+       anything — reuses the exact same computeVesselTrackRecord() logic,
+       just run across every vessel in the Delivery Log instead of one. -->
+  <div class="chart-card" style="margin-bottom:14px">
+    <div class="chart-title">Track Record Watchlist</div>
+    <div class="chart-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries since Sep 2026 — laycan compliance &amp; disputes</div>
+    <div id="dash-track-record-watchlist">
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>
+    </div>
+  </div>
+
   <!-- Dashboard 2-col: Charts + Activity -->
   <div class="dash-row-2col" style="margin-bottom:14px">
     <div class="chart-card" style="overflow:visible">
@@ -4721,6 +4738,7 @@ function refreshDashboard() {
   renderDashCharts(savedRecs, []);
   renderDashFuelingStatus();
   renderDashFleetStatus();
+  renderTrackRecordWatchlist();
   renderDashActivity(savedRecs, []);
 }
 
@@ -14407,6 +14425,59 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
     '<div style="font-weight:700;margin-bottom:2px">Track Record — ' + (nameEl.value || '').trim().replace(/</g,'&lt;') + '</div>' +
     rows.join('<br>') +
   '</div>';
+}
+
+// The standing Dashboard widget — every vessel that has actually built up
+// a track record (2+ deliveries since Sep 2026), not just whichever
+// vessel someone happens to be typing right now. Flagged vessels
+// (any delay or dispute history) are listed first.
+function renderTrackRecordWatchlist() {
+  const el = document.getElementById('dash-track-record-watchlist');
+  if (!el) return;
+
+  const names = new Set();
+  Object.keys(_deliveryLog || {}).forEach(function(monthKey) {
+    if (monthKey < TRACK_RECORD_START_MONTH) return;
+    const month = _deliveryLog[monthKey];
+    ['timely', 'delayed', 'disputes'].forEach(function(bucket) {
+      (month[bucket] || []).forEach(function(e) {
+        const n = (e.vessel || '').trim();
+        if (n) names.add(n);
+      });
+    });
+  });
+
+  const records = Array.from(names)
+    .map(function(n) { const tr = computeVesselTrackRecord(n); return tr ? Object.assign({ name: n }, tr) : null; })
+    .filter(Boolean)
+    .sort(function(a, b) {
+      const aFlag = a.delayed > 0 || a.disputes.length > 0;
+      const bFlag = b.delayed > 0 || b.disputes.length > 0;
+      if (aFlag !== bFlag) return aFlag ? -1 : 1;
+      return b.delayed - a.delayed;
+    });
+
+  if (!records.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>';
+    return;
+  }
+
+  el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">' + records.map(function(r) {
+    const flagged = r.delayed > 0 || r.disputes.length > 0;
+    const bg = flagged ? 'var(--amber-lt)' : 'var(--green-lt)';
+    const border = flagged ? 'var(--amber-bd)' : 'var(--green-bd)';
+    const color = flagged ? 'var(--amber)' : 'var(--green)';
+    const delayPct = Math.round((r.delayed / r.total) * 100);
+    const parts = [];
+    parts.push(r.delayed > 0
+      ? 'Outside laycan in <strong>' + r.delayed + ' of ' + r.total + '</strong> (' + delayPct + '%)'
+      : 'Within laycan on all <strong>' + r.total + '</strong>');
+    if (r.disputes.length) parts.push('<strong>' + r.disputes.length + '</strong> dispute' + (r.disputes.length > 1 ? 's' : ''));
+    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px">' +
+      '<span style="font-size:12px;font-weight:700;color:var(--ink)">' + r.name.replace(/</g,'&lt;') + '</span>' +
+      '<span style="font-size:11px;color:' + color + ';text-align:right">' + parts.join(' · ') + '</span>' +
+    '</div>';
+  }).join('') + '</div>';
 }
 
 // Called from saveChecklistRecord() at the exact moment a supply is saved —
