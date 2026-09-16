@@ -6549,6 +6549,19 @@ async function saveSharedState() {
       .filter(function(id) { return id !== undefined && id !== null; });
 
     const prevBaked = (_bakedSupplyIds && _bakedSupplyIds[b.id]) || [];
+    const prevBakedSet = new Set(prevBaked);
+    const hasNewToBake = matchedIds.some(function(id) { return !prevBakedSet.has(id); });
+
+    // Only actually re-bake (and overwrite vrob/mrob) when there's a
+    // genuinely NEW completed supply to fold in since this barge's last
+    // bake — not unconditionally on every single save regardless of
+    // whether anything changed. The math is designed to be idempotent
+    // either way, but there's no reason to keep rewriting an
+    // already-correct baseline on every save when nothing changed —
+    // this removes that repeated-overwrite risk surface entirely rather
+    // than relying on the idempotency math being perfect on every call.
+    if (!hasNewToBake) return b;
+
     _bakedSupplyIds[b.id] = Array.from(new Set(prevBaked.concat(matchedIds)));
 
     return Object.assign({}, b, { vrob: Math.round(rob.liveV), mrob: Math.round(rob.liveM), _robBakedAt: state.version });
