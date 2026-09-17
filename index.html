@@ -6536,13 +6536,15 @@ async function saveSharedState() {
     const rob = liveROBs[b.id];
     if (!rob) return b;
 
-    const isFirstBargeNow = idx === 0;
+    // Matches computeLiveROB's own matching rule exactly (see its comment)
+    // — an unassigned record only auto-attributes when there's genuinely
+    // only one barge it could mean, never to "whichever barge is first".
     const matchedIds = (_savedSupplies || [])
       .filter(function(r) {
         const aV = parseFloat(r.vlsfoAct)||0, aM = parseFloat(r.mgoAct)||0;
         if (aV === 0 && aM === 0) return false;
         const rb = (r.barge||'').trim();
-        if (rb === '') return isOnlyBargeNow || isFirstBargeNow;
+        if (rb === '') return isOnlyBargeNow;
         return rb === b.name;
       })
       .map(function(r) { return r.id; })
@@ -7906,10 +7908,18 @@ async function saveROBAudit() {
   Returns: { v: number, m: number, history: [{...}] }
 */
 function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
-  // Single barge setup: deduct ALL saved records with actuals
-  // Multi-barge: match by barge name, unassigned go to first barge
+  // Single barge setup: deduct ALL saved records with actuals.
+  // Multi-barge: match by barge name only. An unassigned (blank barge)
+  // record used to silently fall back to "the first barge in the fleet
+  // array" — that's a guess, not evidence of which barge it actually
+  // belongs to, and it meant one specific barge (whichever happened to be
+  // listed first) could have its ROB silently corrupted by records that
+  // may not even be its own. Guessing wrong is worse than not counting
+  // the record at all: an unassigned record in a multi-barge fleet is
+  // now excluded from every barge's ROB until it's actually tagged with
+  // the barge it belongs to, rather than being blamed on whichever barge
+  // happens to sit at index 0.
   const isOnlyBarge = _bargeConfig && _bargeConfig.length === 1;
-  const isFirstBarge = _bargeConfig && _bargeConfig.length > 0 && _bargeConfig[0].name === bargeName;
   const bakedIds = new Set((_bakedSupplyIds && _bakedSupplyIds[bargeId]) || []);
 
   const completed = (_savedSupplies || [])
@@ -7923,8 +7933,9 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
       var rb = (r.barge||'').trim();
       var bargeMatch = false;
       if (rb === '') {
-        // Unassigned: deduct from only barge, or first barge in multi-barge
-        bargeMatch = isOnlyBarge || isFirstBarge;
+        // Unassigned: only auto-attribute when there's literally no other
+        // barge it could possibly mean — otherwise leave it unattributed.
+        bargeMatch = isOnlyBarge;
       } else {
         bargeMatch = (rb === bargeName);
       }
