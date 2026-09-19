@@ -5026,12 +5026,21 @@ function renderDashCharts(records, vessels) {
     // it's already been archived). Full history is still available in
     // Monthly Report / Archives — this card is meant to answer "how much have
     // we put out so far this month," not an all-time running total.
+    //
+    // Filter criteria MUST match getMonthlyRows() (the Monthly Report's own
+    // source of truth) exactly, or this card and the report silently disagree
+    // on the same month's total. It previously fell back to savedAt/date when
+    // supplyDate was missing (pulling in records the report wouldn't count at
+    // all) and never checked r.supplied===true or the report's port filter —
+    // so a handful of draft/incomplete records, or records for a port outside
+    // the current filter, could inflate this figure well past what the report
+    // shows for the same month.
     const _fdNow = new Date(), _fdMon = _fdNow.getMonth(), _fdYr = _fdNow.getFullYear();
     let distV = 0, distM = 0;
     liveRecs.forEach(r => {
-      const _fdDateRaw = r.supplyDate || r.savedAt || r.date;
-      if (!_fdDateRaw) return;
-      const _fdD = new Date(_fdDateRaw);
+      if (!r.supplyDate || r.supplied !== true) return;
+      if (typeof _rowMatchesReportPort === 'function' && !_rowMatchesReportPort(r)) return;
+      const _fdD = new Date(r.supplyDate);
       if (_fdD.getMonth() !== _fdMon || _fdD.getFullYear() !== _fdYr) return;
       distV += parseFloat(r.vlsfoAct) || parseFloat(r.vlsfoActual) || 0;
       distM += parseFloat(r.mgoAct)   || parseFloat(r.mgoActual)   || 0;
@@ -14685,6 +14694,68 @@ function archiveMonth(mon,yr){
   saveSharedRecords();renderSavedRecords();renderArchivePanel();
   alert('Archived '+rows.length+' records for '+key+' '+yr);
 }
+
+// ── AUTOMATIC MONTH-END ARCHIVING ──────────────────────────────────
+// archiveMonth() above has always existed but was only ever wired to a
+// manual "Archive" button — nothing ever called it on its own, so a
+// completed month just sat in _savedSupplies indefinitely until someone
+// remembered to archive it by hand. This runs once per app load (operator
+// sessions only) and silently archives any FULLY PAST month that still
+// has completed ('supplied') records sitting unarchived, using the exact
+// same logic as the manual archiveMonth() — just without its alert()/
+// confirm() dialogs, since this has no one to click through them. The
+// current, still-in-progress month is never touched here.
+function autoArchivePastMonths() {
+  if (typeof isTrader === 'function' && isTrader()) return; // operator-only write, same as the manual button
+  if (!_savedSupplies || !_savedSupplies.length) return;
+
+  const now = new Date();
+  const curMon = now.getMonth(), curYr = now.getFullYear();
+  const pending = {}; // "yr-mon" -> {mon, yr}
+  _savedSupplies.forEach(function(r) {
+    if (!r.supplyDate || r.supplied !== true) return;
+    const d = new Date(r.supplyDate);
+    if (isNaN(d)) return;
+    const mon = d.getMonth(), yr = d.getFullYear();
+    if (yr > curYr || (yr === curYr && mon >= curMon)) return; // current/future month — leave alone
+    const key = yr + '-' + mon;
+    if (!pending[key]) pending[key] = { mon: mon, yr: yr };
+  });
+
+  const monthsToArchive = Object.values(pending).filter(function(p) {
+    return !(_archives[p.yr] && _archives[p.yr][MO[p.mon]]); // skip months already archived
+  });
+  if (!monthsToArchive.length) return;
+
+  let archivedAny = false;
+  monthsToArchive.forEach(function(p) {
+    const rows = (_savedSupplies || []).filter(function(r) {
+      if (!r.supplyDate || !r.supplied) return false;
+      const d = new Date(r.supplyDate);
+      return d.getMonth() === p.mon && d.getFullYear() === p.yr && _rowMatchesReportPort(r);
+    }).map(function(r) { return Object.assign({}, r); });
+    if (!rows.length) return;
+    if (!_archives[p.yr]) _archives[p.yr] = {};
+    const key = MO[p.mon];
+    _archives[p.yr][key] = { records: rows, archivedAt: new Date().toISOString(), month: p.mon, year: p.yr };
+    _savedSupplies = _savedSupplies.filter(function(r) {
+      if (!r.supplyDate || !r.supplied) return true;
+      const d = new Date(r.supplyDate);
+      return !(d.getMonth() === p.mon && d.getFullYear() === p.yr);
+    });
+    archivedAny = true;
+  });
+
+  if (archivedAny) {
+    saveArchives();
+    saveSharedState();
+    saveSharedRecords();
+    if (typeof renderSavedRecords === 'function') renderSavedRecords();
+    if (typeof renderArchivePanel === 'function') renderArchivePanel();
+    if (typeof refreshDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) refreshDashboard();
+  }
+}
+
 function deleteArchive(yr, mon) {
   const arch = _archives[yr] && _archives[yr][mon];
   if (!arch) return;
@@ -17049,6 +17120,11 @@ async function init() {
     // edit (no seed data to accidentally keep, edit, or forget to delete).
     setSyncStatus('ok', 'Fresh empty workspace');
   }
+
+  // Silently roll any fully-completed past month into Archives — this used
+  // to only ever happen if someone remembered to click "Archive" by hand,
+  // so a finished month's records just sat in the live list indefinitely.
+  if (typeof autoArchivePastMonths === 'function') autoArchivePastMonths();
 
   startAutoSync();
   startReminderAutoRefresh();
