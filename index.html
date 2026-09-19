@@ -948,6 +948,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .lc-box.ok{background:var(--green-lt);border-color:var(--green-bd);color:var(--green)}
 .lc-box.warn{background:var(--amber-lt);border-color:var(--amber-bd);color:var(--amber)}
 .lc-box.late{background:var(--red-lt);border-color:var(--red-bd);color:var(--red)}
+.lc-box.early{background:var(--azure-lt);border-color:var(--azure-bd);color:var(--azure)}
 
 /* ════════════════════════════════════════
    FORMULA STRIP
@@ -9878,8 +9879,14 @@ function upd(id) {
   else { prev.className='etc-prev'; }
   if (lc&&eta) {
     if (eta>=lc.from&&eta<=lc.to) { lcbx.className='lc-box ok show'; lcbx.innerHTML=`ETA is <strong>within laycan</strong> (${fmtLC(lc)}).`; }
-    else if (eta>lc.to) { const dh=((eta-lc.to)/3600000).toFixed(1); lcbx.className='lc-box warn show'; lcbx.innerHTML=`ETA is <strong>${dh} hrs after laycan closes</strong> (${fmtLC(lc)}). Vessel slotted after on-laycan supplies.`; }
-    else { lcbx.className='lc-box late show'; lcbx.innerHTML=`ETA is <strong>before laycan opens</strong> (${fmtLC(lc)}).`; }
+    // After laycan closes = genuinely late — this is the case the dashboard's
+    // "Delayed" / "Requires immediate action" alert is built around, so it
+    // gets the urgent red styling, not the milder amber it had before.
+    else if (eta>lc.to) { const dh=((eta-lc.to)/3600000).toFixed(1); lcbx.className='lc-box late show'; lcbx.innerHTML=`ETA is <strong>${dh} hrs after laycan closes — Delayed</strong> (${fmtLC(lc)}). Vessel slotted after on-laycan supplies.`; }
+    // Before laycan opens = arriving early, not a problem — this was
+    // previously using the SAME red "late" class as a genuine delay, making
+    // an early arrival look just as alarming as one that's actually overdue.
+    else { lcbx.className='lc-box early show'; lcbx.innerHTML=`ETA is <strong>before laycan opens — Before Laycan</strong> (${fmtLC(lc)}).`; }
   } else { lcbx.className='lc-box'; }
   // auto-save on change (debounced) — also refresh the dashboard so the
   // Operational Activity card picks up the new ETA/quantity right away.
