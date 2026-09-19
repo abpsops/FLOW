@@ -948,6 +948,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .lc-box.ok{background:var(--green-lt);border-color:var(--green-bd);color:var(--green)}
 .lc-box.warn{background:var(--amber-lt);border-color:var(--amber-bd);color:var(--amber)}
 .lc-box.late{background:var(--red-lt);border-color:var(--red-bd);color:var(--red)}
+.lc-box.early{background:var(--azure-lt);border-color:var(--azure-bd);color:var(--azure)}
 
 /* ════════════════════════════════════════
    FORMULA STRIP
@@ -6545,13 +6546,15 @@ async function saveSharedState() {
     const rob = liveROBs[b.id];
     if (!rob) return b;
 
-    const isFirstBargeNow = idx === 0;
+    // Matches computeLiveROB's own matching rule exactly (see its comment)
+    // — an unassigned record only auto-attributes when there's genuinely
+    // only one barge it could mean, never to "whichever barge is first".
     const matchedIds = (_savedSupplies || [])
       .filter(function(r) {
         const aV = parseFloat(r.vlsfoAct)||0, aM = parseFloat(r.mgoAct)||0;
         if (aV === 0 && aM === 0) return false;
         const rb = (r.barge||'').trim();
-        if (rb === '') return isOnlyBargeNow || isFirstBargeNow;
+        if (rb === '') return isOnlyBargeNow;
         return rb === b.name;
       })
       .map(function(r) { return r.id; })
@@ -7915,10 +7918,18 @@ async function saveROBAudit() {
   Returns: { v: number, m: number, history: [{...}] }
 */
 function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
-  // Single barge setup: deduct ALL saved records with actuals
-  // Multi-barge: match by barge name, unassigned go to first barge
+  // Single barge setup: deduct ALL saved records with actuals.
+  // Multi-barge: match by barge name only. An unassigned (blank barge)
+  // record used to silently fall back to "the first barge in the fleet
+  // array" — that's a guess, not evidence of which barge it actually
+  // belongs to, and it meant one specific barge (whichever happened to be
+  // listed first) could have its ROB silently corrupted by records that
+  // may not even be its own. Guessing wrong is worse than not counting
+  // the record at all: an unassigned record in a multi-barge fleet is
+  // now excluded from every barge's ROB until it's actually tagged with
+  // the barge it belongs to, rather than being blamed on whichever barge
+  // happens to sit at index 0.
   const isOnlyBarge = _bargeConfig && _bargeConfig.length === 1;
-  const isFirstBarge = _bargeConfig && _bargeConfig.length > 0 && _bargeConfig[0].name === bargeName;
   const bakedIds = new Set((_bakedSupplyIds && _bakedSupplyIds[bargeId]) || []);
 
   const completed = (_savedSupplies || [])
@@ -7932,8 +7943,9 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
       var rb = (r.barge||'').trim();
       var bargeMatch = false;
       if (rb === '') {
-        // Unassigned: deduct from only barge, or first barge in multi-barge
-        bargeMatch = isOnlyBarge || isFirstBarge;
+        // Unassigned: only auto-attribute when there's literally no other
+        // barge it could possibly mean — otherwise leave it unattributed.
+        bargeMatch = isOnlyBarge;
       } else {
         bargeMatch = (rb === bargeName);
       }
@@ -9876,8 +9888,14 @@ function upd(id) {
   else { prev.className='etc-prev'; }
   if (lc&&eta) {
     if (eta>=lc.from&&eta<=lc.to) { lcbx.className='lc-box ok show'; lcbx.innerHTML=`ETA is <strong>within laycan</strong> (${fmtLC(lc)}).`; }
-    else if (eta>lc.to) { const dh=((eta-lc.to)/3600000).toFixed(1); lcbx.className='lc-box warn show'; lcbx.innerHTML=`ETA is <strong>${dh} hrs after laycan closes</strong> (${fmtLC(lc)}). Vessel slotted after on-laycan supplies.`; }
-    else { lcbx.className='lc-box late show'; lcbx.innerHTML=`ETA is <strong>before laycan opens</strong> (${fmtLC(lc)}).`; }
+    // After laycan closes = genuinely late — this is the case the dashboard's
+    // "Delayed" / "Requires immediate action" alert is built around, so it
+    // gets the urgent red styling, not the milder amber it had before.
+    else if (eta>lc.to) { const dh=((eta-lc.to)/3600000).toFixed(1); lcbx.className='lc-box late show'; lcbx.innerHTML=`ETA is <strong>${dh} hrs after laycan closes — Delayed</strong> (${fmtLC(lc)}). Vessel slotted after on-laycan supplies.`; }
+    // Before laycan opens = arriving early, not a problem — this was
+    // previously using the SAME red "late" class as a genuine delay, making
+    // an early arrival look just as alarming as one that's actually overdue.
+    else { lcbx.className='lc-box early show'; lcbx.innerHTML=`ETA is <strong>before laycan opens — Before Laycan</strong> (${fmtLC(lc)}).`; }
   } else { lcbx.className='lc-box'; }
   // auto-save on change (debounced) — also refresh the dashboard so the
   // Operational Activity card picks up the new ETA/quantity right away.
