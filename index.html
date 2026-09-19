@@ -1002,6 +1002,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .tb-wm{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
 .tb-dl{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
 .tb-on{background:var(--azure-lt);color:var(--azure);border-color:var(--azure-bd)}
+.tb-early{background:var(--teal-lt);color:var(--teal);border-color:var(--teal-bd)}
 .tlm{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:10px}
 .tmi{background:var(--surface2);border-radius:4px;padding:6px 8px;border:1px solid var(--border)}
 .tmi label{font-size:8px;color:var(--muted);display:block;margin-bottom:2px;font-weight:700;letter-spacing:.08em;text-transform:uppercase}
@@ -1043,6 +1044,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .stag{font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:4px;white-space:nowrap;display:inline-block;border:1px solid;letter-spacing:.03em;text-transform:uppercase}
 .st-ok{background:var(--green-lt);color:var(--green);border-color:var(--green-bd)}
 .st-dl{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
+.st-early{background:var(--azure-lt);color:var(--azure);border-color:var(--azure-bd)}
 .lc-rng{font-size:10.5px;font-weight:600;font-family:'DM Mono',monospace}
 .lc-rng.in{color:var(--green)}.lc-rng.out{color:var(--amber)}
 
@@ -4990,55 +4992,28 @@ function renderDashActivity(records, vessels) {
 }
 
 function renderDashCharts(records, vessels) {
-  // Use live _savedSupplies first, fall back to localStorage, then nominations
-  const baseLive = (_savedSupplies && _savedSupplies.length)
-    ? _savedSupplies
-    : JSON.parse(localStorage.getItem(LS_RECORDS_KEY) || '[]');
-  // Merge archived records so Operations Dashboard reflects full history
-  const dashArchiveRecs = [];
-  if (typeof _archives !== 'undefined') {
-    Object.values(_archives).forEach(yearObj => {
-      Object.values(yearObj).forEach(arch => {
-        if (arch && arch.records) {
-          arch.records.forEach(r => {
-            dashArchiveRecs.push(Object.assign({}, r, {
-              vessel: r.vessel || r.name || 'Unknown',
-              vlsfoAct: r.vlsfoAct || r.vlsfoActual || r.vQ || 0,
-              mgoAct:   r.mgoAct   || r.mgoActual   || r.mQ || 0,
-              savedAt:  r.savedAt  || r.supplyDate   || r.date || (arch.month != null && arch.year != null ? new Date(arch.year, arch.month, 1).toISOString() : arch.archivedAt) || '',
-              _fromArchive: true
-            }));
-          });
-        }
-      });
-    });
-  }
-  const liveIds2 = new Set(baseLive.map(r => r.id).filter(Boolean));
-  const liveRecs = [...baseLive, ...dashArchiveRecs.filter(r => !r.id || !liveIds2.has(r.id))];
-
-
   // ── WEEKLY PLANNED SUPPLY CALENDAR ──
   renderWeekCalendar(0);
 
   // ── FUEL MIX DISTRIBUTION — real live data, split into DISTRIBUTED vs PLANNED ──
   {
-    // DISTRIBUTED = actual quantities already delivered THIS CALENDAR MONTH ONLY
-    // (from saved/completed supply records, including that month's archive if
-    // it's already been archived). Full history is still available in
-    // Monthly Report / Archives — this card is meant to answer "how much have
-    // we put out so far this month," not an all-time running total.
+    // DISTRIBUTED = actual quantities already delivered THIS CALENDAR MONTH ONLY.
+    // Full history is still available in Monthly Report / Archives — this card
+    // is meant to answer "how much have we put out so far this month," not an
+    // all-time running total.
     //
-    // Filter criteria MUST match getMonthlyRows() (the Monthly Report's own
-    // source of truth) exactly, or this card and the report silently disagree
-    // on the same month's total. It previously fell back to savedAt/date when
-    // supplyDate was missing (pulling in records the report wouldn't count at
-    // all) and never checked r.supplied===true or the report's port filter —
-    // so a handful of draft/incomplete records, or records for a port outside
-    // the current filter, could inflate this figure well past what the report
-    // shows for the same month.
+    // Pulled straight from _getAllReportRecords() — the exact same function
+    // getMonthlyRows() (the Monthly Report's own source of truth) uses — rather
+    // than maintaining a second, separate live+archive merge here. That second
+    // copy had already drifted out of sync with the report twice: once on
+    // filter criteria (fixed, then found the report's dedup pass wasn't
+    // mirrored either), which is exactly the kind of repeat drift that calling
+    // the same function outright prevents going forward. _getAllReportRecords()
+    // already includes the near-duplicate safety net (same vessel/day/quantity
+    // records that slipped past id-matching) that this card never had.
     const _fdNow = new Date(), _fdMon = _fdNow.getMonth(), _fdYr = _fdNow.getFullYear();
     let distV = 0, distM = 0;
-    liveRecs.forEach(r => {
+    (typeof _getAllReportRecords === 'function' ? _getAllReportRecords() : []).forEach(r => {
       if (!r.supplyDate || r.supplied !== true) return;
       if (typeof _rowMatchesReportPort === 'function' && !_rowMatchesReportPort(r)) return;
       const _fdD = new Date(r.supplyDate);
@@ -10344,6 +10319,12 @@ function getVessels() {
     if (!eta && !lc) { alert(`"${name}": please enter at least an Actual ETA or Nominated Laycan.`); throw new Error(); }
     const effectiveETA = eta || (lc ? new Date((lc.from.getTime()+lc.to.getTime())/2) : null);
     const isDelayed = !!(lc && eta && eta > lc.to);
+    // Mirrors isDelayed above, just the opposite side of the laycan window —
+    // arriving BEFORE it opens instead of after it closes. Previously nothing
+    // computed this at all, so an early vessel had no distinct status anywhere
+    // downstream (Needs Attention, badges, etc.) even though the inline note
+    // under the ETA field already described it as "Before Laycan."
+    const isEarly = !!(lc && eta && eta < lc.from);
     // ETA at exactly 00:00 = no firm ETA — scheduled last, after all firm-ETA vessels
     const noFirmETA = !!(eta && eta.getHours() === 0 && eta.getMinutes() === 0);
     const paq     = document.getElementById(`v${id}-paq`)?.value    || 'no';
@@ -10351,7 +10332,7 @@ function getVessels() {
     const nomUid  = c.dataset.nomUid || '';
     const imo     = document.getElementById(`v${id}-imo`)?.value     || '';
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
-    out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, noFirmETA, paq, bargeId,
+    out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
               refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks});
   });
   return out;
@@ -10489,7 +10470,7 @@ function calculate() {
       cursor = etc;
     }
 
-    sched.push({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot});
+    sched.push({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot});
     bs.rv=rva; bs.rm=rma;
     totV+=sv; totM+=sm;
   }
@@ -10701,7 +10682,7 @@ function buildVoyRows(items) {
     const displayNo = idx + 1; // Re-number from 1 after filtering
     const st = (item.noFirmETA
       ? '<span class="stag" style="background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple-bd)">No Firm ETA</span>'
-      : item.isDelayed?'<span class="stag st-dl">Delayed</span>':'<span class="stag st-ok">On Laycan</span>') + completedBadge;
+      : item.isDelayed?'<span class="stag st-dl">Delayed</span>':item.isEarly?'<span class="stag st-early">Before Laycan</span>':'<span class="stag st-ok">On Laycan</span>') + completedBadge;
     const seqStyle = seq.type === 'arrival'
       ? 'background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd)'
       : 'background:var(--azure-lt);color:var(--azure);border:1px solid var(--azure-bd)';
@@ -10791,12 +10772,12 @@ function buildTL(items, containerId, loadingsForBarge) {
     const mC = mP<15?'var(--red)':mP<30?'var(--amber)':'var(--fuel-m)';
     const tlNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, tlNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
     const qty = [tlNomV>0?`VLSFO ${tlNomV.toLocaleString()} MT`:'', tlNomM>0?`MGO ${tlNomM.toLocaleString()} MT`:''].filter(Boolean).join(' | ')||'—';
-    const dc  = (item.vLow||item.mLow)?'var(--red)':item.noFirmETA?'var(--purple)':item.isDelayed?'var(--amber)':'var(--azure)';
+    const dc  = (item.vLow||item.mLow)?'var(--red)':item.noFirmETA?'var(--purple)':item.isDelayed?'var(--amber)':item.isEarly?'var(--teal)':'var(--azure)';
     const cc  = (item.vLow&&item.mLow)?'wvm':item.vLow?'wv':item.mLow?'wm':item.isDelayed?'del':'';
     const supB= item.isPartial?`<span class="tb tb-pt">Part Supply</span>`:`<span class="tb tb-ok">Full Supply</span>`;
     const dlB = item.noFirmETA
       ? `<span class="tb" style="background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple-bd)">No Firm ETA</span>`
-      : item.isDelayed?`<span class="tb tb-dl">Delayed</span>`:`<span class="tb tb-on">On Laycan</span>`;
+      : item.isDelayed?`<span class="tb tb-dl">Delayed</span>`:item.isEarly?`<span class="tb tb-early">Before Laycan</span>`:`<span class="tb tb-on">On Laycan</span>`;
     const vB  = item.vLow?`<span class="tb tb-wv">VLSFO Alert</span>`:'';
     const mB  = item.mLow?`<span class="tb tb-wm">MGO Alert</span>`:'';
     const paqB= item.paq==='yes'?`<span class="tb tb-ok">PAQ ✓</span>`:`<span class="tb tb-dl">PAQ Pending</span>`;
@@ -10807,7 +10788,7 @@ function buildTL(items, containerId, loadingsForBarge) {
     const pT  = item.isPartial?`<div class="pt-tag">Partial supply — insufficient ROB</div>`:'';
     const dlN = item.noFirmETA
       ? `<div class="dl-note" style="background:var(--purple-lt);border-color:var(--purple-bd);color:var(--purple)">ETA is 00:00 — no firm arrival time confirmed. This vessel is scheduled last, after all firm-ETA vessels. Update ETA when confirmed.</div>`
-      : item.isDelayed?`<div class="dl-note">Actual ETA (${fmt24(item.eta)}) is outside nominated laycan (${fmtLC(item.lc)}). Vessel slotted by ETA order.</div>`:'';
+      : item.isDelayed?`<div class="dl-note">Actual ETA (${fmt24(item.eta)}) is outside nominated laycan (${fmtLC(item.lc)}). Vessel slotted by ETA order.</div>`:item.isEarly?`<div class="dl-note" style="background:var(--teal-lt);border-color:var(--teal-bd);color:var(--teal)">Actual ETA (${fmt24(item.eta)}) is before nominated laycan opens (${fmtLC(item.lc)}).</div>`:'';
 
     const waitN = item.waitedForBarge?`<div class="travel-notice">Vessel arrived at ${fmt24(item.eta)} but barge was still on previous job. Supply started at ${fmt24(item.bargeStart)} (after previous ETC + 1 hr travel buffer).</div>`:'';
     const travN = (!item.waitedForBarge&&item.sno>1)?`<div class="travel-notice" style="color:var(--green);background:var(--green-lt);border-color:var(--green-bd)">Barge free before vessel ETA. Supply starts on vessel arrival.</div>`:'';
@@ -14017,6 +13998,7 @@ function injectChecklistFromSchedule(sched) {
       _checklistRecords[uid].bargeLabel = item.bargeLabel || '';
       _checklistRecords[uid].supplyDate = item.bargeStart || item.eta;
       _checklistRecords[uid].isDelayed  = !!item.isDelayed;
+      _checklistRecords[uid].isEarly    = !!item.isEarly;
     }
     // If supplied/locked: DO NOT touch any field
   });
@@ -16130,7 +16112,7 @@ function renderWeekCalendar(offsetDays) {
             " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule(${JSON.stringify(String(item.sno))})"`:''} title="${item.name}&#10;ETA: ${etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+loc:''}${barge?'&#10;'+barge:''}${hasSno?'&#10;Click to open in Schedule':''}">
               <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                 <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
-                ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:''}
+                ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:item.isEarly?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--teal);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">BEFORE LAYCAN</span>`:''}
                 <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
               </div>
               <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${item.name}</div>
