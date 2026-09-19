@@ -657,6 +657,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .alert-strip.critical{background:var(--red)}
 .alert-strip.warning{background:var(--amber)}
 .alert-strip.info{background:var(--azure)}
+.alert-strip.early{background:var(--teal)}
 
 /* ════════════════════════════════════════
    DATA TABLE
@@ -4672,9 +4673,15 @@ function refreshDashboard() {
   // Delayed — from last schedule run (upcoming planned supplies flagged delayed)
   let delayed = 0;
   const delayedItems = [];
+  // Early — arriving BEFORE laycan opens. Distinct from delayed (which needs
+  // immediate action); this is informational, so it gets its own calm banner
+  // rather than being folded into the urgent-red delayed one.
+  let early = 0;
+  const earlyItems = [];
   if (_lastSched && _lastSched.length) {
     _lastSched.forEach(item => {
       if (item.isDelayed) { delayed++; delayedItems.push(item); }
+      else if (item.isEarly) { early++; earlyItems.push(item); }
     });
   }
   safeSet('kpi-deliveries', deliveries);
@@ -4724,6 +4731,15 @@ function refreshDashboard() {
       html += `<div class="alert-strip critical" style="cursor:pointer" onclick="_globalSearchGoSchedule(${JSON.stringify(String(first.sno))})" title="Click to open ${first.name} in Schedule">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         <span><strong>${delayed} operation${delayed>1?'s':''}</strong> delayed — ${names} — outside laycan window. Requires immediate action.</span>
+        ${CHEVRON}
+      </div>`;
+    }
+    if (early > 0) {
+      const first = earlyItems[0];
+      const names = earlyItems.slice(0, 3).map(v => v.name).join(', ') + (earlyItems.length > 3 ? ' +' + (earlyItems.length - 3) + ' more' : '');
+      html += `<div class="alert-strip early" style="cursor:pointer" onclick="_globalSearchGoSchedule(${JSON.stringify(String(first.sno))})" title="Click to open ${first.name} in Schedule">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        <span><strong>${early} vessel${early>1?'s':''}</strong> arriving before laycan opens — ${names}.</span>
         ${CHEVRON}
       </div>`;
     }
