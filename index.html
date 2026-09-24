@@ -14180,6 +14180,12 @@ function renderChecklist(sched) {
             onchange="clUpdateNotes('${rec.uid}',this.value)"
             placeholder="Remarks…"
             style="font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;width:110px;font-family:DM Sans,sans-serif;${lockStyle}">
+          <div style="display:flex;gap:4px;margin-top:4px">
+            <button type="button" id="cl-flag-unready-${rec.uid}" onclick="clToggleFlag('${rec.uid}','unready')" title="Vessel arrived on time but was not ready to commence bunkering"
+              style="font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;border:1px solid ${rec.flagUnready?'var(--red-bd)':'var(--border2)'};background:${rec.flagUnready?'var(--red-lt)':'transparent'};color:${rec.flagUnready?'var(--red)':'var(--muted)'}">⚠ Unready</button>
+            <button type="button" id="cl-flag-dispute-${rec.uid}" onclick="clToggleFlag('${rec.uid}','dispute')" title="Vessel's quantity dispute claim changed/was inconsistent"
+              style="font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;border:1px solid ${rec.flagInconsistentDispute?'var(--red-bd)':'var(--border2)'};background:${rec.flagInconsistentDispute?'var(--red-lt)':'transparent'};color:${rec.flagInconsistentDispute?'var(--red)':'var(--muted)'}">⚠ Inconsistent</button>
+          </div>
         </td>
 
         <td style="padding:9px 12px;white-space:nowrap">
@@ -14234,6 +14240,61 @@ function clUpdateNotes(uid, val) {
   const rec = _checklistRecords[uid];
   if (!rec || rec.lockedAt) return;
   rec.notes = val;
+}
+
+// Counterparty red flags — deliberately NOT gated by rec.lockedAt like the
+// rest of this row. A vessel's dispute claim quietly changing, or turning
+// out they were never actually ready to bunker, is almost always something
+// discovered DAYS after the delivery was already saved and locked — by
+// then the row's own "Save" button is gone (replaced by a Completed
+// badge), so this has to persist itself immediately rather than waiting
+// for that button the way Notes/quantities do.
+function clToggleFlag(uid, kind) {
+  const rec = _checklistRecords[uid];
+  if (!rec) return;
+  if (kind === 'unready') rec.flagUnready = !rec.flagUnready;
+  else if (kind === 'dispute') rec.flagInconsistentDispute = !rec.flagInconsistentDispute;
+
+  const btn = document.getElementById('cl-flag-' + kind + '-' + uid);
+  if (btn) {
+    const active = kind === 'unready' ? rec.flagUnready : rec.flagInconsistentDispute;
+    btn.style.border = '1px solid ' + (active ? 'var(--red-bd)' : 'var(--border2)');
+    btn.style.background = active ? 'var(--red-lt)' : 'transparent';
+    btn.style.color = active ? 'var(--red)' : 'var(--muted)';
+  }
+
+  // If this record already has a Delivery Log entry (i.e. it was already
+  // saved before this flag got toggled — whether or not it's since been
+  // locked), update that entry in place so the Track Record Watchlist
+  // picks it up without needing the delivery to be re-saved. This matters
+  // even for an unlocked-but-already-saved record: the existing save path
+  // only ever creates a bucket entry once and never refreshes it on a
+  // second save, so waiting for "Save" to pick this up wouldn't work
+  // either. For a record that's never been saved at all, this safely does
+  // nothing — saveChecklistRecord() will pick up the flag naturally on
+  // its first save.
+  if (typeof _updateDeliveryLogFlags === 'function') _updateDeliveryLogFlags(rec);
+  saveSharedState();
+}
+
+// Finds this record's existing Delivery Log entry (by checklistUid, across
+// both the timely and delayed buckets) and updates its flags in place —
+// see clToggleFlag() above for why this can't just wait for a normal save.
+function _updateDeliveryLogFlags(rec) {
+  let touched = false;
+  Object.keys(_deliveryLog || {}).forEach(function(key) {
+    const month = _deliveryLog[key];
+    ['timely', 'delayed'].forEach(function(bucket) {
+      (month[bucket] || []).forEach(function(e) {
+        if (e.checklistUid === rec.uid) {
+          e.flagUnready = !!rec.flagUnready;
+          e.flagInconsistentDispute = !!rec.flagInconsistentDispute;
+          touched = true;
+        }
+      });
+    });
+  });
+  if (touched) _saveDeliveryLog();
 }
 
 // BDN No. — stored separately per grade (bdnV for VLSFO, bdnM for LSMGO) since
@@ -14421,18 +14482,28 @@ const TRACK_RECORD_START_MONTH = '2026-09';
 function computeVesselTrackRecord(vesselName) {
   const name = (vesselName || '').trim().toLowerCase();
   if (!name) return null;
-  let timely = 0, delayed = 0;
+  let timely = 0, delayed = 0, unready = 0, inconsistentDispute = 0;
   const disputes = [];
   Object.keys(_deliveryLog || {}).sort().forEach(function(monthKey) {
     if (monthKey < TRACK_RECORD_START_MONTH) return;
     const month = _deliveryLog[monthKey];
-    (month.timely || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) timely++; });
-    (month.delayed || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) delayed++; });
+    (month.timely || []).forEach(function(e) {
+      if ((e.vessel || '').trim().toLowerCase() !== name) return;
+      timely++;
+      if (e.flagUnready) unready++;
+      if (e.flagInconsistentDispute) inconsistentDispute++;
+    });
+    (month.delayed || []).forEach(function(e) {
+      if ((e.vessel || '').trim().toLowerCase() !== name) return;
+      delayed++;
+      if (e.flagUnready) unready++;
+      if (e.flagInconsistentDispute) inconsistentDispute++;
+    });
     (month.disputes || []).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) disputes.push(e); });
   });
   const total = timely + delayed;
   if (total < 2) return null; // not enough history yet to mean anything
-  return { total, timely, delayed, disputes };
+  return { total, timely, delayed, disputes, unready, inconsistentDispute };
 }
 
 // Renders the banner into a given container id, reading the vessel name
@@ -14455,13 +14526,27 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
   if (tr.disputes.length) {
     rows.push('<strong>' + tr.disputes.length + '</strong> past dispute' + (tr.disputes.length > 1 ? 's' : '') + ' recorded — see Delivery Log for details.');
   }
+  // Counterparty red flags — genuinely different severity from a plain
+  // delay or dispute (those can just be timing/paperwork; these are about
+  // the counterparty's own conduct), so they get their own bold red lines
+  // and push the whole banner into its strongest tier rather than blending
+  // into the same amber used for an ordinary delay.
+  const redRows = [];
+  if (tr.unready > 0) {
+    redRows.push('⚠ Unready on arrival <strong>' + tr.unready + '</strong> time' + (tr.unready > 1 ? 's' : '') + ' — agreed to bunker on arrival, then wasn\'t ready.');
+  }
+  if (tr.inconsistentDispute > 0) {
+    redRows.push('⚠ Inconsistent dispute claims in <strong>' + tr.inconsistentDispute + '</strong> ' + (tr.inconsistentDispute > 1 ? 'deliveries' : 'delivery') + ' — quantity shortfall claim changed after the fact.');
+  }
+  const critical = redRows.length > 0;
   const severe = tr.delayed > 0 || tr.disputes.length > 0;
-  const bg = severe ? 'var(--amber-lt)' : 'var(--green-lt)';
-  const border = severe ? 'var(--amber-bd)' : 'var(--green-bd)';
-  const color = severe ? 'var(--amber)' : 'var(--green)';
+  const bg = critical ? 'var(--red-lt)' : severe ? 'var(--amber-lt)' : 'var(--green-lt)';
+  const border = critical ? 'var(--red-bd)' : severe ? 'var(--amber-bd)' : 'var(--green-bd)';
+  const color = critical ? 'var(--red)' : severe ? 'var(--amber)' : 'var(--green)';
+  const allRows = critical ? redRows.concat(rows) : rows;
   bannerEl.innerHTML = '<div style="margin-top:8px;padding:8px 12px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;font-size:11.5px;color:' + color + ';line-height:1.5">' +
     '<div style="font-weight:700;margin-bottom:2px">Track Record — ' + (nameEl.value || '').trim().replace(/</g,'&lt;') + '</div>' +
-    rows.join('<br>') +
+    allRows.join('<br>') +
   '</div>';
 }
 
@@ -14489,6 +14574,9 @@ function renderTrackRecordWatchlist() {
     .map(function(n) { const tr = computeVesselTrackRecord(n); return tr ? Object.assign({ name: n }, tr) : null; })
     .filter(Boolean)
     .sort(function(a, b) {
+      const aCrit = a.unready > 0 || a.inconsistentDispute > 0;
+      const bCrit = b.unready > 0 || b.inconsistentDispute > 0;
+      if (aCrit !== bCrit) return aCrit ? -1 : 1; // conduct red-flags always float to the top
       const aFlag = a.delayed > 0 || a.disputes.length > 0;
       const bFlag = b.delayed > 0 || b.disputes.length > 0;
       if (aFlag !== bFlag) return aFlag ? -1 : 1;
@@ -14501,12 +14589,19 @@ function renderTrackRecordWatchlist() {
   }
 
   el.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px">' + records.map(function(r) {
+    // Conduct red flags (unready-on-arrival, inconsistent dispute claims)
+    // are a different kind of problem than a plain delay or paperwork
+    // dispute — they get their own bold red badge instead of blending
+    // into the same amber tier as everything else.
+    const critical = r.unready > 0 || r.inconsistentDispute > 0;
     const flagged = r.delayed > 0 || r.disputes.length > 0;
-    const bg = flagged ? 'var(--amber-lt)' : 'var(--green-lt)';
-    const border = flagged ? 'var(--amber-bd)' : 'var(--green-bd)';
-    const color = flagged ? 'var(--amber)' : 'var(--green)';
+    const bg = critical ? 'var(--red-lt)' : flagged ? 'var(--amber-lt)' : 'var(--green-lt)';
+    const border = critical ? 'var(--red-bd)' : flagged ? 'var(--amber-bd)' : 'var(--green-bd)';
+    const color = critical ? 'var(--red)' : flagged ? 'var(--amber)' : 'var(--green)';
     const delayPct = Math.round((r.delayed / r.total) * 100);
     const parts = [];
+    if (r.unready > 0) parts.push('<strong>⚠ Unready ×' + r.unready + '</strong>');
+    if (r.inconsistentDispute > 0) parts.push('<strong>⚠ Inconsistent dispute ×' + r.inconsistentDispute + '</strong>');
     parts.push(r.delayed > 0
       ? 'Outside laycan in <strong>' + r.delayed + ' of ' + r.total + '</strong> (' + delayPct + '%)'
       : 'Within laycan on all <strong>' + r.total + '</strong>');
@@ -14532,6 +14627,8 @@ function _logDelivery(rec, supplyRec) {
     barge: rec.bargeLabel || '',
     vlsfoAct: supplyRec.vlsfoAct,
     mgoAct: supplyRec.mgoAct,
+    flagUnready: !!rec.flagUnready,
+    flagInconsistentDispute: !!rec.flagInconsistentDispute,
     loggedAt: new Date().toISOString(),
   };
 
