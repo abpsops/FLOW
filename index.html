@@ -5212,39 +5212,24 @@ function _resolveRecordBargeName(r) {
 }
 
 function renderReportCharts(records) {
-  // Merge live saved supplies + all archived records, then scope down to THIS
-  // CALENDAR MONTH ONLY. Full history is still available via Monthly Report /
-  // Archives — these cards answer "how did this month go," not an all-time
-  // running total, so last month's archived deliveries should never bleed in
-  // here just because they're still in the combined pool below.
-  const liveSaved = (_savedSupplies && _savedSupplies.length) ? _savedSupplies : records;
-  const archiveRecs = [];
-  if (typeof _archives !== 'undefined') {
-    Object.values(_archives).forEach(yearObj => {
-      Object.values(yearObj).forEach(arch => {
-        if (arch && arch.records) {
-          arch.records.forEach(r => {
-            // Normalise archived record fields to match live record shape
-            archiveRecs.push(Object.assign({}, r, {
-              vessel: r.vessel || r.name || 'Unknown',
-              vlsfoAct: r.vlsfoAct || r.vlsfoActual || r.vQ || 0,
-              mgoAct:   r.mgoAct   || r.mgoActual   || r.mQ || 0,
-              savedAt:  r.savedAt  || r.supplyDate   || r.date || (arch.month != null && arch.year != null ? new Date(arch.year, arch.month, 1).toISOString() : arch.archivedAt) || '',
-              _fromArchive: true
-            }));
-          });
-        }
-      });
-    });
-  }
-  // Deduplicate: skip archived records that are already in live saved (match by id)
-  const liveIds = new Set(liveSaved.map(r => r.id).filter(Boolean));
-  const freshArchive = archiveRecs.filter(r => !r.id || !liveIds.has(r.id));
+  // This calendar month only — "how did this month go", not an all-time
+  // running total. Full history stays available via Monthly Report / Archives.
+  //
+  // Records come from _getAllReportRecords() with the exact same rules the
+  // Monthly Report and the Dashboard's Fuel Type Distribution donut use:
+  // month decided by supplyDate (the day the fuel was actually delivered),
+  // supplied === true, the report's port filter, and the near-duplicate
+  // safety net. These charts used to carry their own separate live+archive
+  // merge instead, which had drifted from the report on every one of those
+  // points — it decided the month by savedAt (the day the record was
+  // saved, not delivered), counted records that weren't marked supplied,
+  // ignored the port filter, and only de-duplicated by id. That's why the
+  // same month showed a different VLSFO total here than in the report.
   const _rcNow = new Date(), _rcMon = _rcNow.getMonth(), _rcYr = _rcNow.getFullYear();
-  const recs = [...liveSaved, ...freshArchive].filter(r => {
-    const _rcRaw = r.savedAt || r.supplyDate || r.date;
-    if (!_rcRaw) return false;
-    const _rcD = new Date(_rcRaw);
+  const recs = (typeof _getAllReportRecords === 'function' ? _getAllReportRecords() : []).filter(r => {
+    if (!r.supplyDate || r.supplied !== true) return false;
+    if (typeof _rowMatchesReportPort === 'function' && !_rowMatchesReportPort(r)) return false;
+    const _rcD = new Date(r.supplyDate);
     return !isNaN(_rcD.getTime()) && _rcD.getMonth() === _rcMon && _rcD.getFullYear() === _rcYr;
   });
   // Monthly trend
@@ -5253,7 +5238,7 @@ function renderReportCharts(records) {
     if (_chartInstances['monthly-trend']) _chartInstances['monthly-trend'].destroy();
     const buckets = {};
     recs.forEach(r => {
-      const d = new Date(r.savedAt||r.supplyDate||r.date||0);
+      const d = new Date(r.supplyDate||r.savedAt||r.date||0);
       if(isNaN(d.getTime())) return;
       const key = d.toLocaleString('default',{month:'short',year:'2-digit'});
       if(!buckets[key]) buckets[key]={v:0,m:0};
