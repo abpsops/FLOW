@@ -1,14 +1,26 @@
 /* FLOW — service worker
-   Only caches the local app shell (HTML/CSS/JS/icons/manifest) so the app
-   can still open offline. Everything else — Supabase sync calls, Google
-   Fonts, the CDN libraries (XLSX, flatpickr, mammoth, Chart.js) — is left
-   to pass straight through to the network, untouched, since caching those
-   could serve stale libraries or break live cloud sync.
+   Two caches, so the installed app can open offline:
 
-   Bump CACHE_VERSION whenever index.html / style.css / app.js change so
-   returning users pick up the new build instead of a stale cached copy. */
+   1. App shell (HTML/manifest/icons) — NETWORK-FIRST, cache only as the
+      offline fallback (see the long note in the fetch handler for why).
+   2. CDN libraries (supabase-js, XLSX, flatpickr, mammoth, Chart.js, and
+      the lazily loaded jsPDF/html2canvas/ExcelJS/JSZip/EmailJS…) — CACHE-
+      FIRST, but ONLY for URLs pinned to an exact version (e.g.
+      `@supabase/supabase-js@2.117.3/…` or `/ajax/libs/xlsx/0.18.5/…`).
+      Those files are immutable, so a cached copy can never be stale. A
+      floating URL (`@2`, `@latest`) is never cached — it goes to the network.
 
-const CACHE_VERSION = 'flow-shell-v2';
+   Never cached: Supabase API / realtime / storage calls (live data, and
+   signed URLs), Google Fonts, and anything else cross-origin — those pass
+   straight through to the network untouched. Offline, the app falls back to
+   system fonts.
+
+   Bump CACHE_VERSION whenever index.html changes so returning users pick up
+   the new build instead of a stale cached copy. LIB_CACHE only needs a bump
+   if the caching rules for libraries change (its URLs are versioned). */
+
+const CACHE_VERSION = 'flow-shell-v3';
+const LIB_CACHE = 'flow-libs-v1';
 
 const APP_SHELL = [
   './',
@@ -17,6 +29,14 @@ const APP_SHELL = [
   './icon-192.png',
   './icon-512.png'
 ];
+
+const LIB_HOSTS = ['cdn.jsdelivr.net', 'cdnjs.cloudflare.com'];
+// `name@1.2.3/` (npm via jsdelivr) or `/1.2.3/` (cdnjs path segment).
+const EXACT_VERSION_RE = /(@\d+\.\d+\.\d+(?:[-+][\w.]+)?\/)|(\/\d+\.\d+\.\d+(?:[-+][\w.]+)?\/)/;
+
+function isPinnedLibrary(url) {
+  return LIB_HOSTS.includes(url.hostname) && EXACT_VERSION_RE.test(url.pathname);
+}
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -30,7 +50,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((keys) =>
       Promise.all(
         keys
-          .filter((key) => key !== CACHE_VERSION)
+          .filter((key) => key !== CACHE_VERSION && key !== LIB_CACHE)
           .map((key) => caches.delete(key))
       )
     )
@@ -38,12 +58,42 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
+// CACHE-FIRST for exact-version CDN libraries.
+// Scripts tagged crossorigin="anonymous" (supabase-js with SRI, the cdnjs
+// tags) are CORS requests: their responses are type 'cors' with a real
+// status, so only res.ok is cached. A dynamically injected <script> without
+// crossOrigin is a no-cors request whose response is 'opaque' (status
+// hidden); that is the only way to cache it, and a pinned URL is immutable,
+// so it is accepted for no-cors requests only. An opaque copy is never
+// served to a CORS request — the browser would reject it (and SRI needs CORS).
+function libraryResponse(req) {
+  return caches.open(LIB_CACHE).then((cache) =>
+    cache.match(req).then((cached) => {
+      if (cached && !(req.mode === 'cors' && cached.type === 'opaque')) return cached;
+      return fetch(req).then((res) => {
+        const cacheable = res && (res.ok || (res.type === 'opaque' && req.mode === 'no-cors'));
+        if (cacheable) cache.put(req, res.clone());
+        return res;
+      }).catch((err) => {
+        if (cached) return cached; // last resort, e.g. opaque copy offline
+        throw err;
+      });
+    })
+  );
+}
+
 self.addEventListener('fetch', (event) => {
   const req = event.request;
+  if (req.method !== 'GET') return; // let the browser handle it normally
   const url = new URL(req.url);
 
+  if (isPinnedLibrary(url)) {
+    event.respondWith(libraryResponse(req));
+    return;
+  }
+
   // Only handle same-origin GET requests for files in our app shell list.
-  // Everything else (Supabase, fonts.googleapis.com, cdnjs, jsdelivr, etc.)
+  // Everything else (Supabase, fonts.googleapis.com, unpinned CDN URLs, etc.)
   // is ignored here and goes straight to the network as normal.
   const isSameOrigin = url.origin === self.location.origin;
   const isShellPath = APP_SHELL.some((p) => {
@@ -51,7 +101,7 @@ self.addEventListener('fetch', (event) => {
     return url.pathname === shellUrl || (p === './' && url.pathname === '/');
   });
 
-  if (req.method !== 'GET' || !isSameOrigin || !isShellPath) {
+  if (!isSameOrigin || !isShellPath) {
     return; // let the browser handle it normally
   }
 
@@ -66,9 +116,8 @@ self.addEventListener('fetch', (event) => {
   // guard can't catch, since it only protects against an OLDER incoming
   // version, not a bad save made by stale-but-currently-running code.
   // Network-first means every online load — deploy or not — always runs
-  // the current code against current data. The cache is now purely an
-  // offline fallback, matching what this file's top comment says it's
-  // for, and is refreshed on every successful online load.
+  // the current code against current data. The cache is purely an
+  // offline fallback, and is refreshed on every successful online load.
   event.respondWith(
     fetch(req)
       .then((res) => {

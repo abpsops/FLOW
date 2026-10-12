@@ -15,7 +15,8 @@
 --   2. Turns on Row Level Security (RLS) on both `user_roles` and
 --      your existing `abps_workspace` table.
 --   3. Adds policies so:
---        - Anyone signed in can READ the workspace (Dashboard, etc.)
+--        - Only signed-in accounts that HAVE A ROLE (operator or trader)
+--          can READ the workspace (Dashboard, etc.)
 --        - Only 'operator' accounts can write to it directly
 --          (Push, barge edits, checklist, ROB, wipe/reset — anything
 --          that goes through the normal save path or the admin
@@ -26,7 +27,26 @@
 --   4. Adds ONE function, trader_update_vessels(), which is the only
 --      way a trader account can write anything. It only ever touches
 --      the `vessels` key inside the workspace JSON — nothing else in
---      the row can change through it, no matter what's passed in.
+--      the row can change through it, no matter what's passed in —
+--      and on vessels that already exist it keeps the operator-owned
+--      planning fields (barge assignment, barge-refuelling slot).
+--
+-- ┌─────────────────────────────────────────────────────────────────┐
+-- │ !! IMPORTANT — TURN OFF PUBLIC SIGN-UPS !!                       │
+-- │ Supabase Dashboard → Authentication → Sign In / Providers        │
+-- │ (older dashboards: Authentication → Settings) →                  │
+-- │ "Allow new users to sign up"  →  OFF.                            │
+-- │ Your project's anon key is visible in the app's page source, so  │
+-- │ with sign-ups on, anyone could create an account. The read       │
+-- │ policy below only admits accounts you've given a role, but you   │
+-- │ should still not let strangers create logins at all.             │
+-- └─────────────────────────────────────────────────────────────────┘
+--
+-- RE-RUN THIS FILE after updating the app: the app now sends an
+-- expected_version with every trader save (so a trader can't silently
+-- overwrite a colleague's newer change). Until you re-run it, the app
+-- falls back to the old function automatically — nothing breaks, you
+-- just don't get that protection for trader saves.
 -- ═══════════════════════════════════════════════════════════════════
 
 
@@ -72,14 +92,18 @@ $$;
 -- ── 3. Lock down abps_workspace with RLS ──────────────────────────────
 alter table public.abps_workspace enable row level security;
 
--- Read: any signed-in account (trader or operator) can view the
--- workspace — this is what powers the Dashboard and read-only pages.
+-- Read: signed-in accounts that have a role (trader or operator) can
+-- view the workspace — this is what powers the Dashboard and read-only
+-- pages. It used to be `using (true)`: ANY signed-in account, so with
+-- public sign-ups enabled a stranger could register and read everything.
+-- (See the "TURN OFF PUBLIC SIGN-UPS" box at the top — do that too.)
 drop policy if exists "workspace read all authenticated" on public.abps_workspace;
-create policy "workspace read all authenticated"
+drop policy if exists "workspace read role holders" on public.abps_workspace;
+create policy "workspace read role holders"
   on public.abps_workspace
   for select
   to authenticated
-  using (true);
+  using (public.current_user_role() is not null);
 
 -- Write: only accounts with role = 'operator' may INSERT.
 drop policy if exists "workspace insert operators only" on public.abps_workspace;
@@ -108,9 +132,8 @@ create policy "workspace delete operators only"
   using (public.current_user_role() = 'operator');
 
 -- IMPORTANT: an account with NO row in user_roles gets
--- current_user_role() = NULL, which fails every `= 'operator'` check
--- above — so an un-role-assigned account can READ but cannot WRITE
--- anything. Existing team members who already use the shared login
+-- current_user_role() = NULL, which fails every check above — so an
+-- un-role-assigned account can neither READ nor WRITE anything. Existing team members who already use the shared login
 -- need an 'operator' row added (see step 5) or their writes will stop
 -- working the moment you run this file.
 
@@ -120,17 +143,38 @@ create policy "workspace delete operators only"
 -- whoever owns it (you, as project owner) rather than the calling
 -- trader — so it can update abps_workspace even though the RLS
 -- policies above block traders from the table directly. But the
--- function's own body is the only thing deciding what gets written,
--- and it only ever touches the `vessels` key — nothing else.
-create or replace function public.trader_update_vessels(new_vessels jsonb, new_version bigint)
+-- function's own body is the only thing deciding what gets written:
+--   • it only ever touches the `vessels` key (plus the version stamp);
+--   • expected_version: when given and the row's version differs, it
+--     raises 'version_conflict' instead of overwriting a newer save —
+--     the app then pulls, merges the vessels and retries;
+--   • vessels are matched by nomUid: a trader may add, edit and remove
+--     nominations, but on a vessel that already exists the
+--     operator-owned planning fields (bargeId, refuelChk, rfv, rfm,
+--     rfvr, rfmr) are taken from the stored row, never the payload.
+
+-- The old 2-argument version must be dropped, otherwise a 2-argument
+-- call would be ambiguous between it and the new 3-argument one (whose
+-- third argument defaults to NULL, so old app builds keep working).
+drop function if exists public.trader_update_vessels(jsonb, bigint);
+
+create or replace function public.trader_update_vessels(
+  new_vessels      jsonb,
+  new_version      bigint,
+  expected_version bigint default null
+)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  caller_role text;
-  row_found   boolean;
+  caller_role   text;
+  cur_payload   jsonb;
+  cur_version   bigint;
+  old_vessels   jsonb;
+  merged        jsonb;
+  protected     text[] := array['bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr'];
 begin
   select role into caller_role from public.user_roles where user_id = auth.uid();
 
@@ -138,26 +182,139 @@ begin
     raise exception 'Not authorized: this account has no assigned role';
   end if;
 
+  if new_vessels is null or jsonb_typeof(new_vessels) <> 'array' then
+    raise exception 'new_vessels must be a JSON array';
+  end if;
+
+  -- Lock the row so the version check and the write are atomic.
+  select payload, version::bigint into cur_payload, cur_version
+    from public.abps_workspace
+   where id = 'main'
+   for update;
+
+  if not found then
+    raise exception 'Workspace row not found — ask an operator to save at least once first';
+  end if;
+
+  if cur_payload is null or jsonb_typeof(cur_payload -> 'state') is distinct from 'object' then
+    -- jsonb_set() can't create a missing parent key, so this used to be a
+    -- silent no-op that still reported success.
+    raise exception 'Workspace payload has no state object — ask an operator to save once first';
+  end if;
+
+  if expected_version is not null and cur_version is distinct from expected_version then
+    raise exception 'version_conflict';
+  end if;
+
+  old_vessels := coalesce(cur_payload -> 'state' -> 'vessels', '[]'::jsonb);
+  if jsonb_typeof(old_vessels) <> 'array' then old_vessels := '[]'::jsonb; end if;
+
+  -- Per vessel (in the trader's order): if a stored vessel has the same
+  -- non-empty nomUid, keep its operator-owned fields; otherwise (a new
+  -- nomination) take the trader's object as-is.
+  select coalesce(jsonb_agg(
+           case
+             when ov.v is null then nv.v
+             else (nv.v - protected) || coalesce(
+                    (select jsonb_object_agg(e.key, e.value)
+                       from jsonb_each(ov.v) e
+                      where e.key = any(protected)),
+                    '{}'::jsonb)
+           end
+           order by nv.ord), '[]'::jsonb)
+    into merged
+    from jsonb_array_elements(new_vessels) with ordinality as nv(v, ord)
+    left join lateral (
+      select o.v
+        from jsonb_array_elements(old_vessels) with ordinality as o(v, ord)
+       where jsonb_typeof(nv.v) = 'object'
+         and coalesce(nv.v ->> 'nomUid', '') <> ''
+         and o.v ->> 'nomUid' = nv.v ->> 'nomUid'
+       order by o.ord
+       limit 1
+    ) ov on true;
+
   update public.abps_workspace
   set payload    = jsonb_set(
-                      jsonb_set(payload, '{state,vessels}', coalesce(new_vessels, '[]'::jsonb), true),
+                      jsonb_set(jsonb_set(payload, '{state,vessels}', merged, true),
+                                '{state,version}', to_jsonb(new_version), true),
                       '{version}', to_jsonb(new_version), true
                     ),
       version    = new_version,
       updated_at = now()
   where id = 'main';
-
-  get diagnostics row_found = row_count;
-  if not row_found then
-    raise exception 'Workspace row not found — ask an operator to save at least once first';
-  end if;
 end;
 $$;
 
 -- Only signed-in accounts may call it at all; the role check inside
 -- the function is what actually gates who succeeds.
-revoke all on function public.trader_update_vessels(jsonb, bigint) from public;
-grant execute on function public.trader_update_vessels(jsonb, bigint) to authenticated;
+revoke all on function public.trader_update_vessels(jsonb, bigint, bigint) from public;
+revoke all on function public.trader_update_vessels(jsonb, bigint, bigint) from anon;
+grant execute on function public.trader_update_vessels(jsonb, bigint, bigint) to authenticated;
+
+-- Make the API pick up the new function signature immediately.
+notify pgrst, 'reload schema';
+
+
+-- ── 4b. Nomination / cancellation email "already sent" logs ───────────
+-- Each log is its own abps_workspace row (id 'nomination_email_log' or
+-- 'nomination_cancel_email_log') whose payload is { "<nomUid>": {…} }.
+-- The app records each sent email through this function instead of
+-- upserting the whole row, because:
+--   - it sets (or, with entry = null, removes) ONE key atomically, so two
+--     devices sending at once can't overwrite each other's entries;
+--   - traders send nomination emails too, but RLS (section 3) blocks
+--     them from writing abps_workspace directly.
+-- It can only touch those two rows and only one key per call — the main
+-- workspace row ('main') is never reachable through it.
+create or replace function public.log_nomination_email(log_id text, nom_uid text, entry jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller_role text;
+  clearing    boolean := (entry is null or jsonb_typeof(entry) = 'null');
+begin
+  select role into caller_role from public.user_roles where user_id = auth.uid();
+  if caller_role is null or caller_role not in ('trader', 'operator') then
+    raise exception 'Not authorized: this account has no assigned role';
+  end if;
+
+  if log_id is null or log_id not in ('nomination_email_log', 'nomination_cancel_email_log') then
+    raise exception 'Invalid log id';
+  end if;
+  if nom_uid is null or length(nom_uid) = 0 or length(nom_uid) > 200 then
+    raise exception 'Invalid nomination id';
+  end if;
+  if not clearing and jsonb_typeof(entry) <> 'object' then
+    raise exception 'Log entry must be a JSON object';
+  end if;
+
+  -- Same columns/shape the app's own upsert writes: version = epoch ms.
+  insert into public.abps_workspace as w (id, payload, version, updated_at)
+  values (
+    log_id,
+    case when clearing then '{}'::jsonb else jsonb_build_object(nom_uid, entry) end,
+    (extract(epoch from clock_timestamp()) * 1000)::bigint,
+    now()
+  )
+  on conflict (id) do update
+  set payload = case
+                  when clearing then
+                    (case when jsonb_typeof(w.payload) = 'object' then w.payload else '{}'::jsonb end) - nom_uid
+                  else
+                    jsonb_set(case when jsonb_typeof(w.payload) = 'object' then w.payload else '{}'::jsonb end,
+                              array[nom_uid], entry, true)
+                end,
+      version    = excluded.version,
+      updated_at = excluded.updated_at;
+end;
+$$;
+
+revoke all on function public.log_nomination_email(text, text, jsonb) from public, anon;
+grant execute on function public.log_nomination_email(text, text, jsonb) to authenticated;
 
 
 -- ═══════════════════════════════════════════════════════════════════
