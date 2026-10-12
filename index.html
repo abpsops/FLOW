@@ -18,24 +18,27 @@
     var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
-  /* Skin: 'harbour' (default, the "Harbour Light" look — light only) or
-     'classic' (the original look, with its own light/dark toggle). A stored
-     legacy value 'premium' counts as harbour. Harbour forces
-     data-theme="light" for this page view only — the visitor's saved
-     'flow-theme' is left untouched and comes back on switching to Classic. */
+  /* Skin ("Look"): 'fleet' (default, the "Fleet Colour" look — light only),
+     'harbour' (the "Harbour Light" look — light only) or 'classic' (the
+     original look, with its own light/dark toggle). A stored legacy value
+     'premium' counts as fleet; anything unknown falls back to fleet. Fleet
+     and Harbour force data-theme="light" for this page view only — the
+     visitor's saved 'flow-theme' is left untouched and comes back on
+     switching to Classic. */
   try{
-    var skin = localStorage.getItem('flow-skin') === 'classic' ? 'classic' : 'harbour';
+    var stored = localStorage.getItem('flow-skin');
+    var skin = (stored === 'classic' || stored === 'harbour') ? stored : 'fleet';
     document.documentElement.setAttribute('data-skin', skin);
-    if (skin === 'harbour') document.documentElement.setAttribute('data-theme', 'light');
+    if (skin !== 'classic') document.documentElement.setAttribute('data-theme', 'light');
   }catch(e){
-    document.documentElement.setAttribute('data-skin','harbour');
+    document.documentElement.setAttribute('data-skin','fleet');
     document.documentElement.setAttribute('data-theme','light');
   }
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Outfit:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
 <!-- Exact version + SRI: a floating @2 tag would run whatever jsdelivr serves next with full access to the session. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
@@ -98,29 +101,44 @@ function _isScheduleItemCompleted(item) {
    give it colors that hold legible contrast on both a white and a near-black
    canvas, and re-apply whenever the theme toggle flips. Individual charts
    still override these per-dataset colors (fuel-v/fuel-m/etc.) as before. */
-/* Harbour Light skin helpers: _isPremiumSkin() (name kept from the earlier
-   skin; true while the Harbour skin is active), _skinPal(c), which maps the
-   classic chart colours to the Harbour palette (ocean blue + teal), and
-   _skinFont(f) for chart tick fonts — only while Harbour is active; Classic
-   gets its exact colours and fonts back. */
-function _isPremiumSkin() { return document.documentElement.getAttribute('data-skin') === 'harbour'; }
+/* Skin ("Look") helpers. _skinName() = 'fleet' | 'harbour' | 'classic'.
+   _isPremiumSkin() (name kept from the earliest skin) is true while one of
+   the light skins (Fleet Colour or Harbour Light) is active. Each light skin
+   has its own chart palette in _SKIN_CHART: _skinPal(c) maps the classic
+   chart colours to it, _skinFont(f) swaps chart tick fonts — Classic gets its
+   exact colours and fonts back. */
+function _skinName() {
+  var s = document.documentElement.getAttribute('data-skin');
+  return (s === 'fleet' || s === 'harbour') ? s : 'classic';
+}
+function _isPremiumSkin() { return _skinName() !== 'classic'; }
+var _SKIN_CHART = {
+  harbour: { v: 'rgba(21,101,192,', m: 'rgba(14,159,142,', x: 'rgba(21,101,192,', text: '#5B6E86', grid: '#E6ECF3',
+             mono: 'IBM Plex Mono', sans: 'Plus Jakarta Sans', family: "'Plus Jakarta Sans', 'Inter', sans-serif" },
+  fleet:   { v: 'rgba(79,70,229,', m: 'rgba(15,118,110,', x: 'rgba(194,65,12,', text: '#6B6890', grid: '#ECEAF5',
+             mono: "'Space Mono', ui-monospace, monospace", sans: "'Outfit', 'Inter', sans-serif", family: "'Outfit', 'Inter', sans-serif" }
+};
+function _skinChart() { return _SKIN_CHART[_skinName()] || null; }
 function _skinPal(c) {
-  if (!_isPremiumSkin() || typeof c !== 'string') return c;
-  return c.replace(/^rgba\((47,111,237|37,99,235|14,122,155),/, 'rgba(21,101,192,')
-          .replace(/^rgba\((255,122,26|249,115,22),/, 'rgba(14,159,142,');
+  var k = _skinChart();
+  if (!k || typeof c !== 'string') return c;
+  return c.replace(/^rgba\((47,111,237|37,99,235),/, k.v)
+          .replace(/^rgba\(14,122,155,/, k.x)
+          .replace(/^rgba\((255,122,26|249,115,22),/, k.m);
 }
 function _skinFont(f) {
-  if (!_isPremiumSkin()) return f;
-  return f === 'DM Mono' ? 'IBM Plex Mono' : f === 'DM Sans' ? 'Plus Jakarta Sans' : f;
+  var k = _skinChart();
+  if (!k) return f;
+  return f === 'DM Mono' ? k.mono : f === 'DM Sans' ? k.sans : f;
 }
 function _applyChartJsTheme() {
   if (typeof Chart === 'undefined') return;
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  var harbour = _isPremiumSkin();
-  var textColor = harbour ? '#5B6E86' : (dark ? '#C8D6E8' : '#47617D');
+  var k = _skinChart();
+  var textColor = k ? k.text : (dark ? '#C8D6E8' : '#47617D');
   Chart.defaults.color = textColor;
-  Chart.defaults.borderColor = harbour ? '#E6ECF3' : (dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)');
-  Chart.defaults.font.family = harbour ? "'Plus Jakarta Sans', 'Inter', sans-serif" : "'DM Sans', sans-serif";
+  Chart.defaults.borderColor = k ? k.grid : (dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)');
+  Chart.defaults.font.family = k ? k.family : "'DM Sans', sans-serif";
   // Chart.defaults.color alone doesn't reliably reach the legend plugin's own
   // nested default in every Chart.js code path — set it explicitly too so
   // legends never silently fall back to Chart.js's built-in near-black '#666'.
@@ -148,7 +166,8 @@ document.addEventListener('keydown', function(e) {
    above, since some Chart.js legend configs don't reliably fall back to
    the global default. */
 function _chartTextColor() {
-  if (_isPremiumSkin()) return '#5B6E86';
+  var k = _skinChart();
+  if (k) return k.text;
   return document.documentElement.getAttribute('data-theme') === 'dark' ? '#C8D6E8' : '#47617D';
 }
 </script>
@@ -1333,22 +1352,15 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   box-shadow: none;
 }
 </style>
-<style id="skin-harbour">
+<style id="skin-switch">
 /* ═══════════════════════════════════════════════════════════════════════
-   HARBOUR LIGHT SKIN — delete this block + the skin switch to remove
-   (the switch = #skin-toggle-btn in the topbar, toggleSkin()/_syncSkinUI()
-   next to toggleColorTheme(), the 'flow-skin' lines in the <head> script,
-   the #dash-hero banner + _renderDashHero(), and
-   _isPremiumSkin()/_skinPal()/_skinFont()/_skinWrapH2C() — all of which
-   fall back to the Classic look when data-skin is not "harbour").
-   Light ground, white borderless cards with soft layered shadows, deep navy
-   frame, one coral accent. Everything is scoped to html[data-skin="harbour"]
-   and to screen media, so Classic (light + dark) and all print output are
-   untouched.
+   LOOK SWITCH — shared by all three looks (Fleet Colour, Harbour Light,
+   Classic). The "Look" button (#skin-toggle-btn) + its tiny menu
+   (#skin-menu); setSkin()/toggleSkinMenu()/_syncSkinUI() next to
+   toggleColorTheme(). In Classic the button is styled like the
+   neighbouring light/dark toggle; each skin block restyles it.
 ═══════════════════════════════════════════════════════════════════════ */
-
-/* Skin switch button — shared by both skins (Classic: styled like the
-   neighbouring theme toggle). */
+.skin-menu-wrap{position:relative;flex-shrink:0}
 .skin-toggle-btn{
   display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;
   height:30px;padding:0 11px;border-radius:999px;
@@ -1357,8 +1369,46 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   font-size:11px;font-weight:700;letter-spacing:.02em;font-family:inherit;
 }
 .skin-toggle-btn:hover{background:rgba(255,255,255,.24);border-color:#fff}
+.skin-toggle-caret{opacity:.85;transition:transform .15s}
+.skin-toggle-btn[aria-expanded="true"] .skin-toggle-caret{transform:rotate(180deg)}
+.skin-menu{
+  position:absolute;top:calc(100% + 8px);right:0;z-index:9900;min-width:210px;
+  display:flex;flex-direction:column;gap:2px;padding:6px;
+  background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--sh-lg);
+}
+.skin-menu[hidden]{display:none}
+.skin-menu-item{
+  display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:0 12px;
+  border:0;border-radius:10px;background:transparent;color:var(--text);cursor:pointer;
+  font:inherit;font-size:13.5px;font-weight:600;text-align:left;
+}
+.skin-menu-item:hover{background:var(--surface2)}
+.skin-menu-item:focus-visible{background:var(--surface2);outline:2px solid var(--azure);outline-offset:-2px}
+.skin-menu-item[aria-checked="true"]{font-weight:800}
+.skin-menu-item[aria-checked="true"]::after{content:'\2713';margin-left:auto;color:var(--azure);font-weight:800}
+.skin-menu-swatch{width:20px;height:20px;border-radius:7px;flex-shrink:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
+[data-skin-opt="fleet"] .skin-menu-swatch{background:linear-gradient(135deg,#4F46E5 0 50%,#C2410C 50% 100%)}
+[data-skin-opt="harbour"] .skin-menu-swatch{background:linear-gradient(135deg,#0B2545 0 50%,#F26A4B 50% 100%)}
+[data-skin-opt="classic"] .skin-menu-swatch{background:linear-gradient(135deg,#0F1E30 0 50%,#EAEFF5 50% 100%)}
 .dash-hero{display:none}
-@media print{ .skin-toggle-btn,.dash-hero{display:none!important} }
+@media (max-width:768px){
+  .skin-toggle-btn :is(.skin-toggle-label,.skin-toggle-caret){display:none}
+}
+@media print{ .skin-menu-wrap,.skin-toggle-btn,.dash-hero{display:none!important} }
+</style>
+<style id="skin-harbour">
+/* ═══════════════════════════════════════════════════════════════════════
+   HARBOUR LIGHT SKIN — delete this block to remove
+   (then drop 'harbour' from the 'flow-skin' lines in the <head> script,
+   from _SKIN_NAMES/_SKIN_ORDER next to toggleColorTheme(), from
+   _SKIN_CHART, its entry in #skin-menu, and the #dash-hero banner +
+   _renderDashHero() — everything else falls back by itself. The shared
+   Look switch styles live in <style id="skin-switch"> above).
+   Light ground, white borderless cards with soft layered shadows, deep navy
+   frame, one coral accent. Everything is scoped to html[data-skin="harbour"]
+   and to screen media, so Classic (light + dark) and all print output are
+   untouched.
+═══════════════════════════════════════════════════════════════════════ */
 
 @media screen {
 
@@ -1823,6 +1873,610 @@ html[data-skin="harbour"] input[type="file"]::file-selector-button{background:#F
   html[data-skin="harbour"] .kpi-value{font-size:22px}
   html[data-skin="harbour"] .qa-btn{flex:1 1 auto;justify-content:center}
   html[data-skin="harbour"] [id$="-modal"] > div{border-radius:20px!important}
+}
+} /* end @media screen */
+</style>
+<style id="skin-fleet">
+/* ═══════════════════════════════════════════════════════════════════════
+   FLEET COLOUR SKIN — delete this block to remove
+   (then drop 'fleet' from the 'flow-skin' lines in the <head> script, from
+   _SKIN_NAMES/_SKIN_ORDER next to toggleColorTheme(), from _SKIN_CHART, and
+   its entry in #skin-menu — everything else falls back by itself).
+   The default look: soft lavender ground, white borderless cards with
+   one soft shadow, ink pill navigation (a horizontal pill bar under the
+   header from 1100px), big solid colour KPI tiles (indigo / teal / burnt
+   orange / rose), Outfit for UI and Space Mono for numbers. Scoped to
+   html[data-skin="fleet"] and to screen media, so Classic (light + dark),
+   Harbour Light and all print output are untouched; image/PDF exports
+   render Classic via _skinWrapH2C().
+═══════════════════════════════════════════════════════════════════════ */
+@media screen {
+
+/* ── 1. TOKENS ─────────────────────────────────────────────────────── */
+html[data-skin="fleet"]{
+  --navy:#1E1B3A; --navy2:#1E1B3A; --ink:#1E1B3A; --ink-solid:#1E1B3A;
+  --azure:#4F46E5; --azure-lt:#EEF0FF; --azure-bd:#C7CBF5; --azure-dk:#3730A3;
+  --teal:#0F766E; --teal-lt:#E6FAF6; --teal-bd:#A7E3D7;
+  --amber:#92400E; --amber-lt:#FEF3C7; --amber-bd:#FCD98A;
+  --red:#BE185D; --red-lt:#FDE7F1; --red-lt2:#FBCFE3; --red-bd:#F5B5D2;
+  --green:#0F766E; --green-lt:#E6FAF6; --green-lt2:#C9F0E7; --green-bd:#A7E3D7;
+  --purple:#6D28D9; --purple-lt:#F1ECFE; --purple-bd:#D9CCFB; --slate:#6B6890;
+  --fuel-v:#4F46E5; --fuel-v-lt:#EEF0FF; --fuel-v-bd:#C7CBF5;
+  --fuel-m:#0F766E; --fuel-m-lt:#E6FAF6; --fuel-m-bd:#A7E3D7;
+  --pg-dashboard:#FFFFFF; --pg-nominations:#FFFFFF; --pg-schedule:#FFFFFF; --pg-loading:#FFFFFF;
+  --pg-timeline:#FFFFFF; --pg-alerts:#FFFFFF; --pg-bargefleet:#FFFFFF; --pg-availability:#FFFFFF;
+  --pg-agents:#FFFFFF; --pg-reports:#FFFFFF; --pg-commandcenter:#FFFFFF; --pg-checklist:#FFFFFF;
+  --pg-records:#FFFFFF; --pg-deliverylog:#FFFFFF; --pg-archives:#FFFFFF; --pg-trash:#FFFFFF;
+  --pg-bargetracking:#FFFFFF;
+  --bg:#F4F3FA; --surface:#FFFFFF; --surface2:#F8F7FD; --surface3:#F4F3FA;
+  --border:#E6E4F2; --border2:#F0EEF8;
+  --text:#1E1B3A; --sub:#4B4870; --muted:#6B6890;
+  --overlay:rgba(30,27,58,.45);
+  --radius:24px; --radius-sm:16px; --radius-xs:12px;
+  --sh-xs:0 10px 30px rgba(30,27,58,.06);
+  --sh-sm:0 10px 30px rgba(30,27,58,.06);
+  --sh-md:0 14px 36px rgba(30,27,58,.10);
+  --sh-lg:0 18px 48px rgba(30,27,58,.14);
+  --sh-xl:0 28px 70px rgba(30,27,58,.20);
+  --sh-in-xs:none; --sh-in-sm:none;
+  --glow-azure:0 0 0 3px rgba(79,70,229,.18); --glow-green:0 0 0 3px rgba(15,118,110,.18);
+  --sidebar-w:248px;
+  --fc-indigo:#4F46E5; --fc-teal:#0F766E; --fc-orange:#C2410C; --fc-rose:#BE185D;
+  --fc-ink:#1E1B3A; --fc-line:#E6E4F2; --fc-row:#F0EEF8;
+  --fc-shadow:0 10px 30px rgba(30,27,58,.06);
+  --fc-shadow-up:0 14px 36px rgba(30,27,58,.10);
+  --font-ui:'Outfit','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-num:'Space Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:light;
+}
+
+/* ── 2. TYPE ───────────────────────────────────────────────────────── */
+html[data-skin="fleet"] body{background:#F4F3FA;color:var(--text);font-family:var(--font-ui);font-size:13.5px}
+html[data-skin="fleet"] body *{font-family:inherit}
+html[data-skin="fleet"] [style*="DM Sans"]{font-family:var(--font-ui)!important}
+html[data-skin="fleet"] :is([style*="DM Mono"],[style*="DM+Mono"],[style*="monospace"],.kpi-value,.kpi-chip-value,.sync-msg,.vcard-num,.etc-prev,.formula-strip,.tmi span,.rbv,.sno,.lc-rng,.rec-meta,.activity-time,.aq-tag,.data-tbl .num,.data-tbl .mono,.scard span,#live-clock-time,#live-clock-date,pre,code){
+  font-family:var(--font-num)!important;font-variant-numeric:tabular-nums;
+}
+html[data-skin="fleet"] ::selection{background:rgba(79,70,229,.22);color:#1E1B3A}
+html[data-skin="fleet"] ::-webkit-scrollbar{width:8px;height:8px}
+html[data-skin="fleet"] ::-webkit-scrollbar-thumb{background:#D4D1E8;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+html[data-skin="fleet"] [role="button"][tabindex]:focus-visible,
+html[data-skin="fleet"] :is(button,a,.btn):focus-visible{outline:2px solid #4F46E5;outline-offset:2px}
+html[data-skin="fleet"] a{color:#4F46E5}
+
+/* ── 3. HEADER (sync bar + topbar) — white bar, round chrome buttons ─ */
+html[data-skin="fleet"] #app-header{background:#FFFFFF;box-shadow:0 1px 0 #E6E4F2}
+html[data-skin="fleet"] .sync-banner{background:#F8F7FD;border-bottom:1px solid #E6E4F2}
+html[data-skin="fleet"] .sync-msg{color:#6B6890;font-size:10.5px}
+html[data-skin="fleet"] .sync-dot{background:#0F766E}
+html[data-skin="fleet"] .sync-dot.syncing{background:#D97706}
+html[data-skin="fleet"] .sync-dot.error{background:#BE185D}
+html[data-skin="fleet"] .sync-btn{background:#FFFFFF;border:1px solid #E6E4F2;color:#4B4870;border-radius:999px;padding:2px 12px}
+html[data-skin="fleet"] .sync-btn:hover{border-color:#4F46E5;color:#4F46E5;background:#FFFFFF}
+html[data-skin="fleet"] .topbar{background:#FFFFFF;border-bottom:0;box-shadow:none;height:68px;padding:0 clamp(16px,3vw,40px) 0 18px;gap:14px}
+html[data-skin="fleet"] .topbar-logo-wrap > div{background:#4F46E5!important;border-radius:12px!important;box-shadow:none!important;width:38px!important;height:38px!important}
+html[data-skin="fleet"] .topbar > div[style*="width:1px"]{background:#E6E4F2!important}
+html[data-skin="fleet"] #topbar-page-info{border-left:0;padding-left:2px}
+html[data-skin="fleet"] .topbar-section-label{color:#6B6890;font-size:10.5px;letter-spacing:.14em;font-weight:700}
+html[data-skin="fleet"] .topbar-page-title{color:#1E1B3A;font-size:17px;font-weight:800;letter-spacing:-.01em}
+html[data-skin="fleet"] .topbar-page-sub{color:#6B6890}
+html[data-skin="fleet"] .hamburger,
+html[data-skin="fleet"] #global-alerts-btn,
+html[data-skin="fleet"] #topbar-menu-btn{
+  width:40px!important;height:40px!important;border-radius:999px!important;
+  background:#F4F3FA!important;border:0!important;color:#1E1B3A!important;box-shadow:none!important;
+}
+html[data-skin="fleet"] .hamburger:hover,
+html[data-skin="fleet"] #global-alerts-btn:hover,
+html[data-skin="fleet"] #topbar-menu-btn:hover{background:#E6E4F2!important;color:#1E1B3A!important}
+html[data-skin="fleet"] #global-alerts-badge{background:#BE185D!important;color:#fff!important;border-color:#FFFFFF!important}
+html[data-skin="fleet"] #global-search-input{
+  background:#F4F3FA!important;border:1px solid transparent!important;border-radius:999px!important;
+  color:#1E1B3A!important;height:44px;padding-left:40px!important;font-size:14px!important;
+}
+html[data-skin="fleet"] #global-search-wrap > svg{left:16px!important;color:#6B6890!important}
+html[data-skin="fleet"] #global-search-input::placeholder{color:#6B6890}
+html[data-skin="fleet"] #global-search-input:focus{background:#FFFFFF!important;border-color:#4F46E5!important;box-shadow:0 0 0 3px rgba(79,70,229,.18)}
+html[data-skin="fleet"] #live-clock{border-left-color:#E6E4F2!important;padding-left:14px!important}
+html[data-skin="fleet"] #live-clock-time{color:#1E1B3A!important;font-weight:700!important;letter-spacing:.02em!important}
+html[data-skin="fleet"] #live-clock-date{color:#6B6890!important}
+html[data-skin="fleet"] #theme-toggle-btn{display:none!important}
+html[data-skin="fleet"] .skin-toggle-btn{
+  height:40px;padding:0 16px;background:#FFFFFF;border:1px solid #E6E4F2;color:#1E1B3A;border-radius:999px;
+  font-size:13px;font-weight:700;letter-spacing:0;
+}
+html[data-skin="fleet"] .skin-toggle-btn:hover{background:#F4F3FA;border-color:#D4D1E8;color:#1E1B3A}
+html[data-skin="fleet"] .skin-toggle-btn[aria-expanded="true"]{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.14)}
+html[data-skin="fleet"] .topbar-menu-item{color:#1E1B3A;border-radius:12px}
+html[data-skin="fleet"] .topbar-menu-item:hover{background:#F4F3FA}
+html[data-skin="fleet"] #topbar-menu-dropdown,
+html[data-skin="fleet"] #global-alerts-dropdown,
+html[data-skin="fleet"] #global-search-results{background:#FFFFFF!important;border:0!important;border-radius:20px!important;box-shadow:var(--sh-lg)!important}
+
+/* ── 4. NAVIGATION — white, pill-shaped items, solid ink active pill.
+   ≥1100px it becomes a horizontal pill bar under the header (see the
+   block right after); narrower it stays a white sidebar / mobile drawer. */
+html[data-skin="fleet"] .layout{background:#F4F3FA}
+html[data-skin="fleet"] .sidebar{background:#FFFFFF;border-right:0;box-shadow:1px 0 0 #E6E4F2;padding:8px 0 24px}
+html[data-skin="fleet"] .sidebar-section-label{font-size:10.5px;letter-spacing:.14em;color:#6B6890;padding:16px 26px 6px}
+html[data-skin="fleet"] .sidebar-item{
+  color:#4B4870;font-weight:600;font-size:14px;padding:0 16px;min-height:42px;margin:2px 12px;
+  border-radius:999px;border-left:0;
+}
+html[data-skin="fleet"] .sidebar-item:hover{background:#F4F3FA;color:#1E1B3A}
+html[data-skin="fleet"] .sidebar-item.active{background:#1E1B3A;color:#FFFFFF;border-left:0;font-weight:700}
+html[data-skin="fleet"] .sidebar-icon{opacity:.8;color:#6B6890}
+html[data-skin="fleet"] .sidebar-item:hover .sidebar-icon{opacity:1;color:#1E1B3A}
+html[data-skin="fleet"] .sidebar-item.active .sidebar-icon{color:#FFFFFF;opacity:1}
+html[data-skin="fleet"] .sidebar-badge{background:#4F46E5;color:#FFFFFF;border-radius:999px;padding:2px 7px;min-width:22px;font-size:11px;font-weight:700}
+html[data-skin="fleet"] .sidebar-badge.amber{background:#FEF3C7;color:#92400E}
+html[data-skin="fleet"] .sidebar-badge.red{background:#BE185D;color:#FFFFFF}
+html[data-skin="fleet"] .sidebar-item.active .sidebar-badge{background:#FFFFFF;color:#1E1B3A}
+html[data-skin="fleet"] .sidebar-divider{background:#E6E4F2;margin:10px 26px}
+html[data-skin="fleet"] .sidebar-item[style*="color:var(--red)"]{color:#BE185D!important}
+html[data-skin="fleet"] .sidebar-item[style*="color:var(--amber)"]{color:#92400E!important}
+@media (min-width:1100px){
+  html[data-skin="fleet"] .layout{flex-direction:column}
+  html[data-skin="fleet"] .sidebar{
+    position:sticky;top:var(--header-h);z-index:300;align-self:stretch;
+    width:auto;min-width:0;height:auto;overflow:visible;
+    flex-direction:row;flex-wrap:wrap;align-items:center;gap:4px 2px;
+    padding:8px clamp(16px,3vw,40px) 10px 14px;box-shadow:0 1px 0 #E6E4F2;
+  }
+  html[data-skin="fleet"] body.sidebar-collapsed .sidebar{display:none}
+  html[data-skin="fleet"] .sidebar-section-label{display:none}
+  html[data-skin="fleet"] .sidebar-divider{width:1px;height:22px;margin:0 6px;flex-shrink:0}
+  html[data-skin="fleet"] .sidebar-item{min-height:40px;margin:0;padding:0 14px;font-size:13.5px;white-space:nowrap;gap:7px}
+  html[data-skin="fleet"] .sidebar-icon{display:none}
+  html[data-skin="fleet"] .sidebar-badge{margin-left:2px}
+}
+
+/* ── 5. PAGE FRAME ─────────────────────────────────────────────────── */
+html[data-skin="fleet"] .main{background:#F4F3FA}
+html[data-skin="fleet"] .page{padding:28px clamp(16px,3vw,40px) 48px;max-width:1440px;margin-inline:auto;box-sizing:border-box}
+html[data-skin="fleet"] .page-title,
+html[data-skin="fleet"] .page .page-title{color:#1E1B3A!important;font-size:30px;font-weight:800;letter-spacing:-.03em;margin-bottom:4px;line-height:1.15}
+html[data-skin="fleet"] .page-subtitle{color:#6B6890;font-size:14px;font-weight:500}
+html[data-skin="fleet"] .page-header-row{border-bottom:0;padding-bottom:0;margin-bottom:24px;align-items:flex-end}
+html[data-skin="fleet"] .sec-hdr{margin:28px 0 12px}
+html[data-skin="fleet"] .sec-label,
+html[data-skin="fleet"] .slabel{font-size:12px;letter-spacing:.06em;color:#6B6890;font-weight:700}
+html[data-skin="fleet"] .sec-label{font-size:18px;letter-spacing:-.01em;text-transform:none;color:#1E1B3A;font-weight:800}
+html[data-skin="fleet"] .sec-label::before{width:10px;height:10px;border-radius:4px;background:#4F46E5}
+html[data-skin="fleet"] .hint{color:#6B6890}
+
+/* ── 6. DASHBOARD — big heading, solid colour KPI tiles, dark tank card */
+html[data-skin="fleet"] #page-dashboard.active{display:flex;flex-direction:column}
+html[data-skin="fleet"] #page-dashboard > *{order:5}
+html[data-skin="fleet"] #page-dashboard > .page-header-row{order:0}
+html[data-skin="fleet"] #page-dashboard > .kpi-strip{order:1}
+html[data-skin="fleet"] #page-dashboard > .page-header-row > div:first-child{display:flex;flex-direction:column-reverse;gap:4px}
+html[data-skin="fleet"] #page-dashboard .page-title{font-size:40px;letter-spacing:-.03em;line-height:1.08;margin:0}
+html[data-skin="fleet"] #page-dashboard .page-subtitle{font-size:14px;color:#6B6890;font-weight:500}
+
+html[data-skin="fleet"] .kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;margin-bottom:24px}
+html[data-skin="fleet"] .kpi-chip{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label icon" "value value";
+  align-items:center;gap:10px 10px;min-width:0;position:relative;overflow:hidden;
+  border:0;border-radius:24px;padding:20px 22px 58px;color:#FFFFFF;background-color:#4F46E5;
+  background-repeat:no-repeat;background-position:left 0 bottom 14px;background-size:100% 40px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 30 C20 26 30 32 50 24 S80 18 100 22 S130 12 150 16 S180 8 200 10' fill='none' stroke='white' stroke-opacity='.55' stroke-width='2.5' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E");
+  box-shadow:0 14px 30px rgba(30,27,58,.10);
+}
+html[data-skin="fleet"] .kpi-chip:nth-child(4n+2){background-color:#0F766E;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 22 C20 28 35 14 55 20 S85 30 105 18 S140 22 160 14 S185 16 200 8' fill='none' stroke='white' stroke-opacity='.55' stroke-width='2.5' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")}
+html[data-skin="fleet"] .kpi-chip:nth-child(4n+3){background-color:#C2410C;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 14 C25 18 35 16 60 24 S95 18 115 26 S150 20 170 28 S190 22 200 24' fill='none' stroke='white' stroke-opacity='.55' stroke-width='2.5' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")}
+html[data-skin="fleet"] .kpi-chip:nth-child(4n+4){background-color:#BE185D;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 40' preserveAspectRatio='none'%3E%3Cpath d='M0 32 C20 30 35 28 55 24 S85 28 105 20 S140 22 160 16 S185 18 200 14' fill='none' stroke='white' stroke-opacity='.55' stroke-width='2.5' stroke-linecap='round' vector-effect='non-scaling-stroke'/%3E%3C/svg%3E")}
+html[data-skin="fleet"] .kpi-chip:hover{transform:translateY(-2px);border-color:transparent;box-shadow:0 18px 36px rgba(30,27,58,.16)}
+html[data-skin="fleet"] .kpi-chip:focus-visible{outline:3px solid #1E1B3A;outline-offset:3px}
+html[data-skin="fleet"] .kpi-chip *{color:#FFFFFF!important}
+html[data-skin="fleet"] .kpi-chip-body{display:contents}
+html[data-skin="fleet"] .kpi-chip-icon{grid-area:icon;width:34px;height:34px;border-radius:12px;background:rgba(255,255,255,.18)!important}
+html[data-skin="fleet"] .kpi-chip-label{grid-area:label;font-size:14px;font-weight:600;text-transform:none;letter-spacing:0;white-space:normal;line-height:1.3}
+html[data-skin="fleet"] .kpi-chip-value{grid-area:value;font-family:var(--font-num)!important;font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1.1;white-space:nowrap}
+html[data-skin="fleet"] .kpi-chip-value[style*="font-size:13px"]{font-size:13px!important;line-height:1.6!important;font-weight:700;letter-spacing:0;white-space:normal}
+
+/* Quick actions: ink primary pill, then white pills */
+html[data-skin="fleet"] .qa-btn{
+  background:#FFFFFF;color:#1E1B3A;border:1px solid #E6E4F2;border-radius:999px;padding:0 20px;min-height:44px;font-weight:700;font-size:13.5px;
+  box-shadow:none;
+}
+html[data-skin="fleet"] .qa-btn svg{color:#4F46E5}
+html[data-skin="fleet"] .qa-btn:first-child{background:#1E1B3A;border-color:#1E1B3A;color:#FFFFFF}
+html[data-skin="fleet"] .qa-btn:first-child svg{color:#FFFFFF}
+html[data-skin="fleet"] .qa-btn:hover{filter:none;transform:translateY(-1px);background:#F4F3FA;box-shadow:none}
+html[data-skin="fleet"] .qa-btn:first-child:hover{background:#2E2A55}
+
+/* Barge Fleet Status → the dark "Tank levels" card. Re-scoping the
+   colour variables restyles the inline-styled rows without touching JS. */
+html[data-skin="fleet"] .chart-card:has(> #dash-fleet-status){
+  background:#1E1B3A!important;color:#FFFFFF;box-shadow:0 18px 40px rgba(30,27,58,.18)!important;
+  --ink:#FFFFFF; --text:#FFFFFF; --muted:#C7C4E8; --sub:#C7C4E8; --border2:rgba(255,255,255,.09);
+  --fuel-v:#A5B4FC; --fuel-m:#5EEAD4;
+}
+html[data-skin="fleet"] .chart-card:has(> #dash-fleet-status) .chart-title{color:#FFFFFF;font-size:22px}
+html[data-skin="fleet"] .chart-card:has(> #dash-fleet-status) .chart-subtitle{color:#C7C4E8}
+html[data-skin="fleet"] #dash-fleet-status .progress-track{background:#2E2A55;height:10px}
+html[data-skin="fleet"] #dash-fleet-status > div:last-child{border-bottom:0!important}
+html[data-skin="fleet"] #dash-fleet-status > div:has(.badge-red,.badge-amber) .progress-fill[style*="--fuel-v"]{background:#FDA4AF!important}
+html[data-skin="fleet"] #dash-fleet-status > div:has(.badge-red,.badge-amber) span[style*="--fuel-v"]{color:#FDA4AF!important}
+html[data-skin="fleet"] #dash-fleet-status .badge{background:rgba(94,234,212,.16);color:#5EEAD4}
+html[data-skin="fleet"] #dash-fleet-status :is(.badge-red,.badge-amber){background:rgba(253,164,175,.16);color:#FDA4AF}
+html[data-skin="fleet"] #dash-fleet-status [style*="DM Mono"]{font-size:11.5px!important}
+
+/* ── 7. KPI CARDS (other pages) ───────────────────────────────────── */
+html[data-skin="fleet"] .kpi-grid{gap:16px;margin-bottom:22px}
+html[data-skin="fleet"] .kpi-card,
+html[data-skin="fleet"] :is(.kpi-azure,.kpi-teal,.kpi-amber,.kpi-red,.kpi-green,.kpi-ink,.kpi-fuelv,.kpi-fuelm){
+  background:#FFFFFF;border:0!important;border-radius:20px;padding:18px 20px;box-shadow:var(--fc-shadow-up)!important;
+}
+html[data-skin="fleet"] .kpi-card::before{display:none}
+html[data-skin="fleet"] .kpi-card:hover{transform:translateY(-1px)}
+html[data-skin="fleet"] .kpi-label{font-size:13px;letter-spacing:0;text-transform:none;color:#6B6890;font-weight:600;margin-bottom:12px;padding-right:44px}
+html[data-skin="fleet"] .kpi-value{font-size:28px;font-weight:600;letter-spacing:-.02em;color:#1E1B3A!important}
+html[data-skin="fleet"] .kpi-sub{font-size:12.5px;font-weight:600;color:#6B6890}
+html[data-skin="fleet"] .kpi-card-icon{width:36px;height:36px;border-radius:11px;opacity:1;right:18px;top:16px}
+html[data-skin="fleet"] .kpi-azure .kpi-sub,html[data-skin="fleet"] .kpi-fuelv .kpi-sub{color:#4F46E5}
+html[data-skin="fleet"] :is(.kpi-teal,.kpi-green,.kpi-fuelm) .kpi-sub{color:#0F766E}
+html[data-skin="fleet"] .kpi-amber .kpi-sub{color:#92400E}
+html[data-skin="fleet"] .kpi-red .kpi-sub{color:#BE185D}
+html[data-skin="fleet"] .scard{background:#FFFFFF;border:0;border-radius:20px;box-shadow:var(--fc-shadow-up)}
+html[data-skin="fleet"] .scard::before{display:none}
+html[data-skin="fleet"] .scard label{font-size:12.5px;letter-spacing:0;text-transform:none;color:#6B6890;font-weight:600}
+html[data-skin="fleet"] .scard span{color:#1E1B3A!important;font-weight:600}
+
+/* ── 8. CARDS & PANELS ─────────────────────────────────────────────── */
+html[data-skin="fleet"] :is(.card,.chart-card,.ci-card,.vcard,.bcard,.tlc,.nsc-result,.legend,.tbl-wrap,.voy-wrap,.rec-row){
+  background:#FFFFFF;border:0;box-shadow:var(--fc-shadow);
+}
+html[data-skin="fleet"] :is(.card,.chart-card){border-radius:20px;padding:22px 24px;margin-bottom:18px}
+html[data-skin="fleet"] :is(.vcard,.bcard,.ci-card){border-radius:20px;padding:20px 22px;margin-bottom:14px}
+html[data-skin="fleet"] :is(.vcard,.bcard,.tlc,.rec-row):hover{box-shadow:var(--fc-shadow-up)}
+html[data-skin="fleet"] :is(.vcard-hdr,.bcard-hdr){border-bottom-color:#F4F3FA;padding-bottom:12px;margin-bottom:14px}
+html[data-skin="fleet"] :is(.card-title,.chart-title){color:#1E1B3A;font-size:16px;font-weight:800;letter-spacing:-.01em}
+html[data-skin="fleet"] :is(.card-subtitle,.chart-subtitle){color:#6B6890;font-size:12.5px}
+html[data-skin="fleet"] .vcard-num{color:#4F46E5;background:#EEF0FF;border:0;border-radius:999px;padding:3px 10px;font-size:11px}
+html[data-skin="fleet"] .vcard-num.barge{color:#0F766E;background:#E6FAF6}
+html[data-skin="fleet"] .rec-row{border-radius:16px;padding:14px 18px;margin-bottom:10px}
+html[data-skin="fleet"] .rec-vessel{color:#1E1B3A;font-weight:800}
+html[data-skin="fleet"] .formula-strip{background:#F8F7FD;border:0;color:#4F46E5;border-radius:14px}
+html[data-skin="fleet"] .tmi{background:#F8F7FD;border:0;border-radius:12px;padding:8px 10px}
+html[data-skin="fleet"] .tmi label{color:#6B6890;letter-spacing:.04em;font-size:10px}
+html[data-skin="fleet"] .tmi span{color:#1E1B3A}
+html[data-skin="fleet"] .tlvn{color:#1E1B3A;font-weight:800;font-size:14.5px}
+html[data-skin="fleet"] :is(.rbt,.progress-track){background:#F4F3FA;border:0;height:8px;border-radius:999px}
+html[data-skin="fleet"] :is(.progress-fill,.rbf){border-radius:999px}
+html[data-skin="fleet"] .tlc{border-radius:18px;padding:16px 18px}
+html[data-skin="fleet"] .tlc:is(.wv,.wvm){box-shadow:inset 3px 0 0 #BE185D,var(--fc-shadow);border-left:0}
+html[data-skin="fleet"] .tlc:is(.wm,.del){box-shadow:inset 3px 0 0 #D97706,var(--fc-shadow);border-left:0}
+html[data-skin="fleet"] .tld{box-shadow:0 0 0 3px #F4F3FA,0 0 0 4px #DCD9EC}
+html[data-skin="fleet"] .tll{background:#DCD9EC}
+html[data-skin="fleet"] .activity-item{border-bottom-color:#F4F3FA;padding:12px 0}
+html[data-skin="fleet"] .activity-title{color:#1E1B3A}
+html[data-skin="fleet"] .aq-row{border-bottom-color:#F4F3FA;padding:14px 20px}
+html[data-skin="fleet"] .aq-name{color:#1E1B3A;font-weight:800;font-size:13.5px}
+html[data-skin="fleet"] .aq-detail{color:#6B6890;font-size:12px}
+html[data-skin="fleet"] .aq-tag{border-radius:999px;padding:4px 10px;border:0;font-size:10px}
+html[data-skin="fleet"] .barge-tl-tabs{background:transparent;border-bottom:0;gap:6px;flex-wrap:wrap}
+html[data-skin="fleet"] .barge-tl-tab{color:#4B4870;font-weight:700;border:0;border-radius:999px;padding:9px 16px;margin:0;background:#FFFFFF;box-shadow:var(--fc-shadow)}
+html[data-skin="fleet"] .barge-tl-tab.active{color:#FFFFFF;background:#1E1B3A}
+html[data-skin="fleet"] .barge-tl-tab:hover:not(.active){background:#FFFFFF;color:#1E1B3A}
+html[data-skin="fleet"] .legend{border-radius:14px;padding:10px 16px}
+html[data-skin="fleet"] .nsc-result{border-radius:18px;padding:16px}
+
+/* Alert strips & refuel panels: rounded tinted banners */
+html[data-skin="fleet"] .alert-strip{border-radius:16px;padding:13px 18px;border:0;font-weight:600;font-size:12.5px;margin-bottom:10px}
+html[data-skin="fleet"] .alert-strip.critical{background:#FDE7F1;color:#BE185D}
+html[data-skin="fleet"] .alert-strip.warning{background:#FEF3C7;color:#92400E}
+html[data-skin="fleet"] :is(.alert-strip.info,.alert-strip.early){background:#EEF0FF;color:#4F46E5}
+html[data-skin="fleet"] .alert-strip strong{color:inherit}
+html[data-skin="fleet"] .alert-strip[onclick]:hover{filter:none;transform:none;box-shadow:var(--fc-shadow)}
+html[data-skin="fleet"] .apanel{border-radius:20px;padding:18px 20px;border:0}
+html[data-skin="fleet"] .apanel.fired{background:#FDE7F1}
+html[data-skin="fleet"] .apanel.clear{background:#E6FAF6}
+html[data-skin="fleet"] .apanel.fired :is(.apt,.arow){color:#BE185D}
+html[data-skin="fleet"] .apanel.clear :is(.apt,.arow){color:#0F766E}
+html[data-skin="fleet"] .apanel .arow{border-top-color:rgba(30,27,58,.08)}
+html[data-skin="fleet"] .apanel.fired .apdot{background:#BE185D}
+html[data-skin="fleet"] .apanel.clear .apdot{background:#0F766E}
+html[data-skin="fleet"] .apanel .snum{background:#FFFFFF}
+
+/* ── 9. TABLES ─────────────────────────────────────────────────────── */
+html[data-skin="fleet"] :is(.tbl-wrap,.voy-wrap){border-radius:20px;overflow:auto}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl){background:transparent}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl) thead{background:#F8F7FD}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) th{
+  background:#F8F7FD;color:#6B6890;font-size:12px;letter-spacing:0;text-transform:none;font-weight:700;
+  padding:13px 14px;border-bottom:0;
+}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) td{border-bottom:1px solid #F4F3FA;color:#1E1B3A;padding:12px 14px}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) tbody tr:hover td{background:#FAF9FE}
+html[data-skin="fleet"] .main table :is(thead,tr,th)[style*="background:var(--navy)"],
+html[data-skin="fleet"] .main table :is(thead,tr,th)[style*="background:var(--ink"],
+html[data-skin="fleet"] [id$="-modal"] table :is(thead,tr,th)[style*="background:var(--navy)"],
+html[data-skin="fleet"] [id$="-modal"] table :is(thead,tr,th)[style*="background:var(--ink"]{background:#F8F7FD!important;color:#6B6890!important}
+html[data-skin="fleet"] .main table :is(thead,tr)[style*="background:var(--navy)"] th,
+html[data-skin="fleet"] .main table :is(thead,tr)[style*="background:var(--ink"] th{color:#6B6890!important}
+html[data-skin="fleet"] .sno{color:#6B6890}
+/* vessel initials-style badge on the first data cell is skipped (needs logic) */
+html[data-skin="fleet"] .main table tr[style*="background:var(--navy2)"],
+html[data-skin="fleet"] .main table tr[style*="background:var(--navy2)"] th{background:#F8F7FD!important;color:#6B6890!important}
+html[data-skin="fleet"] .main table th[style*="border-left:1px solid rgba(255,255,255"]{border-left-color:#E6E4F2!important}
+html[data-skin="fleet"] .cl-tbl :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){border:1px solid #DCD9EC!important;border-radius:10px!important;background:#FFFFFF!important}
+html[data-skin="fleet"] .rst-barge-block{border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px #F4F3FA}
+/* Dashboard action queue ("Needs attention") — white card, real heading */
+html[data-skin="fleet"] #dash-action-queue > div{border:0!important;border-radius:20px!important;box-shadow:var(--fc-shadow)!important;margin-bottom:18px!important}
+html[data-skin="fleet"] #dash-action-queue > div > div:first-child{background:#FFFFFF!important;border-bottom:1px solid #F4F3FA!important;padding:18px 20px 14px!important}
+html[data-skin="fleet"] #dash-action-queue > div > div:first-child > span{font-family:var(--font-ui)!important;font-size:16px!important;font-weight:800!important;color:#1E1B3A!important;text-transform:none!important;letter-spacing:-.01em!important}
+/* Weekly calendar loading tickets → "loading" amber tint */
+html[data-skin="fleet"] .cal-ticket-loading{background:#FEF3C7!important;border-color:#FCD98A!important;border-radius:10px!important}
+html[data-skin="fleet"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#92400E!important}
+html[data-skin="fleet"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(146,64,14,.35)!important}
+html[data-skin="fleet"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(146,64,14,.2)!important}
+/* Command Center wallboard stays a dark TV screen by design — just framed */
+html[data-skin="fleet"] #cc-wallboard{border:0!important;border-radius:20px!important;box-shadow:0 1px 2px rgba(30,27,58,.06),0 18px 40px rgba(30,27,58,.18)!important}
+
+/* ── 10. STATUS: badges / tags — tinted pills ─────────────────────── */
+html[data-skin="fleet"] :is(.badge,.stag,.tb,.cat,.pt-tag){border-radius:999px;padding:4px 10px;font-size:10.5px;letter-spacing:.02em;font-weight:800;border:0}
+html[data-skin="fleet"] :is(.badge-green,.badge-teal,.st-ok,.tb-ok,.tb-on,.lc-box.ok,.nsc-ok,.send-email-btn.sent){background:#E6FAF6;color:#0F766E;border-color:transparent}
+html[data-skin="fleet"] :is(.badge-azure,.st-early,.tb-early,.lc-box.early,.travel-notice){background:#EEF0FF;color:#4F46E5;border-color:transparent}
+html[data-skin="fleet"] :is(.badge-red,.st-dl,.tb-dl,.tb-wv,.cat-v,.lc-box.late,.nsc-warn){background:#FDE7F1;color:#BE185D;border-color:transparent}
+html[data-skin="fleet"] :is(.badge-amber,.tb-pt,.tb-wm,.cat-m,.pt-tag,.lc-box.warn,.dl-note){background:#FEF3C7;color:#92400E;border-color:transparent}
+html[data-skin="fleet"] .badge-slate{background:#F4F3FA;color:#4B4870;border-color:transparent}
+html[data-skin="fleet"] .badge-purple{border-color:transparent}
+html[data-skin="fleet"] .lc-rng.in{color:#0F766E}
+html[data-skin="fleet"] .lc-rng.out{color:#BE185D}
+html[data-skin="fleet"] .badge-dual{border-radius:999px;border:0}
+html[data-skin="fleet"] .badge-dual .v{background:#EEF0FF;color:#4F46E5}
+html[data-skin="fleet"] .badge-dual .m{background:#E6FAF6;color:#0F766E}
+html[data-skin="fleet"] :is(.lc-box,.etc-prev,.dl-note,.travel-notice,.nsc-ok,.nsc-warn){border-radius:12px;border:0}
+html[data-skin="fleet"] .etc-prev{background:#EEF0FF;color:#4F46E5}
+
+/* ── 11. BUTTONS ───────────────────────────────────────────────────── */
+html[data-skin="fleet"] .btn{border-radius:12px;font-weight:700;letter-spacing:0;padding:9px 16px;font-size:12.5px}
+html[data-skin="fleet"] .btn-primary,
+html[data-skin="fleet"] .btn-generate,
+html[data-skin="fleet"] #og-submit-btn{background:#4F46E5;color:#FFFFFF;border:0;box-shadow:0 8px 20px rgba(79,70,229,.35)}
+html[data-skin="fleet"] .btn-primary:hover,
+html[data-skin="fleet"] .btn-generate:hover,
+html[data-skin="fleet"] #og-submit-btn:hover{background:#4338CA;color:#FFFFFF;box-shadow:0 10px 24px rgba(79,70,229,.42)}
+html[data-skin="fleet"] .btn-primary:not(.btn-sm),
+html[data-skin="fleet"] .btn-lg{min-height:46px;padding:0 20px;border-radius:14px}
+html[data-skin="fleet"] .btn-primary.btn-sm{box-shadow:0 6px 14px rgba(79,70,229,.30)}
+html[data-skin="fleet"] .btn-generate{border-radius:16px;font-weight:800;min-height:52px;font-size:14px}
+html[data-skin="fleet"] .btn-generate svg{opacity:1}
+html[data-skin="fleet"] .btn-secondary{background:#FFFFFF;color:#1E1B3A;border:1px solid #DCD9EC}
+html[data-skin="fleet"] .btn-secondary:hover{color:#1E1B3A;border-color:#C7C3E0;background:#F8F7FD}
+html[data-skin="fleet"] .btn-ghost{background:#F4F3FA;color:#4B4870;border:0}
+html[data-skin="fleet"] .btn-ghost:hover{background:#E6E4F2;color:#1E1B3A}
+html[data-skin="fleet"] .btn-success{background:#0F766E;color:#FFFFFF;border:0}
+html[data-skin="fleet"] .btn-success:hover{background:#0F766E;box-shadow:0 8px 18px rgba(15,118,110,.30)}
+html[data-skin="fleet"] .btn-danger{background:#FFFFFF;color:#BE185D;border:1px solid #F5B5D2}
+html[data-skin="fleet"] .btn-danger:hover{background:#FDE7F1;color:#BE185D;border-color:#F5B5D2;box-shadow:none}
+html[data-skin="fleet"] .btn-sm{padding:6px 12px;border-radius:10px;font-size:12px}
+html[data-skin="fleet"] .aq-btn{background:#FFFFFF;border:1px solid #DCD9EC;color:#1E1B3A;border-radius:11px;padding:7px 13px;font-size:12px;font-weight:700}
+html[data-skin="fleet"] .aq-btn:hover{border-color:#C7C3E0;color:#1E1B3A;background:#F8F7FD}
+html[data-skin="fleet"] .aq-btn-primary{background:#EEF0FF;color:#4F46E5;border-color:#EEF0FF}
+html[data-skin="fleet"] .aq-btn-primary:hover{background:#E0E3FF;color:#3730A3;border-color:#E0E3FF}
+html[data-skin="fleet"] .week-nav-btn{background:#FFFFFF;border:1px solid #DCD9EC;border-radius:10px;color:#4B4870;width:34px;height:34px}
+html[data-skin="fleet"] .week-nav-btn:hover{border-color:#4F46E5;color:#4F46E5}
+html[data-skin="fleet"] .week-nav-btn-today{background:#EEF0FF;color:#4F46E5;border:0;border-radius:10px;height:34px;font-size:12px}
+html[data-skin="fleet"] .week-nav-btn-today:hover{background:#E0E3FF;color:#3730A3}
+html[data-skin="fleet"] .btn-add{background:#FFFFFF;border:1.5px dashed #D4D1E8;border-radius:16px;color:#4B4870;padding:14px;font-weight:700}
+html[data-skin="fleet"] .btn-add:hover{background:#EEF0FF;border-color:#4F46E5;color:#3730A3;border-style:dashed}
+html[data-skin="fleet"] :is(.rm-btn,.send-email-btn,.cancel-email-btn){border-radius:10px;padding:5px 11px;font-weight:700}
+html[data-skin="fleet"] .rm-btn{background:#FFFFFF;border:1px solid #DCD9EC;color:#4B4870}
+html[data-skin="fleet"] .rm-btn:hover{background:#FDE7F1;color:#BE185D;border-color:#F5B5D2}
+html[data-skin="fleet"] .send-email-btn{background:#EEF0FF;border-color:#EEF0FF;color:#4F46E5}
+html[data-skin="fleet"] .send-email-btn:hover:not(:disabled){background:#4F46E5;color:#FFFFFF;border-color:#4F46E5}
+html[data-skin="fleet"] .cancel-email-btn{background:#FDE7F1;border-color:#FDE7F1;color:#BE185D}
+html[data-skin="fleet"] .cancel-email-btn:hover:not(:disabled){background:#BE185D;color:#FFFFFF;border-color:#BE185D}
+html[data-skin="fleet"] .topbar-btn-reset{border-radius:12px}
+
+/* ── 12. INPUTS / SELECTS / FLATPICKR ─────────────────────────────── */
+html[data-skin="fleet"] .field{gap:6px}
+html[data-skin="fleet"] .field label{font-size:12px;letter-spacing:0;text-transform:none;color:#6B6890;font-weight:700}
+html[data-skin="fleet"] :is(.field input,.field select,.field textarea),
+html[data-skin="fleet"] .main :is(input[type="text"],input[type="number"],input[type="email"],input[type="date"],input[type="datetime-local"],input[type="search"],input[type="password"],input:not([type]),select,textarea),
+html[data-skin="fleet"] [id$="-modal"] :is(input[type="text"],input[type="number"],input[type="email"],input[type="password"],input:not([type]),select,textarea){
+  background-color:#FFFFFF;border:1px solid #DCD9EC;color:#1E1B3A;border-radius:14px;box-shadow:none;
+}
+html[data-skin="fleet"] :is(.field input:not([type="checkbox"]):not([type="radio"]),.field select){min-height:46px;padding:0 14px}
+html[data-skin="fleet"] .field textarea{padding:12px 14px}
+html[data-skin="fleet"] :is(input,select,textarea)::placeholder{color:#8A87AD}
+html[data-skin="fleet"] :is(input,select,textarea):hover{border-color:#C7C3E0}
+html[data-skin="fleet"] :is(input,select,textarea):focus{border-color:#4F46E5!important;box-shadow:0 0 0 3px rgba(79,70,229,.18)!important;outline:none}
+html[data-skin="fleet"] :is(.input-cal,.input-with-cal){background:#FFFFFF;border:1px solid #DCD9EC;border-radius:14px;box-shadow:none;min-height:46px}
+html[data-skin="fleet"] .input-cal:focus-within{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.18)}
+html[data-skin="fleet"] :is(.input-cal,.input-with-cal) input{background:transparent!important;border:0!important;min-height:44px}
+html[data-skin="fleet"] .cal-btn:hover{color:#4F46E5}
+html[data-skin="fleet"] input[type="checkbox"],html[data-skin="fleet"] input[type="radio"]{accent-color:#4F46E5}
+html[data-skin="fleet"] .flatpickr-calendar{background:#FFFFFF;border:0;box-shadow:var(--sh-xl);border-radius:18px;font-family:var(--font-ui)}
+html[data-skin="fleet"] .flatpickr-months .flatpickr-month,html[data-skin="fleet"] .flatpickr-weekdays,html[data-skin="fleet"] span.flatpickr-weekday{background:#FFFFFF;color:#1E1B3A;fill:#1E1B3A}
+html[data-skin="fleet"] .flatpickr-current-month{color:#1E1B3A}
+html[data-skin="fleet"] span.flatpickr-weekday{color:#6B6890;font-weight:700}
+html[data-skin="fleet"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month){color:#4B4870;fill:#4B4870}
+html[data-skin="fleet"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month):hover svg{fill:#4F46E5}
+html[data-skin="fleet"] .flatpickr-day{border-radius:10px;color:#1E1B3A}
+html[data-skin="fleet"] .flatpickr-day.today{border-color:#4F46E5}
+html[data-skin="fleet"] :is(.flatpickr-day.selected,.flatpickr-day.startRange,.flatpickr-day.endRange){background:#4F46E5;border-color:#4F46E5;color:#FFFFFF}
+html[data-skin="fleet"] .flatpickr-day.inRange{background:#EEF0FF;border-color:#EEF0FF;box-shadow:-5px 0 0 #EEF0FF,5px 0 0 #EEF0FF}
+
+/* ── 13. MODALS / TOASTS / OVERLAYS ───────────────────────────────── */
+html[data-skin="fleet"] [id$="-modal"]{background:rgba(30,27,58,.45)!important}
+html[data-skin="fleet"] [id$="-modal"] > div{border:0!important;border-radius:24px!important;box-shadow:0 30px 80px rgba(30,27,58,.30)!important}
+html[data-skin="fleet"] [id$="-modal"] button[style*="background:var(--surface"]{background:#FFFFFF!important;border:1px solid #DCD9EC!important;border-radius:12px!important;color:#1E1B3A!important}
+html[data-skin="fleet"] #_archiveModal > div{border:0!important;border-radius:24px!important}
+html[data-skin="fleet"] .toast{background:#FFFFFF;border:0;border-left:4px solid #6B6890;border-radius:16px;color:#1E1B3A;box-shadow:var(--sh-lg);padding:14px 16px}
+html[data-skin="fleet"] .toast-success{border-left-color:#0F766E}
+html[data-skin="fleet"] .toast-success .toast-icon{color:#0F766E}
+html[data-skin="fleet"] .toast-error{border-left-color:#BE185D}
+html[data-skin="fleet"] .toast-info{border-left-color:#4F46E5}
+html[data-skin="fleet"] .toast-warning{border-left-color:#D97706}
+html[data-skin="fleet"] .toast-warning .toast-icon{color:#92400E}
+html[data-skin="fleet"] #print-only-container{background:#fff}
+
+/* ── 14. LOGIN GATE ────────────────────────────────────────────────── */
+html[data-skin="fleet"] #operator-gate{background:linear-gradient(180deg,#1E1B3A 0,#1E1B3A 42%,#F4F3FA 42%,#F4F3FA 100%)}
+html[data-skin="fleet"] #operator-gate > div[style*="pointer-events:none"]{display:none}
+html[data-skin="fleet"] #og-logo-badge{background:#4F46E5;border:0;box-shadow:0 12px 28px rgba(79,70,229,.40);border-radius:20px}
+html[data-skin="fleet"] #og-logo-tagline{color:#9EC3EA;letter-spacing:.2em}
+html[data-skin="fleet"] #og-card{background:#FFFFFF;border:0;border-radius:24px;box-shadow:0 1px 2px rgba(30,27,58,.06),0 24px 56px rgba(30,27,58,.16);padding:32px 30px 28px}
+html[data-skin="fleet"] .og-label{color:#6B6890;letter-spacing:.02em;text-transform:none;font-size:12.5px}
+html[data-skin="fleet"] .og-input{background:#FFFFFF;border:1px solid #DCD9EC;border-radius:14px;box-shadow:none;color:#1E1B3A;min-height:46px}
+html[data-skin="fleet"] .og-input:focus{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.18)}
+html[data-skin="fleet"] #og-error{background:#FDE7F1;color:#BE185D;border:0;border-radius:14px;box-shadow:none}
+html[data-skin="fleet"] #og-submit-btn{border-radius:14px;min-height:48px;font-weight:800;letter-spacing:.02em}
+html[data-skin="fleet"] #og-submit-btn:hover{transform:none}
+html[data-skin="fleet"] #og-footer-hint,html[data-skin="fleet"] #og-horizon-label{color:#6B6890}
+
+/* ── 15. INLINE-STYLED FILLS in JS templates ───────────────────────────
+   Solid status fills with white text become tinted pills (same meaning).
+   Scoped to the app shell and modals only — never off-screen export
+   containers. */
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--green)"],[style*="background:var(--teal)"]){background:#E6FAF6!important;color:#0F766E!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--red)"]{background:#FDE7F1!important;color:#BE185D!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--amber)"]{background:#FEF3C7!important;color:#92400E!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--azure)"],[style*="background: var(--azure)"]){background:#EEF0FF!important;color:#4F46E5!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]{background:#4F46E5!important;border:0!important;color:#FFFFFF!important;border-radius:12px!important;box-shadow:0 8px 20px rgba(79,70,229,.30)!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]:hover{background:#4338CA!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"]) div[style*="linear-gradient(135deg,var(--ink-solid)"]{background:#1E1B3A!important}
+html[data-skin="fleet"] .main table tr[style*="linear-gradient(135deg,var(--ink-solid)"],
+html[data-skin="fleet"] .main table tr[style*="linear-gradient(135deg,var(--ink-solid)"] th{background:#F8F7FD!important;color:#6B6890!important}
+html[data-skin="fleet"] input[type="file"]::file-selector-button{background:#FFFFFF;color:#1E1B3A;border:1px solid #DCD9EC;border-radius:10px;padding:7px 12px;margin-right:10px;font:inherit;font-weight:700;cursor:pointer}
+
+/* ── 17. FLEET COLOUR SPECIFICS (after the shared rules above) ─────── */
+/* Cards: bigger radius, no borders, one soft shadow */
+html[data-skin="fleet"] :is(.card,.chart-card){border-radius:26px;padding:24px 26px}
+html[data-skin="fleet"] :is(.card-title,.chart-title){color:#1E1B3A;font-size:19px;font-weight:800;letter-spacing:-.015em}
+html[data-skin="fleet"] :is(.card-subtitle,.chart-subtitle){color:#6B6890;font-size:13px}
+html[data-skin="fleet"] :is(.vcard,.bcard,.ci-card){border-radius:22px}
+html[data-skin="fleet"] .vcard-num{color:#3730A3;background:#EEF0FF;font-family:var(--font-num)!important}
+html[data-skin="fleet"] .vcard-num.barge{color:#0F766E;background:#E6FAF6}
+html[data-skin="fleet"] :is(.rbt,.progress-track){background:#F0EEF8}
+
+/* Tables: lavender header, soft row rules */
+html[data-skin="fleet"] :is(.tbl-wrap,.voy-wrap){border-radius:24px}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) th{background:#F8F7FD;color:#6B6890;font-weight:700}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) td{border-bottom:1px solid #F0EEF8;color:#1E1B3A}
+html[data-skin="fleet"] :is(.data-tbl,.voy-tbl,.cl-tbl) tbody tr:hover td{background:#FAF9FE}
+
+/* Status pills (colour on tint) */
+html[data-skin="fleet"] :is(.badge,.stag,.tb,.cat,.pt-tag){font-weight:700;letter-spacing:.02em}
+html[data-skin="fleet"] :is(.badge-green,.badge-teal,.st-ok,.tb-ok,.tb-on,.lc-box.ok,.nsc-ok,.send-email-btn.sent){background:#E6FAF6;color:#0F766E}
+html[data-skin="fleet"] :is(.badge-azure,.st-early,.tb-early,.lc-box.early,.travel-notice,.etc-prev){background:#EEF0FF;color:#4338CA}
+html[data-skin="fleet"] :is(.badge-red,.st-dl,.tb-dl,.tb-wv,.cat-v,.lc-box.late,.nsc-warn){background:#FDE7F1;color:#BE185D}
+html[data-skin="fleet"] :is(.badge-amber,.tb-pt,.tb-wm,.cat-m,.pt-tag,.lc-box.warn,.dl-note){background:#FEF3C7;color:#92400E}
+html[data-skin="fleet"] .badge-slate{background:#F4F3FA;color:#4B4870}
+html[data-skin="fleet"] .badge-dual .v{background:#EEF0FF;color:#3730A3}
+html[data-skin="fleet"] .badge-dual .m{background:#E6FAF6;color:#0F766E}
+html[data-skin="fleet"] .alert-strip{border-radius:18px;padding:14px 18px;font-size:13px}
+html[data-skin="fleet"] :is(.alert-strip.info,.alert-strip.early){background:#EEF0FF;color:#4338CA}
+html[data-skin="fleet"] .apanel{border-radius:22px}
+
+/* Buttons: ink primary pill, white secondary pill, indigo accents */
+html[data-skin="fleet"] .btn{border-radius:999px;font-weight:700;font-size:13px;padding:9px 18px}
+html[data-skin="fleet"] .btn-primary,
+html[data-skin="fleet"] .btn-generate,
+html[data-skin="fleet"] #og-submit-btn{background:#1E1B3A;color:#FFFFFF;border:0;box-shadow:none}
+html[data-skin="fleet"] .btn-primary:hover,
+html[data-skin="fleet"] .btn-generate:hover,
+html[data-skin="fleet"] #og-submit-btn:hover{background:#2E2A55;color:#FFFFFF;box-shadow:0 10px 22px rgba(30,27,58,.18)}
+html[data-skin="fleet"] .btn-primary:not(.btn-sm),
+html[data-skin="fleet"] .btn-lg{min-height:46px;padding:0 22px;border-radius:999px}
+html[data-skin="fleet"] .btn-primary.btn-sm{box-shadow:none;min-height:40px;padding:0 18px}
+html[data-skin="fleet"] .btn-generate{border-radius:999px;min-height:52px;font-size:14.5px}
+html[data-skin="fleet"] .btn-secondary{background:#FFFFFF;color:#1E1B3A;border:1px solid #E6E4F2}
+html[data-skin="fleet"] .btn-secondary.btn-sm{min-height:40px;padding:0 16px}
+html[data-skin="fleet"] .btn-secondary:hover{color:#1E1B3A;border-color:#D4D1E8;background:#F8F7FD}
+html[data-skin="fleet"] .btn-ghost{background:#F4F3FA;color:#4B4870;border:0}
+html[data-skin="fleet"] .btn-ghost:hover{background:#ECEAF5;color:#1E1B3A}
+html[data-skin="fleet"] .btn-success{background:#0F766E;color:#FFFFFF}
+html[data-skin="fleet"] .btn-success:hover{background:#115E59;box-shadow:none}
+html[data-skin="fleet"] .btn-danger{color:#BE185D;border-color:#F5B5D2}
+html[data-skin="fleet"] .btn-sm{border-radius:999px;padding:6px 14px}
+html[data-skin="fleet"] :is(.aq-btn,.rm-btn,.send-email-btn,.cancel-email-btn,.week-nav-btn,.week-nav-btn-today){border-radius:999px}
+html[data-skin="fleet"] .aq-btn-primary{background:#EEF0FF;color:#3730A3;border-color:#EEF0FF}
+html[data-skin="fleet"] .week-nav-btn-today{background:#EEF0FF;color:#3730A3;padding:0 14px}
+html[data-skin="fleet"] .week-nav-btn-today:hover{background:#E0E3FF;color:#3730A3}
+html[data-skin="fleet"] .btn-add{border-radius:22px}
+html[data-skin="fleet"] .btn-add:hover{background:#EEF0FF;border-color:#4F46E5;color:#3730A3}
+html[data-skin="fleet"] .barge-tl-tab{border-radius:999px;color:#4B4870;box-shadow:none;border:1px solid #E6E4F2}
+html[data-skin="fleet"] .barge-tl-tab.active{background:#1E1B3A;color:#FFFFFF;border-color:#1E1B3A}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]{background:#1E1B3A!important;border-radius:999px!important;box-shadow:none!important}
+html[data-skin="fleet"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]:hover{background:#2E2A55!important}
+html[data-skin="fleet"] [id$="-modal"] button[style*="background:var(--surface"]{border-radius:999px!important;border-color:#E6E4F2!important;color:#1E1B3A!important}
+
+/* Inputs: soft lavender fields, indigo focus */
+html[data-skin="fleet"] :is(.field input,.field select,.field textarea),
+html[data-skin="fleet"] .main :is(input[type="text"],input[type="number"],input[type="email"],input[type="date"],input[type="datetime-local"],input[type="search"],input[type="password"],input:not([type]),select,textarea),
+html[data-skin="fleet"] [id$="-modal"] :is(input[type="text"],input[type="number"],input[type="email"],input[type="password"],input:not([type]),select,textarea){border-color:#DCD9EC;border-radius:14px;color:#1E1B3A}
+html[data-skin="fleet"] :is(input,select,textarea):focus{border-color:#4F46E5!important;box-shadow:0 0 0 3px rgba(79,70,229,.18)!important}
+html[data-skin="fleet"] .flatpickr-calendar{border-radius:22px}
+html[data-skin="fleet"] :is(.flatpickr-day.selected,.flatpickr-day.startRange,.flatpickr-day.endRange){background:#4F46E5;border-color:#4F46E5}
+
+/* Weekly calendar tickets → solid status fills (white text);
+   loading tickets → butter yellow with dark amber text. */
+html[data-skin="fleet"] #week-calendar > div{border:0!important;border-radius:20px!important;background:#F8F7FD!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"]{
+  background:#0F766E!important;border:0!important;border-radius:12px!important;color:#FFFFFF;
+  --ink:#FFFFFF; --muted:rgba(255,255,255,.92); --sub:#FFFFFF; --fuel-v:#FFFFFF; --fuel-m:#FFFFFF; --purple:#FFFFFF; --border2:rgba(255,255,255,.28);
+  --azure:#FFFFFF; --teal:#FFFFFF; --amber:#FFFFFF; --green:#FFFFFF;
+}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"]:has(span[style*="background:var(--red)"]){background:#BE185D!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"]:has(span[style*="background:var(--teal)"]){background:#4F46E5!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"] span[style*="background:var(--red)"]{background:#FFFFFF!important;color:#BE185D!important;border-radius:999px!important;padding:1px 6px!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"] span[style*="background:var(--teal)"]{background:#FFFFFF!important;color:#4338CA!important;border-radius:999px!important;padding:1px 6px!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"] span[style*="margin-left:auto"]{border-color:rgba(255,255,255,.7)!important;border-radius:999px!important}
+html[data-skin="fleet"] #week-calendar div[style*="border-left:3px solid"]:hover{filter:brightness(1.08)}
+html[data-skin="fleet"] .cal-ticket-loading{background:#FDE68A!important;border:0!important;border-radius:12px!important}
+html[data-skin="fleet"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#78350F!important}
+html[data-skin="fleet"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(120,53,15,.45)!important;border-radius:999px!important}
+html[data-skin="fleet"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(120,53,15,.2)!important}
+
+/* Action queue card heading */
+html[data-skin="fleet"] #dash-action-queue > div{border-radius:26px!important}
+html[data-skin="fleet"] #dash-action-queue > div > div:first-child > span{font-size:19px!important;color:#1E1B3A!important}
+
+/* Toasts */
+html[data-skin="fleet"] .toast{border-radius:18px}
+
+/* Modals */
+html[data-skin="fleet"] [id$="-modal"] > div{border-radius:28px!important;box-shadow:0 30px 80px rgba(30,27,58,.28)!important}
+html[data-skin="fleet"] #_archiveModal > div{border-radius:28px!important}
+
+/* Login gate: lavender ground, white card, indigo badge */
+html[data-skin="fleet"] #operator-gate{background:#F4F3FA}
+html[data-skin="fleet"] #og-logo-badge{background:#4F46E5;box-shadow:0 14px 30px rgba(79,70,229,.30);border-radius:22px}
+html[data-skin="fleet"] #og-logo-tagline{color:#6B6890}
+html[data-skin="fleet"] #og-card{border-radius:28px;box-shadow:0 10px 30px rgba(30,27,58,.08)}
+html[data-skin="fleet"] .og-input{border-color:#DCD9EC}
+html[data-skin="fleet"] .og-input:focus{border-color:#4F46E5;box-shadow:0 0 0 3px rgba(79,70,229,.18)}
+html[data-skin="fleet"] #og-submit-btn{border-radius:999px}
+
+/* Numbers in Space Mono */
+html[data-skin="fleet"] :is(.kpi-value,.scard span){letter-spacing:-.02em}
+
+/* ── 16. MOBILE ────────────────────────────────────────────────────── */
+@media (max-width:768px){
+  html[data-skin="fleet"] .topbar{height:auto;padding:10px 12px;row-gap:10px}
+  html[data-skin="fleet"] .skin-toggle-btn{width:40px;padding:0;justify-content:center}
+  html[data-skin="fleet"] .skin-toggle-btn :is(.skin-toggle-label,.skin-toggle-caret){display:none}
+  html[data-skin="fleet"] .sidebar{background:#FFFFFF;box-shadow:24px 0 60px rgba(30,27,58,.22);width:276px;border-top-right-radius:28px;border-bottom-right-radius:28px}
+  html[data-skin="fleet"] .sidebar-item{min-height:46px;font-size:15px}
+  html[data-skin="fleet"] .page{padding:20px 16px 32px}
+  html[data-skin="fleet"] .page-title{font-size:24px}
+  html[data-skin="fleet"] #page-dashboard .page-title{font-size:30px}
+  html[data-skin="fleet"] :is(.card,.chart-card){padding:18px 16px;border-radius:22px}
+  html[data-skin="fleet"] :is(.vcard,.bcard,.ci-card){padding:16px 14px;border-radius:20px}
+  html[data-skin="fleet"] .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  html[data-skin="fleet"] .kpi-chip{padding:16px 16px 46px;border-radius:22px;gap:8px 6px;background-size:100% 30px;background-position:left 0 bottom 10px}
+  html[data-skin="fleet"] .kpi-chip-value{font-size:24px}
+  html[data-skin="fleet"] .kpi-chip-icon{width:28px;height:28px;border-radius:10px}
+  html[data-skin="fleet"] .kpi-chip-label{font-size:12.5px}
+  html[data-skin="fleet"] .kpi-card{padding:16px}
+  html[data-skin="fleet"] .kpi-value{font-size:22px}
+  html[data-skin="fleet"] .qa-btn{flex:1 1 auto;justify-content:center}
+  html[data-skin="fleet"] [id$="-modal"] > div{border-radius:22px!important}
 }
 } /* end @media screen */
 </style>
@@ -2458,10 +3112,18 @@ function flowWelcomeGo(pageId) {
         </button>
       </div>
     </div>
-    <button id="skin-toggle-btn" onclick="toggleSkin()" class="skin-toggle-btn" aria-label="Switch look" title="Switch look">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
-      <span id="skin-toggle-label">New look</span>
-    </button>
+    <div id="skin-menu-wrap" class="skin-menu-wrap">
+      <button type="button" id="skin-toggle-btn" onclick="toggleSkinMenu(event)" class="skin-toggle-btn" aria-haspopup="true" aria-expanded="false" aria-controls="skin-menu" aria-label="Look: Fleet Colour" title="Change look">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
+        <span id="skin-toggle-label" class="skin-toggle-label">Fleet Colour</span>
+        <svg class="skin-toggle-caret" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div id="skin-menu" class="skin-menu" role="menu" aria-label="Look" hidden>
+        <button type="button" role="menuitemradio" aria-checked="false" class="skin-menu-item" data-skin-opt="fleet" onclick="setSkin('fleet')"><span class="skin-menu-swatch" aria-hidden="true"></span>Fleet Colour</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="skin-menu-item" data-skin-opt="harbour" onclick="setSkin('harbour')"><span class="skin-menu-swatch" aria-hidden="true"></span>Harbour Light</button>
+        <button type="button" role="menuitemradio" aria-checked="false" class="skin-menu-item" data-skin-opt="classic" onclick="setSkin('classic')"><span class="skin-menu-swatch" aria-hidden="true"></span>Classic</button>
+      </div>
+    </div>
     <button id="theme-toggle-btn" onclick="toggleColorTheme()" aria-label="Toggle light / dark theme" title="Toggle light / dark theme" class="theme-toggle-btn">
       <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.94" y2="5.94"/><line x1="18.06" y1="18.06" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.94" y2="18.06"/><line x1="18.06" y1="5.94" x2="19.78" y2="4.22"/></svg>
       <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -4414,30 +5076,37 @@ function toggleColorTheme() {
 }
 document.addEventListener('DOMContentLoaded', _syncThemeIcon);
 
-/* ── HARBOUR LIGHT / CLASSIC SKIN SWITCH ─────────────────────────────
-   Purely visual. Harbour is light-only (forces data-theme="light", hides
-   the light/dark toggle); Classic restores the original look and the
+/* ── LOOK SWITCH: FLEET COLOUR / HARBOUR LIGHT / CLASSIC ─────────────
+   Purely visual. Fleet and Harbour are light-only (force data-theme="light",
+   hide the light/dark toggle); Classic restores the original look and the
    visitor's own saved light/dark choice. Persisted per device in
-   localStorage 'flow-skin'. To drop the Harbour skin entirely remove this,
-   the #skin-toggle-btn, the skin-harbour style block, the #dash-hero
-   markup + _renderDashHero(), and the 'flow-skin' lines in the <head>
-   script — everything else falls back to Classic by itself. ── */
+   localStorage 'flow-skin'. The "Look" button (#skin-toggle-btn) opens a
+   tiny menu (#skin-menu) of real buttons: arrow keys move, Escape closes
+   and returns focus. To drop a skin remove its <style id="skin-…"> block
+   and its entry here and in the <head> script — everything else falls back
+   to Classic by itself. ── */
+var _SKIN_NAMES = { fleet: 'Fleet Colour', harbour: 'Harbour Light', classic: 'Classic' };
+var _SKIN_ORDER = ['fleet', 'harbour', 'classic'];
 function _syncSkinUI() {
-  var harbour = _isPremiumSkin();
+  var skin = _skinName();
+  var name = _SKIN_NAMES[skin];
   var lbl = document.getElementById('skin-toggle-label');
   var btn = document.getElementById('skin-toggle-btn');
-  var t = harbour ? 'Classic look' : 'New look';
-  if (lbl) lbl.textContent = t;
-  if (btn) { btn.title = 'Switch to the ' + t; btn.setAttribute('aria-label', 'Switch to the ' + t); }
+  if (lbl) lbl.textContent = name;
+  if (btn) { btn.title = 'Change look (now: ' + name + ')'; btn.setAttribute('aria-label', 'Look: ' + name); }
+  document.querySelectorAll('#skin-menu [data-skin-opt]').forEach(function(b) {
+    b.setAttribute('aria-checked', b.getAttribute('data-skin-opt') === skin ? 'true' : 'false');
+  });
   var tm = document.querySelector('meta[name="theme-color"]');
-  if (tm) tm.setAttribute('content', harbour ? '#0B2545' : '#0F1E30');
+  if (tm) tm.setAttribute('content', skin === 'harbour' ? '#0B2545' : skin === 'fleet' ? '#FFFFFF' : '#0F1E30');
 }
-function toggleSkin() {
+function setSkin(next) {
+  if (!_SKIN_NAMES[next]) next = 'fleet';
   var html = document.documentElement;
-  var next = _isPremiumSkin() ? 'classic' : 'harbour';
+  closeSkinMenu(true);
   html.setAttribute('data-skin', next);
   try { localStorage.setItem('flow-skin', next); } catch(e) {}
-  if (next === 'harbour') {
+  if (next !== 'classic') {
     html.setAttribute('data-theme', 'light');
   } else {
     var saved = null;
@@ -4454,6 +5123,49 @@ function toggleSkin() {
   } catch(e) { /* charts/data not ready yet — safe to ignore */ }
   if (typeof _flowWelcomeApplyTheme === 'function') _flowWelcomeApplyTheme();
 }
+/* Kept for older callers: steps to the next look in menu order. */
+function toggleSkin() {
+  setSkin(_SKIN_ORDER[(_SKIN_ORDER.indexOf(_skinName()) + 1) % _SKIN_ORDER.length]);
+}
+function _skinMenuItems() { return Array.prototype.slice.call(document.querySelectorAll('#skin-menu .skin-menu-item')); }
+function openSkinMenu(focusFirst) {
+  var menu = document.getElementById('skin-menu'), btn = document.getElementById('skin-toggle-btn');
+  if (!menu || !btn) return;
+  _syncSkinUI();
+  menu.hidden = false;
+  btn.setAttribute('aria-expanded', 'true');
+  var items = _skinMenuItems();
+  var cur = items.filter(function(b) { return b.getAttribute('aria-checked') === 'true'; })[0] || items[0];
+  if (focusFirst !== false && cur) cur.focus();
+}
+function closeSkinMenu(silent) {
+  var menu = document.getElementById('skin-menu'), btn = document.getElementById('skin-toggle-btn');
+  if (!menu || menu.hidden) return;
+  var hadFocus = menu.contains(document.activeElement);
+  menu.hidden = true;
+  if (btn) { btn.setAttribute('aria-expanded', 'false'); if (hadFocus || silent) { try { btn.focus(); } catch(e) {} } }
+}
+function toggleSkinMenu(evt) {
+  if (evt && evt.stopPropagation) evt.stopPropagation();
+  var menu = document.getElementById('skin-menu');
+  if (!menu) return;
+  if (menu.hidden) openSkinMenu(); else closeSkinMenu(true);
+}
+document.addEventListener('click', function(evt) {
+  var wrap = document.getElementById('skin-menu-wrap');
+  if (wrap && !wrap.contains(evt.target)) closeSkinMenu();
+});
+document.addEventListener('keydown', function(e) {
+  var menu = document.getElementById('skin-menu');
+  if (!menu || menu.hidden) return;
+  var items = _skinMenuItems(), i = items.indexOf(document.activeElement);
+  if (e.key === 'Escape') { e.preventDefault(); closeSkinMenu(true); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); items[(i + 1) % items.length].focus(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); items[(i - 1 + items.length) % items.length].focus(); }
+  else if (e.key === 'Home') { e.preventDefault(); items[0].focus(); }
+  else if (e.key === 'End') { e.preventDefault(); items[items.length - 1].focus(); }
+  else if (e.key === 'Tab') { menu.hidden = true; var sb = document.getElementById('skin-toggle-btn'); if (sb) sb.setAttribute('aria-expanded', 'false'); }
+});
 document.addEventListener('DOMContentLoaded', _syncSkinUI);
 
 /* ── GLOBAL VESSEL SEARCH ──────────────────────────────────────────
