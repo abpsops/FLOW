@@ -18,11 +18,22 @@
     var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+  /* Skin: 'premium' (default, dark-only) or 'classic' (the original look,
+     with its own light/dark toggle). Premium forces data-theme="dark" so all
+     existing dark-aware JS (charts, welcome screen) treats it as dark. */
+  try{
+    var skin = localStorage.getItem('flow-skin') === 'classic' ? 'classic' : 'premium';
+    document.documentElement.setAttribute('data-skin', skin);
+    if (skin === 'premium') document.documentElement.setAttribute('data-theme', 'dark');
+  }catch(e){
+    document.documentElement.setAttribute('data-skin','premium');
+    document.documentElement.setAttribute('data-theme','dark');
+  }
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
 <!-- Exact version + SRI: a floating @2 tag would run whatever jsdelivr serves next with full access to the session. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
@@ -85,12 +96,22 @@ function _isScheduleItemCompleted(item) {
    give it colors that hold legible contrast on both a white and a near-black
    canvas, and re-apply whenever the theme toggle flips. Individual charts
    still override these per-dataset colors (fuel-v/fuel-m/etc.) as before. */
+/* Premium skin helpers: _isPremiumSkin() and _skinPal(c), which maps the
+   classic chart colours to the premium palette (brass + steel blue) only
+   while the Premium skin is active — Classic gets its exact colours back. */
+function _isPremiumSkin() { return document.documentElement.getAttribute('data-skin') === 'premium'; }
+function _skinPal(c) {
+  if (!_isPremiumSkin() || typeof c !== 'string') return c;
+  if (c === '#fff' || c === '#ffffff') return '#0B1424';
+  return c.replace(/^rgba\((47,111,237|37,99,235|14,122,155),/, 'rgba(212,166,87,')
+          .replace(/^rgba\((255,122,26|249,115,22),/, 'rgba(127,167,217,');
+}
 function _applyChartJsTheme() {
   if (typeof Chart === 'undefined') return;
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  var textColor = dark ? '#C8D6E8' : '#47617D';
+  var textColor = _isPremiumSkin() ? '#8D9AAE' : (dark ? '#C8D6E8' : '#47617D');
   Chart.defaults.color = textColor;
-  Chart.defaults.borderColor = dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)';
+  Chart.defaults.borderColor = _isPremiumSkin() ? '#172338' : (dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)');
   Chart.defaults.font.family = "'DM Sans', sans-serif";
   // Chart.defaults.color alone doesn't reliably reach the legend plugin's own
   // nested default in every Chart.js code path — set it explicitly too so
@@ -119,6 +140,7 @@ document.addEventListener('keydown', function(e) {
    above, since some Chart.js legend configs don't reliably fall back to
    the global default. */
 function _chartTextColor() {
+  if (_isPremiumSkin()) return '#8D9AAE';
   return document.documentElement.getAttribute('data-theme') === 'dark' ? '#C8D6E8' : '#47617D';
 }
 </script>
@@ -1303,6 +1325,419 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   box-shadow: none;
 }
 </style>
+<style id="skin-premium">
+/* ═══════════════════════════════════════════════════════════════════════
+   PREMIUM SKIN — delete this block + the skin toggle to remove
+   (the toggle = #skin-toggle-btn in the topbar, toggleSkin()/_syncSkinUI()
+   next to toggleColorTheme(), the 'flow-skin' lines in the <head> script,
+   and _isPremiumSkin()/_skinPal()/_skinWrapH2C() — all of which fall back
+   to the Classic look when data-skin is not "premium").
+   "Maritime night": deep navy ground, hairline panels, one brass accent.
+   Everything is scoped to html[data-skin="premium"] and to screen media,
+   so Classic (light + dark) and all print output are untouched.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* Skin switch button — shared by both skins (Classic look styled like the
+   neighbouring theme toggle). */
+.skin-toggle-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;
+  height:30px;padding:0 11px;border-radius:999px;
+  background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.30);
+  color:#fff;cursor:pointer;transition:all .15s;white-space:nowrap;
+  font-size:11px;font-weight:700;letter-spacing:.02em;font-family:inherit;
+}
+.skin-toggle-btn:hover{background:rgba(255,255,255,.24);border-color:#fff}
+@media print{ .skin-toggle-btn{display:none!important} }
+
+@media screen {
+
+/* ── 1. TOKENS ─────────────────────────────────────────────────────── */
+html[data-skin="premium"]{
+  --navy:#070D18; --navy2:#0A1220; --ink:#F4EFE4; --ink-solid:#16233A;
+  --azure:#D4A657; --azure-lt:rgba(212,166,87,.12); --azure-bd:rgba(212,166,87,.36); --azure-dk:#E2C27E;
+  --teal:#6FD0C2; --teal-lt:#0F2826; --teal-bd:rgba(111,208,194,.30);
+  --amber:#E2C27E; --amber-lt:#2A2112; --amber-bd:rgba(226,194,126,.32);
+  --red:#F08A8A; --red-lt:#2A1418; --red-lt2:rgba(240,138,138,.26); --red-bd:#4A1F27;
+  --green:#6FD0C2; --green-lt:#0F2826; --green-lt2:rgba(111,208,194,.24); --green-bd:rgba(111,208,194,.30);
+  --purple:#B3A6EA; --purple-lt:rgba(179,166,234,.12); --purple-bd:rgba(179,166,234,.32); --slate:#8D9AAE;
+  --fuel-v:#D4A657; --fuel-v-lt:rgba(212,166,87,.12); --fuel-v-bd:rgba(212,166,87,.34);
+  --fuel-m:#7FA7D9; --fuel-m-lt:rgba(127,167,217,.12); --fuel-m-bd:rgba(127,167,217,.34);
+  --pg-dashboard:#D4A657; --pg-nominations:#D4A657; --pg-schedule:#D4A657; --pg-loading:#D4A657;
+  --pg-timeline:#D4A657; --pg-alerts:#D4A657; --pg-bargefleet:#D4A657; --pg-availability:#D4A657;
+  --pg-agents:#D4A657; --pg-reports:#D4A657; --pg-commandcenter:#D4A657; --pg-checklist:#D4A657;
+  --pg-records:#D4A657; --pg-deliverylog:#8D9AAE; --pg-archives:#D4A657; --pg-trash:#D4A657;
+  --pg-bargetracking:#1E6F66;
+  --bg:#070D18; --surface:#0B1424; --surface2:#0E182B; --surface3:#132038;
+  --border:#172338; --border2:#131E31;
+  --text:#ECE6D8; --sub:#AEB9C9; --muted:#8D9AAE; --faint:#6F7C91;
+  --overlay:rgba(3,7,14,.74);
+  --radius:18px; --radius-sm:12px; --radius-xs:10px;
+  --sh-xs:none; --sh-sm:none;
+  --sh-md:0 10px 30px rgba(0,0,0,.35);
+  --sh-lg:0 18px 48px rgba(0,0,0,.5), 0 0 0 1px #172338;
+  --sh-xl:0 24px 64px rgba(0,0,0,.6), 0 0 0 1px #172338;
+  --sh-in-xs:none; --sh-in-sm:none;
+  --glow-azure:0 0 0 3px rgba(212,166,87,.18); --glow-green:0 0 0 3px rgba(111,208,194,.18);
+  --fuel-v-bg:rgba(212,166,87,.08); --fuel-m-bg:rgba(127,167,217,.08);
+  --sidebar-w:236px;
+  --font-ui:'Manrope',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-num:'JetBrains Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:dark;
+}
+
+/* ── 2. TYPE ───────────────────────────────────────────────────────── */
+html[data-skin="premium"] body{background:#070D18;color:var(--text);font-family:var(--font-ui);font-size:13.5px;letter-spacing:.005em}
+html[data-skin="premium"] body *{font-family:inherit}
+html[data-skin="premium"] [style*="DM Sans"]{font-family:var(--font-ui)!important}
+html[data-skin="premium"] :is([style*="DM Mono"],[style*="DM+Mono"],.kpi-value,.kpi-chip-value,.sync-msg,.topbar-app-sub,.vcard-num,.etc-prev,.formula-strip,.tmi span,.rbv,.sno,.lc-rng,.rec-meta,.activity-time,.aq-tag,.data-tbl .num,.data-tbl .mono,.scard span,#og-horizon-label,pre,code){
+  font-family:var(--font-num)!important;font-variant-numeric:tabular-nums;
+}
+html[data-skin="premium"] ::selection{background:rgba(212,166,87,.32);color:#F4EFE4}
+html[data-skin="premium"] ::-webkit-scrollbar{width:8px;height:8px}
+html[data-skin="premium"] ::-webkit-scrollbar-thumb{background:#1C2A42;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+html[data-skin="premium"] [role="button"][tabindex]:focus-visible,
+html[data-skin="premium"] :is(button,a,.btn):focus-visible{outline:2px solid #D4A657;outline-offset:2px}
+
+/* ── 3. HEADER (sync bar + topbar) ─────────────────────────────────── */
+html[data-skin="premium"] #app-header{background:#070D18}
+html[data-skin="premium"] .sync-banner{background:#070D18;border-bottom:1px solid #121C2E}
+html[data-skin="premium"] .sync-msg{color:#6F7C91;font-size:10px}
+html[data-skin="premium"] .sync-dot{background:#6FD0C2}
+html[data-skin="premium"] .sync-dot.syncing{background:#E2C27E}
+html[data-skin="premium"] .sync-dot.error{background:#F08A8A}
+html[data-skin="premium"] .sync-btn{background:transparent;border:1px solid #253552;color:#AEB9C9;border-radius:999px;padding:2px 11px}
+html[data-skin="premium"] .sync-btn:hover{border-color:#D4A657;color:#E2C27E;background:transparent}
+html[data-skin="premium"] .topbar{background:#0A1220;border-bottom:1px solid #172338;box-shadow:none;height:60px;padding:0 20px}
+html[data-skin="premium"] .topbar-section-label{color:#8D9AAE;font-size:10px;letter-spacing:.18em}
+html[data-skin="premium"] .topbar-page-title{color:#F4EFE4;font-size:14px;font-weight:800}
+html[data-skin="premium"] .topbar-page-sub{color:#8D9AAE}
+html[data-skin="premium"] #topbar-page-info{border-left:1px solid #172338}
+html[data-skin="premium"] .topbar > div[style*="width:1px"]{background:#172338!important}
+html[data-skin="premium"] .hamburger,
+html[data-skin="premium"] #global-alerts-btn,
+html[data-skin="premium"] #topbar-menu-btn{
+  width:36px!important;height:36px!important;border-radius:12px!important;
+  background:transparent!important;border:1px solid #253552!important;color:#C9D3E2!important;
+}
+html[data-skin="premium"] .hamburger:hover,
+html[data-skin="premium"] #global-alerts-btn:hover,
+html[data-skin="premium"] #topbar-menu-btn:hover{border-color:#D4A657!important;color:#E2C27E!important}
+html[data-skin="premium"] #global-alerts-badge{background:#F08A8A!important;color:#1A0F12!important;border-color:#0A1220!important}
+html[data-skin="premium"] #global-search-input{
+  background:#0E182B!important;border:1px solid #172338!important;border-radius:12px!important;
+  color:#ECE6D8!important;height:38px;
+}
+html[data-skin="premium"] #global-search-input::placeholder{color:#6F7C91}
+html[data-skin="premium"] #global-search-input:focus{border-color:#D4A657!important;box-shadow:0 0 0 3px rgba(212,166,87,.16)}
+html[data-skin="premium"] #live-clock{border-left-color:#172338!important}
+html[data-skin="premium"] #live-clock-time{color:#F4EFE4!important;font-weight:600!important}
+html[data-skin="premium"] #live-clock-date{color:#8D9AAE!important}
+html[data-skin="premium"] #theme-toggle-btn{display:none!important}
+html[data-skin="premium"] .skin-toggle-btn{
+  height:36px;padding:0 14px;background:transparent;border:1px solid #253552;color:#E2C27E;
+  font-size:11.5px;letter-spacing:.04em;
+}
+html[data-skin="premium"] .skin-toggle-btn:hover{border-color:#D4A657;background:rgba(212,166,87,.08)}
+html[data-skin="premium"] .topbar-menu-item{color:#ECE6D8;border-radius:10px}
+html[data-skin="premium"] .topbar-menu-item:hover{background:#0E182B}
+html[data-skin="premium"] #topbar-menu-dropdown,
+html[data-skin="premium"] #global-alerts-dropdown,
+html[data-skin="premium"] #global-search-results{background:#0B1424!important;border:1px solid #172338!important;border-radius:14px!important}
+
+/* ── 4. SIDEBAR ────────────────────────────────────────────────────── */
+html[data-skin="premium"] .sidebar{background:#0A1220;border-right:1px solid #172338;padding:8px 0 16px}
+html[data-skin="premium"] .sidebar-section-label{font-size:10.5px;letter-spacing:.18em;color:#6F7C91;padding:18px 22px 8px}
+html[data-skin="premium"] .sidebar-item{
+  color:#AEB9C9;font-weight:600;font-size:13px;padding:9px 14px;margin:2px 10px;
+  border-radius:12px;border-left:0;
+}
+html[data-skin="premium"] .sidebar-item:hover{background:#0E182B;color:#ECE6D8}
+html[data-skin="premium"] .sidebar-item.active{
+  background:rgba(212,166,87,.10);color:#E2C27E;border-left:0;font-weight:700;
+  box-shadow:inset 0 0 0 1px rgba(212,166,87,.22);
+}
+html[data-skin="premium"] .sidebar-item.active .sidebar-icon{color:#D4A657;opacity:1}
+html[data-skin="premium"] .sidebar-icon{opacity:.7}
+html[data-skin="premium"] .sidebar-badge{background:#D4A657;color:#1A1407;border-radius:999px;padding:1px 7px;font-family:var(--font-num)}
+html[data-skin="premium"] .sidebar-badge.amber{background:#2A2112;color:#E2C27E;box-shadow:inset 0 0 0 1px rgba(226,194,126,.32)}
+html[data-skin="premium"] .sidebar-badge.red{background:#2A1418;color:#F08A8A;box-shadow:inset 0 0 0 1px #4A1F27}
+html[data-skin="premium"] .sidebar-divider{background:#172338;margin:10px 22px}
+
+/* ── 5. PAGE FRAME ─────────────────────────────────────────────────── */
+html[data-skin="premium"] .main{background:#070D18}
+html[data-skin="premium"] .page{padding:28px 32px 40px}
+html[data-skin="premium"] .page-title{color:#F4EFE4!important;font-size:24px;font-weight:800;letter-spacing:-.025em;margin-bottom:4px}
+html[data-skin="premium"] .page-subtitle{color:#8D9AAE;font-size:12.5px}
+html[data-skin="premium"] .page-header-row{border-bottom:1px solid #172338;padding-bottom:20px;margin-bottom:24px}
+html[data-skin="premium"] .sec-hdr{margin:28px 0 12px}
+html[data-skin="premium"] .sec-label,
+html[data-skin="premium"] .slabel{font-size:11px;letter-spacing:.16em;color:#8D9AAE;font-weight:700}
+html[data-skin="premium"] .sec-label::before{width:6px;height:6px;border-radius:999px;background:#D4A657}
+html[data-skin="premium"] .hint{color:#8D9AAE}
+
+/* ── 6. KPI — joined strip with hairline dividers ─────────────────── */
+html[data-skin="premium"] .kpi-grid{gap:0;background:#0B1424;border:1px solid #172338;border-radius:18px;overflow:hidden;margin-bottom:20px}
+html[data-skin="premium"] .kpi-grid > .kpi-card{border:0!important;border-radius:0;box-shadow:inset 1px 0 0 #172338,inset 0 1px 0 #172338!important;margin:-1px 0 0 -1px;transform:none!important}
+html[data-skin="premium"] .kpi-card,
+html[data-skin="premium"] :is(.kpi-azure,.kpi-teal,.kpi-amber,.kpi-red,.kpi-green,.kpi-ink,.kpi-fuelv,.kpi-fuelm){background:#0B1424;padding:20px 22px}
+html[data-skin="premium"] .kpi-card::before{display:none}
+html[data-skin="premium"] .kpi-card:hover{border-color:#172338;box-shadow:none;transform:none;background:#0D1729}
+html[data-skin="premium"] .kpi-label{font-size:10.5px;letter-spacing:.16em;color:#8D9AAE;margin-bottom:12px}
+html[data-skin="premium"] .kpi-value{font-size:26px;font-weight:600;letter-spacing:-.02em}
+html[data-skin="premium"] .kpi-sub{color:#6F7C91;font-size:11px}
+html[data-skin="premium"] .kpi-card-icon{background:#0E182B!important;border-radius:10px}
+html[data-skin="premium"] .kpi-ink .kpi-value{color:#F4EFE4}
+html[data-skin="premium"] .kpi-strip{gap:0;background:#0B1424;border:1px solid #172338;border-radius:18px;overflow:hidden;margin-bottom:20px}
+html[data-skin="premium"] .kpi-chip{background:#0B1424;border:0;border-radius:0;box-shadow:inset 1px 0 0 #172338,inset 0 1px 0 #172338;margin:-1px 0 0 -1px;padding:16px 14px;gap:10px}
+html[data-skin="premium"] .kpi-chip:hover{background:#0D1729;box-shadow:inset 1px 0 0 #172338,inset 0 1px 0 #172338;transform:none}
+html[data-skin="premium"] .kpi-chip-icon{width:32px;height:32px;border-radius:10px;background:#0E182B!important}
+html[data-skin="premium"] .kpi-chip-value{font-size:17px;font-weight:600;color:#F4EFE4}
+html[data-skin="premium"] .kpi-chip-label{font-size:10px;letter-spacing:.1em;color:#8D9AAE;white-space:normal;line-height:1.3}
+html[data-skin="premium"] .scard{background:#0B1424;border-color:#172338}
+html[data-skin="premium"] .scard::before{display:none}
+
+/* ── 7. CARDS & PANELS ─────────────────────────────────────────────── */
+html[data-skin="premium"] :is(.card,.chart-card,.ci-card,.vcard,.bcard,.tlc,.nsc-result,.legend){
+  background:#0B1424;border:1px solid #172338;box-shadow:none;
+}
+html[data-skin="premium"] :is(.card,.chart-card){border-radius:18px;padding:22px 24px;margin-bottom:16px}
+html[data-skin="premium"] :is(.vcard,.bcard,.ci-card){border-radius:18px;padding:20px 22px;margin-bottom:12px}
+html[data-skin="premium"] :is(.vcard,.bcard,.tlc,.rec-row):hover{border-color:#22324D;box-shadow:none}
+html[data-skin="premium"] :is(.vcard-hdr,.bcard-hdr){border-bottom-color:#172338;padding-bottom:12px;margin-bottom:14px}
+html[data-skin="premium"] :is(.card-title,.chart-title){color:#F4EFE4;font-size:14px;font-weight:700;letter-spacing:-.005em}
+html[data-skin="premium"] :is(.card-subtitle,.chart-subtitle){color:#8D9AAE}
+html[data-skin="premium"] .vcard-num{color:#E2C27E;background:rgba(212,166,87,.10);border-color:rgba(212,166,87,.30);border-radius:999px;padding:2px 10px}
+html[data-skin="premium"] .vcard-num.barge{color:#6FD0C2;background:#0F2826;border-color:rgba(111,208,194,.3)}
+html[data-skin="premium"] .rec-row{background:#0B1424;border-color:#172338;border-radius:14px;padding:12px 16px}
+html[data-skin="premium"] .formula-strip{background:#0E182B;border-color:#172338;color:#C9D3E2;border-radius:12px}
+html[data-skin="premium"] .tmi{background:#0E182B;border-color:#172338;border-radius:10px}
+html[data-skin="premium"] .tmi label{color:#8D9AAE;letter-spacing:.14em}
+html[data-skin="premium"] :is(.rbt,.progress-track){background:#0E182B;border:0;height:6px;border-radius:999px}
+html[data-skin="premium"] .progress-fill,.rbf{border-radius:999px}
+html[data-skin="premium"] .tld{box-shadow:0 0 0 3px #070D18,0 0 0 4px #172338}
+html[data-skin="premium"] .tll{background:#172338}
+html[data-skin="premium"] .activity-item{border-bottom-color:#131E31;padding:12px 0}
+html[data-skin="premium"] .aq-row{border-bottom-color:#131E31;padding:14px 18px}
+html[data-skin="premium"] .aq-name{color:#F4EFE4}
+html[data-skin="premium"] .aq-tag{border-radius:999px;padding:3px 9px}
+html[data-skin="premium"] .barge-tl-tabs{background:transparent;border-bottom-color:#172338}
+html[data-skin="premium"] .barge-tl-tab{color:#8D9AAE;font-weight:700}
+html[data-skin="premium"] .barge-tl-tab.active{color:#E2C27E;border-bottom-color:#D4A657}
+html[data-skin="premium"] .barge-tl-tab:hover:not(.active){background:transparent;color:#ECE6D8}
+
+/* Alert strips & refuel panels: dark tinted panels, coloured text */
+html[data-skin="premium"] .alert-strip{border-radius:14px;padding:12px 16px;border:1px solid;font-weight:600;margin-bottom:10px}
+html[data-skin="premium"] .alert-strip.critical{background:#1A0F12;border-color:#4A1F27;color:#F08A8A}
+html[data-skin="premium"] .alert-strip.warning{background:#1D1810;border-color:#3D3018;color:#E2C27E}
+html[data-skin="premium"] .alert-strip.info{background:#131F38;border-color:#22345A;color:#9DB8F2}
+html[data-skin="premium"] .alert-strip.early{background:#131F38;border-color:#22345A;color:#9DB8F2}
+html[data-skin="premium"] .alert-strip[onclick]:hover{filter:none;border-color:currentColor}
+html[data-skin="premium"] .apanel{border-radius:18px;padding:18px 20px}
+html[data-skin="premium"] .apanel.fired{background:#1A0F12;border-color:#4A1F27}
+html[data-skin="premium"] .apanel.clear{background:#0F2826;border-color:rgba(111,208,194,.26)}
+html[data-skin="premium"] .apanel.fired :is(.apt,.arow){color:#F08A8A}
+html[data-skin="premium"] .apanel.clear :is(.apt,.arow){color:#6FD0C2}
+html[data-skin="premium"] .apanel .arow{border-top-color:rgba(255,255,255,.07)}
+html[data-skin="premium"] .apanel.fired .apdot{background:#F08A8A}
+html[data-skin="premium"] .apanel.clear .apdot{background:#6FD0C2}
+html[data-skin="premium"] .apanel .snum{background:rgba(255,255,255,.08)}
+html[data-skin="premium"] .apanel.fired .snum{color:#F08A8A}
+html[data-skin="premium"] .apanel.clear .snum{color:#6FD0C2}
+
+/* ── 8. TABLES ─────────────────────────────────────────────────────── */
+html[data-skin="premium"] :is(.tbl-wrap,.voy-wrap){background:#0B1424;border:1px solid #172338;border-radius:18px;box-shadow:none}
+html[data-skin="premium"] :is(.data-tbl,.voy-tbl,.cl-tbl){background:transparent}
+html[data-skin="premium"] :is(.data-tbl,.voy-tbl) thead{background:#0E182B}
+html[data-skin="premium"] :is(.data-tbl,.voy-tbl,.cl-tbl) th{
+  background:#0E182B;color:#8D9AAE;font-size:10px;letter-spacing:.14em;font-weight:700;
+  padding:12px 14px;border-bottom:1px solid #172338;
+}
+html[data-skin="premium"] :is(.data-tbl,.voy-tbl,.cl-tbl) td{border-bottom:1px solid #131E31;color:#ECE6D8;padding:12px 14px}
+html[data-skin="premium"] :is(.data-tbl,.voy-tbl,.cl-tbl) tbody tr:hover td{background:rgba(212,166,87,.035)}
+html[data-skin="premium"] .main table thead[style*="background:var(--navy)"],
+html[data-skin="premium"] .main table thead tr[style*="background:var(--navy)"],
+html[data-skin="premium"] .main table th[style*="background:var(--navy)"],
+html[data-skin="premium"] .main table th[style*="background:var(--ink"]{background:#0E182B!important;color:#8D9AAE!important}
+html[data-skin="premium"] .sno{color:#6F7C91}
+
+/* ── 9. STATUS: badges / tags — pills, one meaning per colour ─────── */
+html[data-skin="premium"] :is(.badge,.stag,.tb,.cat,.pt-tag){border-radius:999px;padding:3px 10px;font-size:10px;letter-spacing:.08em;font-weight:700}
+/* on-laycan / OK → teal */
+html[data-skin="premium"] :is(.badge-green,.badge-teal,.st-ok,.tb-ok,.tb-on,.lc-box.ok,.nsc-ok,.send-email-btn.sent){background:#0F2826;color:#6FD0C2;border-color:rgba(111,208,194,.30)}
+/* before laycan → blue */
+html[data-skin="premium"] :is(.badge-azure,.st-early,.tb-early,.lc-box.early,.travel-notice){background:#131F38;color:#9DB8F2;border-color:#22345A}
+/* delayed / critical → red */
+html[data-skin="premium"] :is(.badge-red,.st-dl,.tb-dl,.tb-wv,.cat-v,.lc-box.late,.nsc-warn){background:#2A1418;color:#F08A8A;border-color:#4A1F27}
+/* pending / loading → amber */
+html[data-skin="premium"] :is(.badge-amber,.tb-pt,.tb-wm,.cat-m,.pt-tag,.lc-box.warn,.dl-note){background:#2A2112;color:#E2C27E;border-color:rgba(226,194,126,.30)}
+html[data-skin="premium"] .badge-slate{background:#0E182B;color:#AEB9C9;border-color:#172338}
+html[data-skin="premium"] .badge-purple{border-color:rgba(179,166,234,.32)}
+html[data-skin="premium"] .lc-rng.in{color:#6FD0C2}
+html[data-skin="premium"] .lc-rng.out{color:#F08A8A}
+html[data-skin="premium"] .badge-dual{border-radius:999px;border-color:#172338}
+html[data-skin="premium"] .badge-dual .v{background:rgba(212,166,87,.12);color:#D4A657}
+html[data-skin="premium"] .badge-dual .m{background:rgba(127,167,217,.12);color:#7FA7D9}
+html[data-skin="premium"] :is(.lc-box,.etc-prev,.dl-note,.travel-notice,.nsc-ok,.nsc-warn){border-radius:12px}
+html[data-skin="premium"] .etc-prev{background:#0E182B;border-color:#172338;color:#C9D3E2}
+
+/* ── 10. BUTTONS ───────────────────────────────────────────────────── */
+html[data-skin="premium"] .btn{border-radius:12px;font-weight:700;letter-spacing:.01em;padding:9px 16px;transition:background .15s,border-color .15s,color .15s}
+html[data-skin="premium"] .btn:hover{transform:none!important;box-shadow:none!important}
+html[data-skin="premium"] .btn-primary,
+html[data-skin="premium"] .btn-generate,
+html[data-skin="premium"] .aq-btn-primary,
+html[data-skin="premium"] .week-nav-btn-today,
+html[data-skin="premium"] #og-submit-btn{background:#D4A657;color:#1A1407;border:1px solid #D4A657}
+html[data-skin="premium"] .btn-primary:hover,
+html[data-skin="premium"] .btn-generate:hover,
+html[data-skin="premium"] .aq-btn-primary:hover,
+html[data-skin="premium"] .week-nav-btn-today:hover,
+html[data-skin="premium"] #og-submit-btn:hover{background:#E2C27E;border-color:#E2C27E;color:#1A1407;box-shadow:none}
+html[data-skin="premium"] .btn-primary:not(.btn-sm),
+html[data-skin="premium"] .btn-generate,
+html[data-skin="premium"] .btn-lg{min-height:44px}
+html[data-skin="premium"] .btn-generate{border-radius:14px;font-weight:800}
+html[data-skin="premium"] .btn-generate svg{opacity:1}
+html[data-skin="premium"] :is(.btn-secondary,.btn-ghost){background:transparent;color:#C9D3E2;border:1px solid #253552}
+html[data-skin="premium"] :is(.btn-secondary,.btn-ghost):hover{color:#E2C27E;border-color:#D4A657;background:rgba(212,166,87,.06)}
+html[data-skin="premium"] .btn-success{background:#0F2826;color:#6FD0C2;border:1px solid rgba(111,208,194,.34)}
+html[data-skin="premium"] .btn-success:hover{background:#133430}
+html[data-skin="premium"] .btn-danger{background:transparent;color:#F08A8A;border:1px solid #4A1F27}
+html[data-skin="premium"] .btn-danger:hover{background:#2A1418;color:#F08A8A}
+html[data-skin="premium"] .btn-sm{padding:6px 12px;border-radius:10px}
+html[data-skin="premium"] .qa-btn{
+  background:#0B1424;color:#ECE6D8;border:1px solid #172338;border-radius:14px;padding:12px 18px;font-weight:700;min-height:44px;
+}
+html[data-skin="premium"] .qa-btn svg{color:#D4A657}
+html[data-skin="premium"] .qa-btn:first-child{background:#D4A657;color:#1A1407;border-color:#D4A657}
+html[data-skin="premium"] .qa-btn:first-child svg{color:#1A1407}
+html[data-skin="premium"] .qa-btn:hover{filter:none;transform:none;box-shadow:none;border-color:#D4A657}
+html[data-skin="premium"] .qa-btn:first-child:hover{background:#E2C27E}
+html[data-skin="premium"] .aq-btn{background:transparent;border:1px solid #253552;color:#C9D3E2;border-radius:10px;padding:6px 12px}
+html[data-skin="premium"] .aq-btn:hover{border-color:#D4A657;color:#E2C27E}
+html[data-skin="premium"] .week-nav-btn{background:transparent;border:1px solid #253552;border-radius:10px;color:#C9D3E2}
+html[data-skin="premium"] .week-nav-btn:hover{border-color:#D4A657;color:#E2C27E}
+html[data-skin="premium"] .week-nav-btn-today{border-radius:10px}
+html[data-skin="premium"] .btn-add{background:transparent;border:1px dashed #253552;border-radius:14px;color:#8D9AAE;padding:12px}
+html[data-skin="premium"] .btn-add:hover{background:rgba(212,166,87,.06);border-color:#D4A657;color:#E2C27E}
+html[data-skin="premium"] :is(.rm-btn,.send-email-btn,.cancel-email-btn){border-radius:10px;padding:5px 11px}
+html[data-skin="premium"] .rm-btn{background:transparent;border-color:#253552;color:#AEB9C9}
+html[data-skin="premium"] .rm-btn:hover{background:#2A1418;color:#F08A8A;border-color:#4A1F27}
+html[data-skin="premium"] .send-email-btn{background:rgba(212,166,87,.10);border-color:rgba(212,166,87,.32);color:#E2C27E}
+html[data-skin="premium"] .send-email-btn:hover:not(:disabled){background:#D4A657;color:#1A1407;border-color:#D4A657}
+html[data-skin="premium"] .cancel-email-btn{background:#2A1418;border-color:#4A1F27}
+html[data-skin="premium"] .cancel-email-btn:hover:not(:disabled){background:#3A1A20;color:#F08A8A;border-color:#4A1F27}
+html[data-skin="premium"] .topbar-btn-reset{border-radius:12px}
+
+/* ── 11. INPUTS / SELECTS / FLATPICKR ─────────────────────────────── */
+html[data-skin="premium"] .field{gap:6px}
+html[data-skin="premium"] .field label{font-size:10.5px;letter-spacing:.14em;color:#8D9AAE;font-weight:700}
+html[data-skin="premium"] :is(.field input,.field select,.field textarea),
+html[data-skin="premium"] .main :is(input[type="text"],input[type="number"],input[type="email"],input[type="date"],input[type="datetime-local"],input[type="search"],input:not([type]),select,textarea),
+html[data-skin="premium"] [id$="-modal"] :is(input[type="text"],input[type="number"],input[type="email"],input:not([type]),select,textarea){
+  background-color:#0E182B;border-color:#172338;color:#ECE6D8;border-radius:12px;box-shadow:none;
+}
+html[data-skin="premium"] :is(.field input,.field select){min-height:40px}
+html[data-skin="premium"] :is(input,select,textarea)::placeholder{color:#6F7C91}
+html[data-skin="premium"] :is(input,select,textarea):hover{border-color:#22324D}
+html[data-skin="premium"] :is(input,select,textarea):focus{border-color:#D4A657!important;box-shadow:0 0 0 3px rgba(212,166,87,.16)!important;outline:none}
+html[data-skin="premium"] :is(.input-cal,.input-with-cal){background:#0E182B;border-color:#172338;border-radius:12px;box-shadow:none}
+html[data-skin="premium"] .input-cal:focus-within{border-color:#D4A657;box-shadow:0 0 0 3px rgba(212,166,87,.16)}
+html[data-skin="premium"] .input-cal input{background:transparent!important}
+html[data-skin="premium"] select option{background:#0E182B;color:#ECE6D8}
+html[data-skin="premium"] input[type="checkbox"],html[data-skin="premium"] input[type="radio"]{accent-color:#D4A657}
+html[data-skin="premium"] .flatpickr-calendar{background:#0B1424;border:1px solid #172338;box-shadow:0 24px 64px rgba(0,0,0,.6);border-radius:16px}
+html[data-skin="premium"] .flatpickr-calendar.arrowTop:after{border-bottom-color:#0E182B}
+html[data-skin="premium"] .flatpickr-calendar.arrowBottom:after{border-top-color:#0B1424}
+html[data-skin="premium"] .flatpickr-calendar:before{border-bottom-color:#172338}
+html[data-skin="premium"] .flatpickr-months .flatpickr-month,html[data-skin="premium"] .flatpickr-weekdays,html[data-skin="premium"] span.flatpickr-weekday{background:#0E182B;color:#ECE6D8;fill:#ECE6D8}
+html[data-skin="premium"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month){color:#C9D3E2;fill:#C9D3E2}
+html[data-skin="premium"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month):hover svg{fill:#D4A657}
+html[data-skin="premium"] .flatpickr-current-month .flatpickr-monthDropdown-months{background:#0E182B;color:#ECE6D8}
+html[data-skin="premium"] span.flatpickr-weekday{color:#8D9AAE}
+html[data-skin="premium"] .flatpickr-day{color:#ECE6D8;border-radius:10px}
+html[data-skin="premium"] .flatpickr-day:hover{background:#132038;border-color:#132038}
+html[data-skin="premium"] :is(.flatpickr-day.prevMonthDay,.flatpickr-day.nextMonthDay,.flatpickr-day.flatpickr-disabled){color:#4A586E}
+html[data-skin="premium"] .flatpickr-day.today{border-color:#D4A657}
+html[data-skin="premium"] :is(.flatpickr-day.selected,.flatpickr-day.startRange,.flatpickr-day.endRange){background:#D4A657;border-color:#D4A657;color:#1A1407}
+html[data-skin="premium"] .flatpickr-time{border-top-color:#172338}
+html[data-skin="premium"] .flatpickr-time :is(input,.flatpickr-am-pm,.flatpickr-time-separator){color:#ECE6D8;background:#0B1424}
+html[data-skin="premium"] .flatpickr-time :is(input,.flatpickr-am-pm):hover{background:#132038}
+html[data-skin="premium"] .numInputWrapper span.arrowUp:after{border-bottom-color:#C9D3E2}
+html[data-skin="premium"] .numInputWrapper span.arrowDown:after{border-top-color:#C9D3E2}
+
+/* ── 12. MODALS / TOASTS / OVERLAYS ───────────────────────────────── */
+html[data-skin="premium"] [id$="-modal"]{background:rgba(3,7,14,.74)!important}
+html[data-skin="premium"] [id$="-modal"] > div{border:1px solid #172338!important;border-radius:20px!important;box-shadow:0 30px 80px rgba(0,0,0,.6)!important}
+html[data-skin="premium"] [id$="-modal"] > div[style*="background:var(--surface)"],
+html[data-skin="premium"] [id$="-modal"] > div[style*="background:#fff"],
+html[data-skin="premium"] [id$="-modal"] > div[style*="background: #fff"]{background:#0B1424!important}
+html[data-skin="premium"] [id$="-modal"] button[style*="background:var(--surface"]{background:transparent!important;border:1px solid #253552!important;border-radius:12px!important;color:#C9D3E2!important}
+html[data-skin="premium"] #_archiveModal > div{background:#0B1424!important;border:1px solid #172338!important;border-radius:20px!important}
+html[data-skin="premium"] .toast{background:#0E182B;border:1px solid #172338;border-left:3px solid #8D9AAE;border-radius:14px;color:#ECE6D8;box-shadow:0 18px 48px rgba(0,0,0,.5);padding:14px 16px}
+html[data-skin="premium"] .toast-success{border-left-color:#6FD0C2}
+html[data-skin="premium"] .toast-error{border-left-color:#F08A8A}
+html[data-skin="premium"] .toast-info{border-left-color:#9DB8F2}
+html[data-skin="premium"] .toast-info .toast-icon{color:#9DB8F2}
+html[data-skin="premium"] .toast-warning{border-left-color:#E2C27E}
+html[data-skin="premium"] #flow-welcome-overlay{background:radial-gradient(1200px 600px at 50% 110%,#0E1A2E 0%,#070D18 60%)!important}
+html[data-skin="premium"] #flow-welcome-btn{background:#D4A657!important;color:#1A1407!important;border-color:#D4A657!important;border-radius:12px!important}
+html[data-skin="premium"] #print-only-container{background:#fff}
+
+/* ── 13. LOGIN GATE ────────────────────────────────────────────────── */
+html[data-skin="premium"] #operator-gate{background:radial-gradient(900px 520px at 50% -10%,#0F1A2E 0%,#070D18 62%)}
+html[data-skin="premium"] #operator-gate > div[style*="pointer-events:none"]{display:none}
+html[data-skin="premium"] #og-logo-badge{background:#0B1424;border:1px solid #172338;box-shadow:none;border-radius:18px}
+html[data-skin="premium"] #og-logo-tagline{color:#8D9AAE;letter-spacing:.24em}
+html[data-skin="premium"] #og-card{background:#0B1424;border:1px solid #172338;border-radius:20px;box-shadow:0 30px 80px rgba(0,0,0,.45);padding:32px 30px 28px}
+html[data-skin="premium"] .og-label{color:#8D9AAE;letter-spacing:.16em}
+html[data-skin="premium"] .og-input{background:#0E182B;border:1px solid #172338;border-radius:12px;box-shadow:none;color:#ECE6D8;min-height:46px}
+html[data-skin="premium"] .og-input:focus{border-color:#D4A657;box-shadow:0 0 0 3px rgba(212,166,87,.16)}
+html[data-skin="premium"] #og-error{background:#1A0F12;color:#F08A8A;border:1px solid #4A1F27;border-radius:12px;box-shadow:none}
+html[data-skin="premium"] #og-submit-btn{border-radius:12px;min-height:46px;font-weight:800;letter-spacing:.04em;box-shadow:none}
+html[data-skin="premium"] #og-submit-btn:hover{transform:none}
+html[data-skin="premium"] #og-footer-hint,html[data-skin="premium"] #og-horizon-label{color:#6F7C91}
+
+/* ── 14. MOBILE ────────────────────────────────────────────────────── */
+@media (max-width:768px){
+  html[data-skin="premium"] .topbar{height:auto;padding:10px 12px;row-gap:10px}
+  html[data-skin="premium"] .topbar > div:last-child > button{width:38px;height:36px;border-radius:12px}
+  html[data-skin="premium"] .skin-toggle-btn{padding:0!important}
+  html[data-skin="premium"] .sidebar{background:#0A1220;border-right:1px solid #172338;box-shadow:24px 0 60px rgba(0,0,0,.55)}
+  html[data-skin="premium"] .sidebar-item{padding:12px 16px;font-size:14px}
+  html[data-skin="premium"] .page{padding:20px 16px 32px}
+  html[data-skin="premium"] .page-title{font-size:21px}
+  html[data-skin="premium"] :is(.card,.chart-card){padding:18px 16px;border-radius:16px}
+  html[data-skin="premium"] :is(.vcard,.bcard,.ci-card){padding:16px 14px;border-radius:16px}
+  html[data-skin="premium"] .kpi-chip{min-width:46%;padding:14px}
+  html[data-skin="premium"] .kpi-card{padding:16px}
+  html[data-skin="premium"] .kpi-value{font-size:22px}
+  html[data-skin="premium"] .qa-btn{flex:1 1 auto;justify-content:center}
+  html[data-skin="premium"] [id$="-modal"] > div{border-radius:18px!important}
+}
+@media (max-width:430px){
+  html[data-skin="premium"] .page{padding:18px 14px 28px}
+  html[data-skin="premium"] .btn{min-height:40px}
+}
+
+/* ── 15. INLINE-STYLED FILLS in JS templates ───────────────────────────
+   Solid status fills with white text become tinted pills (same meaning,
+   readable on navy); brass fills get dark text. Scoped to the app shell
+   and modals only — never off-screen export containers. */
+html[data-skin="premium"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--green)"],[style*="background:var(--teal)"]){background:#0F2826!important;color:#6FD0C2!important;box-shadow:inset 0 0 0 1px rgba(111,208,194,.32)}
+html[data-skin="premium"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--red)"]{background:#2A1418!important;color:#F08A8A!important;box-shadow:inset 0 0 0 1px #4A1F27}
+html[data-skin="premium"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--amber)"]{background:#2A2112!important;color:#E2C27E!important;box-shadow:inset 0 0 0 1px rgba(226,194,126,.32)}
+html[data-skin="premium"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--azure)"],[style*="background:var(--azure-dk)"],[style*="background: var(--azure)"]){color:#1A1407!important}
+html[data-skin="premium"] .cal-ticket-loading{background:#2A2112!important;border-color:rgba(226,194,126,.38)!important;border-radius:10px!important}
+html[data-skin="premium"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#E2C27E!important}
+html[data-skin="premium"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(226,194,126,.45)!important}
+
+html[data-skin="premium"] :is(.layout,[id$="-modal"]) button[style*="linear-gradient"]{background:#0E182B!important;border:1px solid #253552!important;color:#ECE6D8!important;border-radius:12px!important;box-shadow:none!important}
+html[data-skin="premium"] :is(.layout,[id$="-modal"]) button[style*="linear-gradient"]:hover{border-color:#D4A657!important;color:#E2C27E!important}
+html[data-skin="premium"] input[type="file"]{color:#AEB9C9}
+html[data-skin="premium"] input[type="file"]::file-selector-button{background:transparent;color:#C9D3E2;border:1px solid #253552;border-radius:10px;padding:6px 12px;margin-right:10px;font:inherit;font-weight:700;cursor:pointer}
+} /* end @media screen */
+</style>
 </head>
 <!-- ═══════════════════════════════════════════════════════
      BODY — SYNC BANNER + TOPBAR + SIDEBAR + PAGES
@@ -1935,6 +2370,10 @@ function flowWelcomeGo(pageId) {
         </button>
       </div>
     </div>
+    <button id="skin-toggle-btn" onclick="toggleSkin()" class="skin-toggle-btn" aria-label="Switch look" title="Switch look">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
+      <span id="skin-toggle-label">Premium look</span>
+    </button>
     <button id="theme-toggle-btn" onclick="toggleColorTheme()" aria-label="Toggle light / dark theme" title="Toggle light / dark theme" class="theme-toggle-btn">
       <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.94" y2="5.94"/><line x1="18.06" y1="18.06" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.94" y2="18.06"/><line x1="18.06" y1="5.94" x2="19.78" y2="4.22"/></svg>
       <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -3866,6 +4305,46 @@ function toggleColorTheme() {
 }
 document.addEventListener('DOMContentLoaded', _syncThemeIcon);
 
+/* ── PREMIUM / CLASSIC SKIN SWITCH ───────────────────────────────────
+   Purely visual. Premium is dark-only (forces data-theme="dark", hides the
+   light/dark toggle); Classic restores the original look and the visitor's
+   own saved light/dark choice. Persisted per device in localStorage
+   'flow-skin'. Remove this + the #skin-toggle-btn + the skin-premium style block
+   to drop the Premium skin entirely. ── */
+function _syncSkinUI() {
+  var premium = _isPremiumSkin();
+  var lbl = document.getElementById('skin-toggle-label');
+  var btn = document.getElementById('skin-toggle-btn');
+  var t = premium ? 'Classic look' : 'Premium look';
+  if (lbl) lbl.textContent = t;
+  if (btn) { btn.title = 'Switch to the ' + t; btn.setAttribute('aria-label', 'Switch to the ' + t); }
+  var tm = document.querySelector('meta[name="theme-color"]');
+  if (tm) tm.setAttribute('content', premium ? '#070D18' : '#0F1E30');
+}
+function toggleSkin() {
+  var html = document.documentElement;
+  var next = _isPremiumSkin() ? 'classic' : 'premium';
+  html.setAttribute('data-skin', next);
+  try { localStorage.setItem('flow-skin', next); } catch(e) {}
+  if (next === 'premium') {
+    html.setAttribute('data-theme', 'dark');
+  } else {
+    var saved = null;
+    try { saved = localStorage.getItem('flow-theme'); } catch(e) {}
+    html.setAttribute('data-theme', saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  }
+  _syncThemeIcon();
+  _syncSkinUI();
+  try {
+    if (typeof _applyChartJsTheme === 'function') _applyChartJsTheme();
+    if (typeof _savedSupplies !== 'undefined' && typeof renderReportCharts === 'function') renderReportCharts(_savedSupplies);
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+    if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+  } catch(e) { /* charts/data not ready yet — safe to ignore */ }
+  if (typeof _flowWelcomeApplyTheme === 'function') _flowWelcomeApplyTheme();
+}
+document.addEventListener('DOMContentLoaded', _syncSkinUI);
+
 /* ── GLOBAL VESSEL SEARCH ──────────────────────────────────────────
    Searches across the three places a vessel name lives — live
    Nomination cards (DOM inputs), the generated Schedule (_lastSched),
@@ -4542,7 +5021,7 @@ function renderDashCharts(records, vessels) {
     }
 
     const _fdTextColor = _chartTextColor();
-    const _fdColors = ['rgba(47,111,237,.85)','rgba(255,122,26,.78)'];
+    const _fdColors = [_skinPal('rgba(47,111,237,.85)'),_skinPal('rgba(255,122,26,.78)')];
     function _buildFuelDonut(key, canvasId, vVal, mVal) {
       const ctx = document.getElementById(canvasId);
       if (!ctx) return;
@@ -4552,7 +5031,7 @@ function renderDashCharts(records, vessels) {
         type: 'doughnut',
         data: {
           labels: ['VLSFO', 'LSMGO'],
-          datasets: [{ data:[rv, rm], backgroundColor:_fdColors, borderWidth:2, borderColor:'#fff', hoverOffset:8 }]
+          datasets: [{ data:[rv, rm], backgroundColor:_fdColors, borderWidth:2, borderColor:_skinPal('#fff'), hoverOffset:8 }]
         },
         options: {
           responsive:true, maintainAspectRatio:false, cutout:'66%',
@@ -4743,8 +5222,8 @@ function renderReportCharts(records) {
       data:{
         labels: labels.length?labels:['No data'],
         datasets:[
-          {label:'VLSFO (MT)',data:labels.map(k=>buckets[k].v),backgroundColor:'rgba(47,111,237,.78)',borderRadius:5,borderSkipped:false},
-          {label:'LSMGO (MT)',data:labels.map(k=>buckets[k].m),backgroundColor:'rgba(255,122,26,.68)',borderRadius:5,borderSkipped:false}
+          {label:'VLSFO (MT)',data:labels.map(k=>buckets[k].v),backgroundColor:_skinPal('rgba(47,111,237,.78)'),borderRadius:5,borderSkipped:false},
+          {label:'LSMGO (MT)',data:labels.map(k=>buckets[k].m),backgroundColor:_skinPal('rgba(255,122,26,.68)'),borderRadius:5,borderSkipped:false}
         ]
       },
       options:{
@@ -4777,8 +5256,8 @@ function renderReportCharts(records) {
       data: {
         labels: bLabels.length ? bLabels : ['No data'],
         datasets: [
-          { label:'VLSFO (MT)', data: bLabels.map(k=>bargeBuckets[k].v), backgroundColor:'rgba(47,111,237,.82)', borderRadius:5, borderSkipped:false },
-          { label:'LSMGO (MT)', data: bLabels.map(k=>bargeBuckets[k].m), backgroundColor:'rgba(255,122,26,.75)', borderRadius:5, borderSkipped:false }
+          { label:'VLSFO (MT)', data: bLabels.map(k=>bargeBuckets[k].v), backgroundColor:_skinPal('rgba(47,111,237,.82)'), borderRadius:5, borderSkipped:false },
+          { label:'LSMGO (MT)', data: bLabels.map(k=>bargeBuckets[k].m), backgroundColor:_skinPal('rgba(255,122,26,.75)'), borderRadius:5, borderSkipped:false }
         ]
       },
       options: {
@@ -4812,8 +5291,8 @@ function renderReportCharts(records) {
       data:{
         labels:sorted.map(x=>x[0]),
         datasets:[
-          {label:'VLSFO (MT)',data:sorted.map(x=>x[1].v),backgroundColor:'rgba(47,111,237,.8)',borderRadius:4,borderSkipped:false,stack:'s'},
-          {label:'LSMGO (MT)',data:sorted.map(x=>x[1].m),backgroundColor:'rgba(255,122,26,.72)',borderRadius:4,borderSkipped:false,stack:'s'}
+          {label:'VLSFO (MT)',data:sorted.map(x=>x[1].v),backgroundColor:_skinPal('rgba(47,111,237,.8)'),borderRadius:4,borderSkipped:false,stack:'s'},
+          {label:'LSMGO (MT)',data:sorted.map(x=>x[1].m),backgroundColor:_skinPal('rgba(255,122,26,.72)'),borderRadius:4,borderSkipped:false,stack:'s'}
         ]
       },
       options:{
@@ -4853,7 +5332,7 @@ function renderReportCharts(records) {
         datasets:[{
           label:'Vessel Count',
           data,
-          backgroundColor:'rgba(14,122,155,.82)',
+          backgroundColor:_skinPal('rgba(14,122,155,.82)'),
           borderRadius:6,
           borderSkipped:false
         }]
@@ -9299,12 +9778,27 @@ function renderRemainingSupplyTracker(){
    totals — to a canvas at 2x scale for crisp text, then triggers a
    PNG file download. Nothing about the tracker's own data or layout
    changes; this only captures exactly what's already shown. ─────── */
+/* Image/PDF exports always render in the Classic light look: under the
+   Premium skin the cloned document html2canvas paints from is switched back
+   to classic + light, so generated files are unchanged by the skin. */
+function _skinWrapH2C(fn) {
+  if (!fn || !_isPremiumSkin()) return fn;
+  return function(el, opts) {
+    var o = Object.assign({}, opts || {}), prev = o.onclone;
+    o.onclone = function(doc) {
+      doc.documentElement.setAttribute('data-skin', 'classic');
+      doc.documentElement.setAttribute('data-theme', 'light');
+      if (typeof prev === 'function') return prev.apply(this, arguments);
+    };
+    return fn(el, o);
+  };
+}
 async function _loadHtml2Canvas() {
-  if (typeof html2canvas !== 'undefined') return html2canvas;
+  if (typeof html2canvas !== 'undefined') return _skinWrapH2C(html2canvas);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    s.onload = () => resolve(window.html2canvas);
+    s.onload = () => resolve(_skinWrapH2C(window.html2canvas));
     s.onerror = () => reject(new Error('Could not load the image export library. Check your internet connection.'));
     document.head.appendChild(s);
   });
@@ -10139,15 +10633,15 @@ function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, o
       datasets: [
         {
           label: 'FO / VLSFO (MT)', data: foData,
-          borderColor: 'rgba(37,99,235,1)',
-          backgroundColor: isLine ? 'rgba(37,99,235,.14)' : 'rgba(37,99,235,.8)',
+          borderColor: _skinPal('rgba(37,99,235,1)'),
+          backgroundColor: _skinPal(isLine ? 'rgba(37,99,235,.14)' : 'rgba(37,99,235,.8)'),
           fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
           borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
         },
         {
           label: 'MGO / LSMGO (MT)', data: mgoData,
-          borderColor: 'rgba(249,115,22,1)',
-          backgroundColor: isLine ? 'rgba(249,115,22,.14)' : 'rgba(249,115,22,.75)',
+          borderColor: _skinPal('rgba(249,115,22,1)'),
+          backgroundColor: _skinPal(isLine ? 'rgba(249,115,22,.14)' : 'rgba(249,115,22,.75)'),
           fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
           borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
         }
