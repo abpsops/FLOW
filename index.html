@@ -38,6 +38,22 @@
 <script defer src="https://cdn.jsdelivr.net/npm/@capacitor/filesystem@6/dist/plugin.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/@capacitor/share@6/dist/plugin.js"></script>
 <script>
+/* esc(): the ONE HTML-escape helper for the whole app. Every value that came
+   from user input, a file import, or the shared cloud workspace (vessel names,
+   remarks, agents, barge names, notes…) MUST go through esc() before it is put
+   into innerHTML or a template string — including attribute values, which is
+   why quotes are escaped too. Without it, a vessel name like
+   <img src=x onerror=…> runs as code in every operator's browser. */
+function esc(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+/* escJs(): for a value placed inside a single-quoted JS string literal that is
+   itself inside a double-quoted HTML attribute, e.g. onclick="fn('${escJs(x)}')". */
+function escJs(s) {
+  return esc(String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, '\\n'));
+}
 /* Chart.js renders to <canvas>, so it can't read our CSS variables directly —
    give it colors that hold legible contrast on both a white and a near-black
    canvas, and re-apply whenever the theme toggle flips. Individual charts
