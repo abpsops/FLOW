@@ -3777,6 +3777,11 @@ function flowWelcomeGo(pageId) {
         <div style="font-size:18px;font-weight:700;color:var(--green);font-family:DM Mono,monospace" id="calc-view-travel">1 hr</div>
         <div style="font-size:10px;color:var(--sub);margin-top:2px">Barge travel between vessels</div>
       </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;min-width:160px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:3px">Overrun Contingency</div>
+        <div style="font-size:18px;font-weight:700;color:var(--amber);font-family:DM Mono,monospace" id="calc-view-contingency">1 hr</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Free Windows &amp; availability margin after each ETC</div>
+      </div>
       <div style="background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;flex:1;min-width:220px">
         <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:6px">Formulas in use</div>
         <div style="font-size:11px;color:var(--sub);line-height:1.9;font-family:DM Mono,monospace" id="calc-view-formulas">
@@ -3798,6 +3803,11 @@ function flowWelcomeGo(pageId) {
           <label for="calc-travel-input">Travel Buffer (hrs)</label>
           <input type="number" id="calc-travel-input" value="1" min="0" max="12" step="0.5" style="font-family:DM Mono,monospace">
           <div style="font-size:10px;color:var(--muted);margin-top:3px">Sailing time between consecutive vessels</div>
+        </div>
+        <div class="field">
+          <label for="calc-contingency-input">Overrun Contingency (hrs)</label>
+          <input type="number" id="calc-contingency-input" value="1" min="0" max="24" step="0.5" style="font-family:DM Mono,monospace">
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">Planning margin after each job's ETC — used by Free Windows and Check Availability, does not change scheduled ETCs</div>
         </div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
@@ -7585,8 +7595,8 @@ function _isPlainObj(x) { return !!x && typeof x === 'object' && !Array.isArray(
 
 // Stable identity per collection — matched per item in a three-way merge.
 // Agents are matched by name: their numeric ids are assigned per device.
-const _MERGE_ID_FIELDS   = { vessels: 'nomUid', barges: 'id', records: 'id', loadingRecords: 'id', bargeTrackingReports: 'id', bargeReloads: 'id', agents: 'name' };
-const _MERGE_ATOMIC_KEYS = { lastSched: 1 };   // derived as a whole by calculate() — never splice two schedules together
+const _MERGE_ID_FIELDS   = { vessels: 'nomUid', barges: 'id', records: 'id', loadingRecords: 'id', bargeTrackingReports: 'id', bargeReloads: 'id', bargeBlocks: 'id', agents: 'name' };
+const _MERGE_ATOMIC_KEYS = { lastSched: 1, lastSchedMeta: 1 };   // derived as a whole by calculate() — never splice two schedules together (meta travels with its schedule)
 const _MERGE_SET_KEYS    = { robAuditLog: 1 }; // append-only log — union of both sides
 
 function _mergeItemKey(item, field) {
@@ -7827,6 +7837,7 @@ function _applyPayload(payload, replaceUnions) {
   try { localStorage.setItem(LS_RECORDS_KEY, JSON.stringify(_savedSupplies)); } catch(e) {}
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
   if (typeof renderTrashBin === 'function') renderTrashBin();
+  if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   _restoreFocus(focus);
 }
 
@@ -8565,7 +8576,8 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   if (b) {
     _getBargeTimeline(b.id, b.name).forEach(function(op) {
       if (_doesJobConflict(jobStart, jobEnd, op, travelHrs, 0)) {
-        conflicts.push(`Vessel ${op.vessel} (supply ${fmt24(op.start)} → ${fmt24(op.etc)})`);
+        conflicts.push(op.isBlock ? `Barge unavailable — ${op.reason || 'blocked'} (${fmt24(op.start)} → ${fmt24(op.etc)})`
+                                  : `Vessel ${op.vessel} (supply ${fmt24(op.start)} → ${fmt24(op.etc)})`);
       }
     });
   }
@@ -9232,7 +9244,7 @@ function captureCurrentState() {
     });
   });
 
-  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[] };
+  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
 }
 
 /* ── ANTI-ZERO-RESET GUARD (Fix #1) ──────────────────────────────────
@@ -9335,6 +9347,8 @@ function applyState(state) {
   }
   // Barge reload events (dated, merged by id) — authoritative list.
   if (Array.isArray(state.bargeReloads)) _bargeReloads = state.bargeReloads.slice();
+  // Unavailable blocks — authoritative like reloads, so a deletion reaches every device.
+  if (Array.isArray(state.bargeBlocks)) _bargeBlocks = state.bargeBlocks.filter(function(b) { return b && b.id; }).map(function(b) { return Object.assign({}, b); });
   if (state.calcParams)      { _calcParams        = state.calcParams; renderCalcParamsView(); }
   // Restore only ACTIVE (non-completed) checklist records.
   // Completed records live in _savedSupplies — merging them here was the root cause
@@ -9465,6 +9479,9 @@ function applyState(state) {
     // ours too — otherwise the next save pushes the old one back.
     _lastSched = [];
   }
+  // Generation stamp travels with the schedule it describes (absent on
+  // payloads saved before it existed → unknown, never guessed).
+  if (Array.isArray(state.lastSched)) _lastSchedMeta = _isPlainObj(state.lastSchedMeta) ? state.lastSchedMeta : null;
 
   // Keep the ROB engine's barge config in step with the barges just
   // restored (opening ROB / names can change on another device).
@@ -11184,6 +11201,15 @@ async function loadManualROB() {
 let vc = 0, bc = 0;
 let _barges = [];
 let _lastETC = null, _closingV = 0, _closingM = 0, _lastSched = [];
+// When _lastSched was generated + a signature of the inputs it was built
+// from ({generatedAt, sig}) — lets Free Windows say when it's out of date.
+// Synced with the schedule (atomic, like lastSched).
+let _lastSchedMeta = null;
+// Operator-entered barge downtime (maintenance, off-hire, crew change,
+// weather): [{id, bargeId, bargeName, start, end, reason, createdBy, createdAt, updatedAt}].
+// Synced per id; a deletion is a plain removal (the three-way merge treats
+// "removed here, untouched there" as removed).
+let _bargeBlocks = [];
 let _bargeStates = {}, _bargeConfig = [];
 const _nscCheckData = {}; // NSC check data store
 let _checklistRecords = {}; // Persistent independent checklist records
@@ -12128,6 +12154,26 @@ function getVessels() {
   return out;
 }
 
+/* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its
+   Unavailable blocks (with transit either side, like any other job). Returns
+   {start, block} — block = the first one it had to wait for, or null. */
+function _schedStartOutsideBlocks(barge, start, vq, mq) {
+  const blocks = _blocksForBarge(barge.id, barge.name)
+    .map(bk => ({ s: new Date(bk.start), e: new Date(bk.end), bk }))
+    .filter(x => !isNaN(x.s.getTime()) && !isNaN(x.e.getTime()) && x.e > x.s);
+  if (!blocks.length) return { start, block: null };
+  const tr = _calcParams.travelHrs || 0;
+  let s = start, hit = null;
+  for (let guard = 0; guard < 50; guard++) {
+    const e = calcETC(s, vq, mq, barge.vtph, barge.mtph);
+    const b = blocks.find(x => s < addHrs(x.e, tr) && addHrs(e, tr) > x.s);
+    if (!b) break;
+    if (!hit) hit = b.bk;
+    s = addHrs(b.e, tr);
+  }
+  return { start: s, block: hit };
+}
+
 /* ─── CALCULATE ─── */
 let _calculating = false; // Guard: prevent concurrent schedule generation (Issue 1 fix)
 function calculate() {
@@ -12222,7 +12268,7 @@ function calculate() {
     bargeState[b.id] = { cursor:null, rv:openV, rm:openM, _openingV:openV, _openingM:openM, vcap:b.vcap, mcap:b.mcap, vbuf:b.vbuf, mbuf:b.mbuf, name:b.name };
   });
   cursor = null;
-  const sched = [], vAl = [], mAl = [];
+  const sched = [], vAl = [], mAl = [], blockMoves = [];
   let totV = 0, totM = 0;
 
   for (let i = 0; i < sequence.length; i++) {
@@ -12239,7 +12285,10 @@ function calculate() {
         const covV = v.vq > 0 ? Math.min(1, st.rv / v.vq) : 1;
         const covM = v.mq > 0 ? Math.min(1, st.rm / v.mq) : 1;
         const free = st.cursor ? addHrs(st.cursor,_calcParams.travelHrs).getTime() : -Infinity;
-        return { cov: Math.min(covV, covM), avail: Math.max(free, etaMs), rob: (v.vq > 0 ? st.rv : 0) + (v.mq > 0 ? st.rm : 0) };
+        let avail = Math.max(free, etaMs);
+        // A barge sitting in an Unavailable block isn't free then.
+        if (isFinite(avail)) avail = _schedStartOutsideBlocks(b, new Date(avail), v.vq, v.mq).start.getTime();
+        return { cov: Math.min(covV, covM), avail, rob: (v.vq > 0 ? st.rv : 0) + (v.mq > 0 ? st.rm : 0) };
       };
       barge = barges.reduce((best,b) => {
         const sb = score(b), sbest = score(best);
@@ -12251,8 +12300,15 @@ function calculate() {
     }
     const VCAP = barge.vcap, MCAP = barge.mcap;
     const earliestBarge = bs.cursor ? addHrs(bs.cursor,_calcParams.travelHrs) : null;
-    const bargeStart = earliestBarge && earliestBarge > v.effectiveETA ? earliestBarge : v.effectiveETA;
-    const waitedForBarge = !!(earliestBarge && earliestBarge > v.effectiveETA);
+    let bargeStart = earliestBarge && earliestBarge > v.effectiveETA ? earliestBarge : v.effectiveETA;
+    let waitedForBarge = !!(earliestBarge && earliestBarge > v.effectiveETA);
+    // Never plan a supply inside an Unavailable block: wait it out (plus
+    // transit) and say so — the job is moved, not silently overlapped.
+    const blk = _schedStartOutsideBlocks(barge, bargeStart, v.vq, v.mq);
+    if (blk.block) {
+      blockMoves.push({ vessel: v.name, barge: barge.name, reason: blk.block.reason || 'blocked', from: bargeStart, to: blk.start });
+      bargeStart = blk.start; waitedForBarge = true;
+    }
     const sv = Math.min(v.vq, bs.rv), sm = Math.min(v.mq, bs.rm);
     // ETC/Duration reflect the time to pump the FULL nominated quantity —
     // not however much ROB happens to be left. Running out of ROB partway
@@ -12303,11 +12359,18 @@ function calculate() {
   _lastETC = _lastETC_agg;
   _closingV = _closingV_agg;
   _closingM = _closingM_agg;
+  // Stamp what this schedule was built from before it's rendered + saved,
+  // so Free Windows can tell when nominations/barges change afterwards.
+  _stampScheduleMeta();
   renderOutput(sched, totV, totM, vAl, mAl, barges, bargeState);
   if(typeof _routerOnScheduleReady==='function') _routerOnScheduleReady();
   // Sync all modules after schedule generation
   setTimeout(refreshAllModules, 100);
   showToast('Schedule generated — ' + vessels.length + ' vessel' + (vessels.length!==1?'s':'') + ' across ' + barges.length + ' barge' + (barges.length!==1?'s':''), 'success');
+  if (blockMoves.length) {
+    showToast('Unavailable blocks moved ' + blockMoves.length + ' job' + (blockMoves.length !== 1 ? 's' : '') + ': ' +
+      blockMoves.map(m => m.vessel + ' on ' + m.barge + ' waits for "' + m.reason + '" until ' + fmt24(m.to)).join('; ') + '. Check laycans.', 'warning', 10000);
+  }
   } catch(e) {
     console.error('ABPS schedule generation failed:', e);
     alert('Something went wrong generating the schedule: ' + (e && e.message ? e.message : e) + '\n\nPlease try again. If this keeps happening, let support know.');
@@ -13131,8 +13194,9 @@ function openNscEtaPicker() {
 // gap / free-window logic must filter them back out.
 function _getBargeTimeline(bargeId, bargeName, includePastUnsaved) {
   var now = new Date();
+  var cont = _contingencyHrs();
 
-  return (_lastSched || [])
+  var ops = (_lastSched || [])
     .filter(function (item) {
       var itemBarge  = (item.bargeLabel || '').trim();
       var targetName = (bargeName || '').trim();
@@ -13158,136 +13222,190 @@ function _getBargeTimeline(bargeId, bargeName, includePastUnsaved) {
         vQ:     item.vQ || 0,
         mQ:     item.mQ || 0,
         sno:    item.sno,
-        pastEtc: item.etc <= now
+        pastEtc: item.etc <= now,
+        kind:   'vessel',
+        // ETC + overrun contingency = when the barge is really free again for
+        // planning. The ETC itself stays the scheduler's figure.
+        busyUntil: addHrs(item.etc, cont)
       };
-    })
-    .sort(function (a, b) { return a.start - b.start; });
+    });
+  // Unavailable blocks occupy the barge like a job (fixed times, no
+  // contingency), so Check Availability never proposes a start inside one
+  // and the Loading conflict check sees them too.
+  _blocksForBarge(bargeId, bargeName).forEach(function (bk) {
+    var s = new Date(bk.start), e = new Date(bk.end);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= now || e <= s) return;
+    ops.push({ vessel: 'Unavailable — ' + (bk.reason || 'blocked'), nomUid: null, start: s, etc: e, busyUntil: e,
+               vQ: 0, mQ: 0, sno: null, pastEtc: false, kind: 'block', isBlock: true, blockId: bk.id, reason: bk.reason || '' });
+  });
+  return ops.sort(function (a, b) { return a.start - b.start; });
+}
+// End of an op's busy time for gap/conflict maths (ETC + contingency).
+function _opBusyEnd(op) { return op.busyUntil || op.etc; }
+
+function _blocksForBarge(bargeId, bargeName) {
+  return (_bargeBlocks || []).filter(function (bk) {
+    if (!bk || bk.deletedAt) return false;
+    // By id (survives a rename); legacy/hand-made entries without one by name.
+    if (bk.bargeId !== undefined && bk.bargeId !== null && bk.bargeId !== '') return String(bk.bargeId) === String(bargeId);
+    return !!bargeName && bk.bargeName === bargeName;
+  });
 }
 
-/* ─── Free Windows — inverts a barge's committed schedule (vessel supply
-   + Loading, which _getBargeTimeline alone doesn't include) into the
-   gaps between commitments, with an estimated max deliverable quantity
-   per gap. Uses the same vessel-SUPPLY pump rate and hose-up overhead
-   already used by the real scheduling engine (calcETC / split-supply —
-   vtph/mtph, default 300/100 MT/h, plus _calcParams.hoseHrs, default 6h)
-   — NOT _loadingConfig's rate, which is the much faster TERMINAL loading
-   rate (how fast the barge itself fills up at VOPAK etc.), a different
-   number for a different operation. The estimate is also capped by what
-   the barge can actually hold: the very next window (nothing busy
-   between now and it) is capped by ROB actually onboard right now; any
-   later window is capped by tank capacity instead, since a Loading in
-   between could top it back up and we're not simulating that whole
-   chain — capacity is the honest upper bound either way, instead of an
-   unbounded rate×hours figure that can run far past what any barge could
-   physically carry. Answers "what's actually open, and how much could I
-   commercially nominate into it without disrupting anything already
-   planned" — the same question as a hand-built availability sheet, just
-   computed from the live schedule instead of maintained by hand. ─── */
+/* ─── Free Windows — inverts a barge's commitments (vessel supply, Loading,
+   Unavailable blocks) into the gaps between them, with what could honestly
+   be offered in each gap:
+   • time: gap − travel in (after a job) − travel out (before the next one)
+     − hose-up − contingency = usable pumping hours (the same hoseHrs /
+     travelHrs the scheduler uses; each job's ETC is padded by the overrun
+     contingency first). Vessel-supply rate vtph/mtph, NOT the terminal
+     loading rate.
+   • stock: available-to-promise = the LOWEST simulated ROB per grade from
+     the gap until that grade's next Loading (looking up to 30 days ahead,
+     past the week shown), minus the barge's minimum-stock buffer. Fuel
+     already promised to a later job is never offered again.
+   Overlapping commitments are shown as a Conflict, never re-sequenced.
+   Rows: status free | short | busy | unavailable | conflict. ─── */
+var FW_MIN_PARCEL_MT = 50;   // below this a gap isn't a sellable parcel
+var FW_LOOKAHEAD_DAYS = 30;  // later commitments still claim stock even outside the week shown
+
 function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd) {
+  var H = 3600000;
   var now = new Date();
-  // Never start before "now" — even if the given range begins earlier,
-  // there's nothing free before this exact moment.
-  var cursor = (rangeStart && rangeStart > now) ? rangeStart : now;
-  var horizonEnd = rangeEnd || new Date(cursor.getTime() + 7 * 86400000);
-
-  var allOps = _getBargeTimeline(bargeId, bargeName, true);
-  var busy = allOps.filter(function(op) { return !op.pastEtc; }).map(function(op) {
-    return { start: op.start, end: op.etc, label: 'Vessel — ' + op.vessel, kind: 'vessel', nomV: op.vQ || 0, nomM: op.mQ || 0 };
-  });
-  (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
-    busy.push({ start: new Date(r.startAt), end: new Date(r.endAt), label: 'Loading — ' + (r.terminal || 'Terminal'), kind: 'loading', grade: r.grade, qty: r.qty || 0 });
-  });
-  busy.sort(function(a, b) { return a.start - b.start; });
-
-  // A single barge can't physically be doing two things at once — but the
-  // underlying vessel-supply and Loading records are entered independently
-  // of each other, so two windows for the same barge can end up overlapping
-  // on paper (e.g. a Loading logged before the prior one's ETC). Rather
-  // than display that as two "busy" blocks happening at the same time,
-  // sequence the later one to start right when the earlier one actually
-  // finishes — same duration, just pushed to after the first one's ETC —
-  // so Free Windows always reflects what the barge could really do next,
-  // not a physically-impossible double-booking.
-  var mergedBusy = [];
-  var runningCursor = null;
-  busy.forEach(function(b) {
-    var start = b.start, end = b.end;
-    if (runningCursor && start < runningCursor) {
-      var dur = end - start;
-      start = runningCursor;
-      end = new Date(start.getTime() + Math.max(0, dur));
-    }
-    mergedBusy.push({ start: start, end: end, label: b.label, kind: b.kind, grade: b.grade, nomV: b.nomV, nomM: b.nomM, qty: b.qty });
-    if (!runningCursor || end > runningCursor) runningCursor = end;
-  });
+  // Never start before "now" — even if the given range begins earlier.
+  var cursor0 = (rangeStart && rangeStart > now) ? rangeStart : now;
+  var horizonEnd = rangeEnd || new Date(cursor0.getTime() + 7 * 86400000);
+  var lookEnd = new Date(Math.max(horizonEnd.getTime(), now.getTime() + FW_LOOKAHEAD_DAYS * 86400000));
+  var cont = _contingencyHrs();
+  var travel = Math.max(0, Number(_calcParams && _calcParams.travelHrs) || 0);
+  var hoseHrs = (_calcParams && _calcParams.hoseHrs != null && !isNaN(Number(_calcParams.hoseHrs))) ? Number(_calcParams.hoseHrs) : 6;
 
   var barge = (_bargeConfig || []).find(function(x) { return x.id === bargeId || x.name === bargeName; }) || {};
-  var vtph = barge.vtph || 300;
-  var mtph = barge.mtph || 100;
-  var hoseHrs = (_calcParams && _calcParams.hoseHrs) || 6;
+  var vtph = barge.vtph || 300, mtph = barge.mtph || 100;
+  // Same minimum-stock buffers the Availability Check protects.
+  var vbuf = Math.max(0, Number(barge.vbuf) || 0), mbuf = Math.max(0, Number(barge.mbuf) || 0);
 
   var liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var liveRob = liveROBs[bargeId] || Object.values(liveROBs).find(function(r) { return r.bargeName === bargeName; }) || {};
   var vcap = liveRob.vcap || 0, mcap = liveRob.mcap || 0;
-  // Running simulated ROB as we walk the timeline chronologically — starts
-  // at what's actually onboard right now, depletes through each vessel
-  // supply, tops back up (capped at tank capacity) through each Loading.
-  // This is what lets a free window's deliverable estimate reflect what
-  // would ACTUALLY be onboard by the time that window arrives (instead of
-  // a blanket "now vs capacity" guess), and gives each Loading block a real
-  // before/after ROB figure per grade.
-  var simV = liveRob.liveV || 0, simM = liveRob.liveM || 0;
-  // Ops whose ETC has passed but whose supply isn't saved yet are still
-  // committed fuel (live ROB hasn't deducted them) — they just don't occupy
-  // any future time, so they only reduce the starting ROB here.
-  allOps.forEach(function(op) {
-    if (!op.pastEtc) return;
-    simV = Math.max(0, simV - (op.vQ || 0));
-    simM = Math.max(0, simM - (op.mQ || 0));
-  });
+  var st = { v: liveRob.liveV || 0, m: liveRob.liveM || 0 };
 
-  // Clip everything to [cursor, horizonEnd] — this is the piece that was
-  // actually missing before: horizonEnd was only ever used to size the
-  // LAST window's duration estimate, never to stop the list itself, so it
-  // kept listing every future op regardless of the stated horizon (e.g.
-  // still showing next week's ops under "this week"'s Free Windows).
-  var windows = [];
-  function pushFree(start, end) {
-    var hrs = Math.max(0, (end - start) / 3600000);
-    // The fixed hook-up/mobilization overhead (the same hoseHrs used for
-    // every real supply job) eats into the window before any pumping
-    // happens — a window shorter than that isn't actually usable.
-    var pumpHrs = Math.max(0, hrs - hoseHrs);
-    var estV = Math.min(Math.round(pumpHrs * vtph), Math.max(0, simV));
-    var estM = Math.min(Math.round(pumpHrs * mtph), Math.max(0, simM));
-    windows.push({ status: 'free', start: start, end: end, hrs: hrs, estV: estV, estM: estM });
+  var items = [];
+  var pastBusyEnd = null;
+  _getBargeTimeline(bargeId, bargeName, true).forEach(function(op) {
+    if (op.pastEtc) {
+      // ETC passed but supply not saved: still committed fuel (live ROB
+      // hasn't deducted it) and the barge may still be in its contingency.
+      st.v = Math.max(0, st.v - (op.vQ || 0));
+      st.m = Math.max(0, st.m - (op.mQ || 0));
+      var pe = _opBusyEnd(op);
+      if (!pastBusyEnd || pe > pastBusyEnd) pastBusyEnd = pe;
+      return;
+    }
+    if (op.start >= lookEnd) return;
+    if (op.kind === 'block') items.push({ kind: 'block', start: op.start, end: op.etc, busyEnd: op.etc, label: 'Unavailable — ' + (op.reason || 'blocked'), reason: op.reason || '', blockId: op.blockId });
+    else items.push({ kind: 'vessel', start: op.start, end: op.etc, busyEnd: _opBusyEnd(op), label: 'Vessel — ' + op.vessel, vessel: op.vessel, nomV: op.vQ || 0, nomM: op.mQ || 0 });
+  });
+  (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
+    var s = new Date(r.startAt), e = new Date(r.endAt);
+    if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= lookEnd) return;
+    items.push({ kind: 'loading', start: s, end: e, busyEnd: addHrs(e, cont), label: 'Loading — ' + (r.terminal || 'Terminal'), grade: r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO', qty: Number(r.qty) || 0 });
+  });
+  items.sort(function(a, b) { return (a.start - b.start) || (a.end - b.end); });
+
+  // Vessel supply deducts (at its start — conservative), Loading tops up
+  // (capped at tank capacity) at its end.
+  function apply(it, s) {
+    if (it.kind === 'vessel') { s.v = Math.max(0, s.v - it.nomV); s.m = Math.max(0, s.m - it.nomM); }
+    else if (it.kind === 'loading') {
+      if (it.grade === 'LSMGO') s.m = mcap ? Math.min(mcap, s.m + it.qty) : s.m + it.qty;
+      else s.v = vcap ? Math.min(vcap, s.v + it.qty) : s.v + it.qty;
+    }
+  }
+  // Available-to-promise from items[idx] on: lowest projected ROB per grade
+  // until that grade's next Loading (which could refill it), less buffer.
+  function atpFrom(idx, v, m) {
+    var s = { v: v, m: m }, minV = v, minM = m, stopV = false, stopM = false;
+    for (var k = idx; k < items.length && !(stopV && stopM); k++) {
+      var it = items[k];
+      if (it.kind === 'loading') { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
+      apply(it, s);
+      if (!stopV) minV = Math.min(minV, s.v);
+      if (!stopM) minM = Math.min(minM, s.m);
+    }
+    return { v: Math.max(0, minV - vbuf), m: Math.max(0, minM - mbuf), lowV: minV, lowM: minM };
   }
 
-  mergedBusy.forEach(function(b) {
-    if (b.start >= horizonEnd) return; // entirely beyond this range — drop
-    var bStart = b.start < cursor ? cursor : b.start;
-    var bEnd = b.end > horizonEnd ? horizonEnd : b.end;
-    if (bEnd <= bStart) return; // clipped away to nothing
-    if (bStart > cursor) pushFree(cursor, bStart);
+  var rows = [];
+  function inRange(s, e) { return e > cursor0 && s < horizonEnd; }
+  function clipS(d) { return d < cursor0 ? cursor0 : d; }
+  function clipE(d) { return d > horizonEnd ? horizonEnd : d; }
 
-    var beforeV = simV, beforeM = simM;
-    if (b.kind === 'vessel') {
-      simV = Math.max(0, simV - (b.nomV || 0));
-      simM = Math.max(0, simM - (b.nomM || 0));
-    } else if (b.kind === 'loading') {
-      if (b.grade === 'LSMGO') simM = mcap ? Math.min(mcap, simM + (b.qty || 0)) : (simM + (b.qty || 0));
-      else simV = vcap ? Math.min(vcap, simV + (b.qty || 0)) : (simV + (b.qty || 0));
-    }
-    windows.push({
-      status: 'busy', start: bStart, end: bEnd, label: b.label, kind: b.kind, grade: b.grade,
-      nomV: b.nomV, nomM: b.nomM,
-      beforeV: beforeV, beforeM: beforeM, afterV: simV, afterM: simM
+  // gs = when the barge is free (null = idle right now), ge = next
+  // commitment's start (null = open-ended).
+  function pushGap(gs, ge, afterJob, idx) {
+    var visStart = new Date(Math.max(gs ? gs.getTime() : now.getTime(), now.getTime()));
+    if (ge && ge <= visStart) return;
+    var dispStart = clipS(visStart), dispEnd = ge ? clipE(ge) : horizonEnd;
+    if (dispEnd <= dispStart) return; // outside the range shown
+    // Travel in only after a job (an idle barge is already on station);
+    // travel out only if something follows. Usable time is measured over
+    // the whole gap, even where it runs past the week shown.
+    var effStart = new Date(Math.max(visStart.getTime(), (gs && afterJob) ? gs.getTime() + travel * H : 0));
+    var travelBefore = (effStart - visStart) / H;
+    var travelAfter = ge ? travel : 0;
+    var gapHrs = ge ? (ge - visStart) / H : Infinity;
+    var usable = ge ? gapHrs - travelBefore - travelAfter - hoseHrs - cont : Infinity;
+    var pumpV = usable === Infinity ? Infinity : Math.max(0, Math.floor(usable * vtph));
+    var pumpM = usable === Infinity ? Infinity : Math.max(0, Math.floor(usable * mtph));
+    var atp = atpFrom(idx, st.v, st.m);
+    var estV = Math.round(Math.min(pumpV, atp.v)), estM = Math.round(Math.min(pumpM, atp.m));
+    var tooShort = !(usable > 0) || Math.max(pumpV, pumpM) < FW_MIN_PARCEL_MT;
+    var noStock = !tooShort && estV < FW_MIN_PARCEL_MT && estM < FW_MIN_PARCEL_MT;
+    rows.push({
+      status: (tooShort || noStock) ? 'short' : 'free', shortReason: tooShort ? 'time' : (noStock ? 'stock' : null),
+      start: dispStart, end: dispEnd, hrs: (dispEnd - dispStart) / H,
+      gapStart: visStart, gapEnd: ge || null, openEnded: !ge, continuesPastRange: !ge || ge > horizonEnd,
+      gapHrs: gapHrs, usableHrs: usable, travelBefore: travelBefore, travelAfter: travelAfter, hoseHrs: hoseHrs, contingencyHrs: cont,
+      pumpV: pumpV, pumpM: pumpM, robV: st.v, robM: st.m, lowV: atp.lowV, lowM: atp.lowM,
+      atpV: Math.round(atp.v), atpM: Math.round(atp.m), vbuf: vbuf, mbuf: mbuf, estV: estV, estM: estM
     });
-    cursor = bEnd;
-  });
-  if (cursor < horizonEnd) pushFree(cursor, horizonEnd);
+  }
 
-  return windows;
+  var freeFrom = pastBusyEnd, afterJob = !!pastBusyEnd;
+  items.forEach(function(it, i) {
+    if (!freeFrom || it.start > freeFrom) pushGap(freeFrom, it.start, afterJob, i);
+    var before = { v: st.v, m: st.m };
+    apply(it, st);
+    if (inRange(it.start, it.end)) {
+      rows.push({
+        status: it.kind === 'block' ? 'unavailable' : 'busy', kind: it.kind, label: it.label, reason: it.reason, blockId: it.blockId,
+        grade: it.grade, qty: it.qty, nomV: it.nomV, nomM: it.nomM,
+        start: clipS(it.start), end: clipE(it.end), rawStart: it.start, rawEnd: it.end, busyEnd: it.busyEnd,
+        beforeV: before.v, beforeM: before.m, afterV: st.v, afterM: st.m
+      });
+    }
+    // A barge can't do two things at once: anything earlier still running
+    // when this starts is a double-booking. Show it — never quietly move
+    // either item; free time simply resumes after the later end.
+    for (var j = 0; j < i; j++) {
+      var pr = items[j];
+      if (pr.end > it.start) {
+        var cs = it.start, ce = pr.end < it.end ? pr.end : it.end;
+        if (ce > cs && inRange(cs, ce)) {
+          rows.push({ status: 'conflict', kind: 'conflict', a: pr.label, b: it.label, aKind: pr.kind, bKind: it.kind,
+            label: pr.label + ' overlaps ' + it.label, start: clipS(cs), end: clipE(ce), overlapStart: cs, overlapEnd: ce, overlapHrs: (ce - cs) / H });
+        }
+      }
+    }
+    if (!freeFrom || it.busyEnd > freeFrom) freeFrom = it.busyEnd;
+    afterJob = true;
+  });
+  pushGap(freeFrom, null, afterJob, items.length);
+
+  rows.meta = { robNowV: liveRob.liveV || 0, robNowM: liveRob.liveM || 0, vbuf: vbuf, mbuf: mbuf, vtph: vtph, mtph: mtph,
+                hoseHrs: hoseHrs, travelHrs: travel, contingencyHrs: cont };
+  return rows;
 }
 
 // Shared by both the panel render and the Excel download — the week Free
@@ -13300,6 +13418,182 @@ function _freeWindowsWeekRange() {
   return { weekStart: weekStart, weekEnd: weekEnd };
 }
 
+/* ─── Schedule staleness — Free Windows reads _lastSched, which is only as
+   current as the last "Generate Schedule". A signature of what the schedule
+   was built from is stored with it; comparing it to the live inputs tells
+   the planner when the picture is out of date (never auto-regenerated). ─── */
+function _fwHash(str) {
+  var h = 5381;
+  for (var i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36);
+}
+function _fwInputSignature() {
+  var st = captureCurrentState();
+  var v = {};
+  (st.vessels || []).forEach(function(x, i) {
+    if (!String(x.name || '').trim()) return; // a blank card isn't a nomination yet
+    v[x.nomUid || ('#' + i)] = _fwHash(_stableStr([x.name, x.type, x.qty, x.mgo, x.eta, x.lc, x.bargeId, x.refuelChk, x.rfv, x.rfm, x.rfvr, x.rfmr]));
+  });
+  // Barge ROB is left out on purpose: it moves with every saved supply and
+  // Free Windows reads live ROB anyway.
+  var b = _fwHash(_stableStr((st.barges || []).map(function(x) { return [x.id, x.name, x.vcap, x.mcap, x.vbuf, x.mbuf, x.vtph, x.mtph]; })));
+  var l = _fwHash(_stableStr((_loadingRecords || []).filter(function(r) { return r && !r.deletedAt; })
+    .map(function(r) { return [r.id, r.barge, r.startAt, r.endAt, r.grade, r.qty]; }).map(_stableStr).sort()));
+  var k = _fwHash(_stableStr((_bargeBlocks || []).filter(function(x) { return x && !x.deletedAt; })
+    .map(function(x) { return [x.id, x.bargeId, x.start, x.end]; }).map(_stableStr).sort()));
+  var p = _fwHash(_stableStr([_calcParams && _calcParams.hoseHrs, _calcParams && _calcParams.travelHrs]));
+  return { v: v, b: b, l: l, k: k, p: p };
+}
+function _fwScheduleStaleness() {
+  var meta = _lastSchedMeta;
+  if (!meta || !meta.sig) return { known: false, stale: false, reasons: [] };
+  var cur = _fwInputSignature(), old = meta.sig, reasons = [];
+  var oldV = old.v || {}, curV = cur.v || {}, edited = 0, added = 0, removed = 0;
+  Object.keys(curV).forEach(function(k) { if (!(k in oldV)) added++; else if (oldV[k] !== curV[k]) edited++; });
+  Object.keys(oldV).forEach(function(k) {
+    if (k in curV) return;
+    // A card disappears when its supply is saved — that's progress, not a change.
+    var item = (_lastSched || []).find(function(it) { return it.nomUid === k; });
+    if (item && _isScheduleItemCompleted(item)) return;
+    removed++;
+  });
+  if (edited) reasons.push(edited + ' nomination' + (edited > 1 ? 's' : '') + ' edited');
+  if (added) reasons.push(added + ' nomination' + (added > 1 ? 's' : '') + ' added');
+  if (removed) reasons.push(removed + ' nomination' + (removed > 1 ? 's' : '') + ' removed');
+  if (old.b !== cur.b) reasons.push('barge settings');
+  if (old.l !== cur.l) reasons.push('loadings');
+  if (old.k !== cur.k) reasons.push('unavailable blocks');
+  if (old.p !== cur.p) reasons.push('hose-up/travel times');
+  var at = meta.generatedAt ? new Date(meta.generatedAt) : null;
+  return { known: true, generatedAt: (at && !isNaN(at.getTime())) ? at : null, stale: reasons.length > 0, reasons: reasons };
+}
+// Called by calculate() right after a schedule is built.
+function _stampScheduleMeta() {
+  try { _lastSchedMeta = { generatedAt: new Date().toISOString(), sig: _fwInputSignature() }; }
+  catch (e) { _lastSchedMeta = null; console.warn('ABPS: could not stamp schedule inputs', e); }
+}
+// "Regenerate" from the Free Windows panel — the normal Generate Schedule,
+// then a re-render. Operators only (traders never write the schedule).
+function fwRegenerateSchedule() {
+  if (isTrader()) return;
+  calculate();
+  renderFreeWindowsPanel();
+}
+
+/* ─── Unassigned demand — nominations that occupy no barge in the schedule
+   Free Windows is built from: cards added/changed since the last Generate
+   (not in it at all), plus any schedule entry whose barge label matches no
+   configured barge. Their fuel and time are still needed, so free time on
+   the barges is not spare capacity for them. ─── */
+function _fwUnassignedDemand(weekStart, weekEnd) {
+  var out = [];
+  var barges = _bargeConfig || [];
+  var names = barges.map(function(b) { return String(b.name || '').trim(); });
+  var schedUids = {}, schedNames = {};
+  var norm = function(s) { return String(s || '').trim().toLowerCase(); };
+  var inWeek = function(t) { return t && !isNaN(t.getTime()) && t >= weekStart && t < weekEnd; };
+  (_lastSched || []).forEach(function(it) {
+    if (it.nomUid) schedUids[it.nomUid] = 1; else schedNames[norm(it.name)] = 1;
+    if (_isScheduleItemCompleted(it)) return;
+    var lbl = String(it.bargeLabel || '').trim();
+    var placed = (lbl && names.indexOf(lbl) !== -1) || (!lbl && barges.length === 1) ||
+                 (it.bargeId && barges.some(function(b) { return String(b.id) === String(it.bargeId); }));
+    if (placed) return;
+    var t = it.bargeStart || it.eta || it.etc; t = t ? new Date(t) : null;
+    if (!inWeek(t)) return;
+    out.push({ name: it.name, v: it.nomVQ != null ? it.nomVQ : (it.vQ || 0), m: it.nomMQ != null ? it.nomMQ : (it.mQ || 0), why: 'no barge' });
+  });
+  var vessels = [];
+  try { vessels = captureCurrentState().vessels || []; } catch (e) {}
+  vessels.forEach(function(x) {
+    if (!String(x.name || '').trim()) return;
+    if (x.nomUid ? schedUids[x.nomUid] : schedNames[norm(x.name)]) return;
+    var eta = null, lc = null;
+    try { eta = x.eta ? parseDT(x.eta) : null; } catch (e) {}
+    try { lc = x.lc ? parseLaycan(x.lc) : null; } catch (e) {}
+    var hit = eta ? inWeek(eta) : !!(lc && lc.from && lc.to && lc.from < weekEnd && lc.to >= weekStart);
+    if (!hit) return;
+    out.push({ name: x.name, v: x.type === 'MGO' ? 0 : (Number(x.qty) || 0), m: x.type === 'VLSFO' ? 0 : (Number(x.mgo) || 0), why: 'not in schedule' });
+  });
+  return {
+    items: out, count: out.length,
+    v: out.reduce(function(s, x) { return s + (x.v || 0); }, 0),
+    m: out.reduce(function(s, x) { return s + (x.m || 0); }, 0)
+  };
+}
+
+/* ─── Unavailable blocks (operator-only) ─── */
+function _fwKey(id) { return String(id).replace(/[^A-Za-z0-9_-]/g, '_'); }
+function _fwNormTime(el) {
+  var d = el.value.replace(/[^\d]/g, '');
+  var hh = 0, mm = 0;
+  if (d.length >= 3) { hh = parseInt(d.slice(0, d.length - 2), 10); mm = parseInt(d.slice(-2), 10); }
+  else if (d.length) hh = parseInt(d, 10);
+  el.value = String(Math.min(23, hh || 0)).padStart(2, '0') + ':' + String(Math.min(59, mm || 0)).padStart(2, '0');
+}
+function fwToggleBlockForm(bargeId) {
+  if (isTrader()) return;
+  var f = document.getElementById('fw-blk-form-' + _fwKey(bargeId));
+  if (!f) return;
+  var show = f.style.display === 'none';
+  f.style.display = show ? 'block' : 'none';
+  if (show) {
+    var k = _fwKey(bargeId), sd = document.getElementById('fw-blk-sd-' + k), ed = document.getElementById('fw-blk-ed-' + k);
+    if (sd && !sd.value) sd.value = _localDateInputStr(new Date());
+    if (ed && !ed.value) ed.value = _localDateInputStr(new Date());
+  }
+}
+async function addBargeBlock(bargeId) {
+  if (isTrader()) { showToast('Only an operator can block out barge time.', 'warning'); return; }
+  var k = _fwKey(bargeId);
+  var b = (_bargeConfig || []).find(function(x) { return String(x.id) === String(bargeId); });
+  if (!b) return;
+  var val = function(s) { var el = document.getElementById('fw-blk-' + s + '-' + k); return el ? String(el.value || '').trim() : ''; };
+  var sd = val('sd'), st = val('st') || '00:00', ed = val('ed'), et = val('et') || '00:00', reason = val('reason');
+  if (!sd || !ed) { alert('Pick a start and end date.'); return; }
+  var start = new Date(sd + 'T' + st + ':00'), end = new Date(ed + 'T' + et + ':00');
+  if (isNaN(start.getTime()) || isNaN(end.getTime())) { alert('That start/end date or time isn\'t valid.'); return; }
+  if (end <= start) { alert('The end must be after the start.'); return; }
+  var who = ABPS_UID || '';
+  try {
+    if (typeof supabaseClient !== 'undefined' && supabaseClient && supabaseClient.auth) {
+      var sess = await supabaseClient.auth.getSession();
+      var u = sess && sess.data && sess.data.session && sess.data.session.user;
+      if (u && u.email) who = u.email;
+    }
+  } catch (e) {}
+  var nowMs = Date.now();
+  _bargeBlocks = (_bargeBlocks || []).concat([{
+    id: 'blk_' + nowMs + '_' + Math.random().toString(36).slice(2, 7), bargeId: b.id, bargeName: b.name,
+    start: start.toISOString(), end: end.toISOString(), reason: reason.slice(0, 120), createdBy: who, createdAt: nowMs, updatedAt: nowMs
+  }]);
+  saveSharedState();
+  renderFreeWindowsPanel();
+  // Already-scheduled jobs inside the block now show as Conflicts — say so.
+  var hits = _getBargeTimeline(b.id, b.name).filter(function(op) { return !op.isBlock && op.start < end && op.etc > start; });
+  showToast('Blocked ' + b.name + ' ' + fmt24(start) + ' → ' + fmt24(end) +
+    (hits.length ? ' — overlaps ' + hits.map(function(op) { return op.vessel; }).join(', ') + '; regenerate the schedule to move them.' : ''),
+    hits.length ? 'warning' : 'success', hits.length ? 8000 : undefined);
+}
+function deleteBargeBlock(id) {
+  if (isTrader()) return;
+  var bk = (_bargeBlocks || []).find(function(x) { return x.id === id; });
+  if (!bk) return;
+  if (!confirm('Remove this unavailable block (' + (bk.reason || 'no reason') + ')?')) return;
+  _bargeBlocks = _bargeBlocks.filter(function(x) { return x.id !== id; });
+  saveSharedState();
+  renderFreeWindowsPanel();
+}
+
+// Re-render an open Free Windows panel after data changes — but not while
+// the operator is typing in it (e.g. the block-out form).
+function _fwRefreshIfOpen() {
+  var panel = document.getElementById('free-windows-panel');
+  if (!panel || panel.style.display === 'none') return;
+  if (document.activeElement && panel.contains(document.activeElement) && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+  try { renderFreeWindowsPanel(); } catch (e) { console.warn('ABPS: Free Windows refresh failed', e); }
+}
+
 function toggleFreeWindowsPanel() {
   var panel = document.getElementById('free-windows-panel');
   var btn = document.getElementById('free-windows-toggle-btn');
@@ -13308,6 +13602,35 @@ function toggleFreeWindowsPanel() {
   panel.style.display = showing ? 'none' : 'block';
   if (btn) btn.classList.toggle('active', !showing);
   if (!showing) renderFreeWindowsPanel();
+}
+
+function _fwFmtDT(d) {
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+function _fwH(h) { return (Math.round(h * 10) / 10).toLocaleString() + 'h'; }
+// One-line arithmetic for a free/short row (also used in the Excel detail).
+function _fwBreakdown(w) {
+  var parts = [w.openEnded ? 'open-ended gap' : _fwH(w.gapHrs) + ' gap'];
+  if (w.travelBefore > 0) parts.push(_fwH(w.travelBefore) + ' travel in');
+  if (w.travelAfter > 0) parts.push(_fwH(w.travelAfter) + ' travel out');
+  parts.push(_fwH(w.hoseHrs) + ' hose-up');
+  parts.push(_fwH(w.contingencyHrs) + ' contingency');
+  return parts.join(' − ') + (w.openEnded ? '' : ' = ' + _fwH(Math.max(0, w.usableHrs)) + ' pumping');
+}
+function _fwAtpText(w) {
+  return 'Available to promise: ' + w.atpV.toLocaleString() + ' MT VLSFO / ' + w.atpM.toLocaleString() + ' MT LSMGO' +
+    ' (lowest projected ROB before the next loading, ' + Math.round(w.lowV).toLocaleString() + ' / ' + Math.round(w.lowM).toLocaleString() +
+    ' MT, less ' + w.vbuf.toLocaleString() + ' / ' + w.mbuf.toLocaleString() + ' MT minimum-stock buffer)';
+}
+// Shared header lines for panel + Excel: staleness and unassigned demand.
+function _fwStatusInfo(range) {
+  var stale = _fwScheduleStaleness();
+  var hasSched = (_lastSched || []).length > 0;
+  var genText = !hasSched ? 'No schedule generated yet — nominations are not reflected below'
+    : stale.known && stale.generatedAt ? 'Based on schedule generated ' + fmt24(stale.generatedAt)
+    : 'Based on the last generated schedule (generation time unknown — regenerate to track changes)';
+  var staleText = stale.stale ? 'Nominations/barges changed since (' + stale.reasons.join(', ') + ') — regenerate' : '';
+  return { stale: stale, hasSched: hasSched, genText: genText, staleText: staleText, unassigned: _fwUnassignedDemand(range.weekStart, range.weekEnd) };
 }
 
 async function downloadFreeWindowsReport(btnEl) {
@@ -13320,92 +13643,96 @@ async function downloadFreeWindowsReport(btnEl) {
     var range = _freeWindowsWeekRange();
     var weekLabel = range.weekStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + '-' +
       new Date(range.weekEnd.getTime()-1).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-    var fmtDT = function(d) {
-      return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-    };
+    var fmtDT = _fwFmtDT;
+    var info = _fwStatusInfo(range);
+    var NC = 11, lastCol = 'K';
 
     var ExcelJS = await _loadExcelJS();
     var wb = new ExcelJS.Workbook();
     var ws = wb.addWorksheet('Free Windows');
-    ws.columns = [{width:14},{width:10},{width:16},{width:16},{width:8},{width:32},{width:14},{width:14}];
+    ws.columns = [{width:14},{width:12},{width:14},{width:14},{width:8},{width:10},{width:48},{width:13},{width:13},{width:13},{width:13}];
 
-    ws.mergeCells('A1:H1');
-    var titleCell = ws.getCell('A1');
-    titleCell.value = 'FLOW Free Windows — Week of ' + weekLabel;
-    titleCell.font = { bold:true, size:13, color:{argb:'FF0D1B2A'} };
-    ws.mergeCells('A2:H2');
-    var subCell = ws.getCell('A2');
-    subCell.value = 'Generated ' + fmt24(new Date()) + ' · Purely informational — nothing here books anything';
-    subCell.font = { size:9, color:{argb:'FF8A9BAC'} };
-    ws.getRow(1).height = 20; ws.getRow(2).height = 15;
+    var line = function(r, text, font) {
+      ws.mergeCells('A' + r + ':' + lastCol + r);
+      var c = ws.getCell('A' + r); c.value = text; c.font = font; c.alignment = { wrapText: true, vertical: 'top' };
+    };
+    line(1, 'FLOW Free Windows — Week of ' + weekLabel, { bold:true, size:13, color:{argb:'FF0D1B2A'} });
+    line(2, 'Exported ' + fmt24(new Date()) + ' · Purely informational — nothing here books anything', { size:9, color:{argb:'FF8A9BAC'} });
+    line(3, info.genText + (info.staleText ? ' — WARNING: ' + info.staleText : ''), { size:9, bold: !!info.staleText, color:{argb: info.staleText ? 'FFB8790F' : 'FF47617D'} });
+    var u = info.unassigned;
+    line(4, 'Unassigned demand this week: ' + (u.count ? u.count + ' vessel' + (u.count > 1 ? 's' : '') + ' — ' + Math.round(u.v).toLocaleString() + ' MT VLSFO / ' + Math.round(u.m).toLocaleString() + ' MT LSMGO (' + u.items.map(function(x) { return x.name; }).join(', ') + ')' : 'none'),
+      { size:9, bold: !!u.count, color:{argb: u.count ? 'FFB8790F' : 'FF47617D'} });
+    var p0 = (_calcParams || {});
+    line(5, 'Usable time = gap − travel (' + (Number(p0.travelHrs) || 0) + 'h each way between jobs) − hose-up (' + (p0.hoseHrs != null ? p0.hoseHrs : 6) + 'h) − contingency (' + _contingencyHrs() + 'h, also added after every job\'s ETC). Est. = min(pump capacity, available to promise). ATP = lowest projected ROB until the next loading of that grade (30-day look-ahead) less the minimum-stock buffer. Windows under ' + FW_MIN_PARCEL_MT + ' MT are "Too short".',
+      { size:9, color:{argb:'FF47617D'} });
+    ws.getRow(1).height = 20; ws.getRow(3).height = 15; ws.getRow(4).height = 15; ws.getRow(5).height = 30;
 
     var thinBorder = { style:'thin', color:{argb:'FFD8E0E8'} };
     var border = { top:thinBorder, bottom:thinBorder, left:thinBorder, right:thinBorder };
 
-    var headers = ['Barge','Status','Start','End','Hours','Detail','Est. VLSFO (MT)','Est. LSMGO (MT)'];
-    var headerRow = ws.getRow(4);
+    var headers = ['Barge','Status','Start','End','Hours','Usable h','Detail','Est. VLSFO (MT)','Est. LSMGO (MT)','ATP VLSFO (MT)','ATP LSMGO (MT)'];
+    var headerRow = ws.getRow(7);
     headers.forEach(function(h, i) {
       var cell = headerRow.getCell(i+1);
       cell.value = h;
       cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
       cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF0D1B2A'} };
-      cell.alignment = { horizontal:'center', vertical:'middle' };
+      cell.alignment = { horizontal:'center', vertical:'middle', wrapText:true };
       cell.border = border;
     });
-    headerRow.height = 20;
+    headerRow.height = 28;
 
-    var rowIdx = 5;
+    var rowIdx = 8;
     barges.forEach(function(b) {
       var windows = computeFreeWindows(b.id, b.name, range.weekStart, range.weekEnd);
 
       // Summary row: total quantity this barge is already committed to
-      // supply within this week — same figure shown in the on-screen
-      // panel, so the download isn't missing context the panel has.
+      // supply within this week — same figure shown in the on-screen panel.
       var toSupplyV = 0, toSupplyM = 0;
       windows.forEach(function(w) {
-        if (w.status === 'busy' && w.kind === 'vessel') {
-          toSupplyV += (w.nomV || 0);
-          toSupplyM += (w.nomM || 0);
-        }
+        if (w.status === 'busy' && w.kind === 'vessel') { toSupplyV += (w.nomV || 0); toSupplyM += (w.nomM || 0); }
       });
       var sumRow = ws.getRow(rowIdx++);
-      ws.mergeCells('A' + sumRow.number + ':F' + sumRow.number);
+      ws.mergeCells('A' + sumRow.number + ':G' + sumRow.number);
       var sumCell = sumRow.getCell(1);
-      sumCell.value = b.name + ' — To be supplied this week';
+      sumCell.value = b.name + ' — To be supplied this week (buffer ' + windows.meta.vbuf + ' / ' + windows.meta.mbuf + ' MT kept back)';
       sumCell.font = { bold:true, italic:true, color:{argb:'FF0D1B2A'} };
-      sumRow.getCell(7).value = Math.round(toSupplyV);
-      sumRow.getCell(8).value = Math.round(toSupplyM);
-      for (var sc = 1; sc <= 8; sc++) {
+      sumRow.getCell(8).value = Math.round(toSupplyV);
+      sumRow.getCell(9).value = Math.round(toSupplyM);
+      for (var sc = 1; sc <= NC; sc++) {
         var sCell = sumRow.getCell(sc);
         sCell.border = border;
         sCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF0F2F5'} };
-        if (sc === 7 || sc === 8) { sCell.font = { bold:true }; sCell.alignment = { horizontal:'right' }; }
+        if (sc === 8 || sc === 9) { sCell.font = { bold:true }; sCell.alignment = { horizontal:'right' }; }
       }
 
       windows.forEach(function(w) {
         var row = ws.getRow(rowIdx++);
         var isLoading = w.status === 'busy' && w.kind === 'loading';
         var isM = isLoading && w.grade === 'LSMGO';
-        var detail = w.status === 'busy'
-          ? (w.label || '') + (isLoading ? ' — ROB ' + Math.round(isM ? w.beforeM : w.beforeV).toLocaleString() + ' → ' + Math.round(isM ? w.afterM : w.afterV).toLocaleString() + ' MT ' + w.grade : '')
-          : Math.round(w.hrs) + 'h free';
+        var isGap = w.status === 'free' || w.status === 'short';
+        var statusLbl = { free: 'Free', short: 'Too short', busy: 'Busy', unavailable: 'Unavailable', conflict: 'Conflict' }[w.status] || w.status;
+        var detail;
+        if (w.status === 'busy') detail = (w.label || '') + (isLoading ? ' — ROB ' + Math.round(isM ? w.beforeM : w.beforeV).toLocaleString() + ' → ' + Math.round(isM ? w.afterM : w.afterV).toLocaleString() + ' MT ' + w.grade : '');
+        else if (w.status === 'unavailable') detail = 'Unavailable — ' + (w.reason || 'no reason given');
+        else if (w.status === 'conflict') detail = 'CONFLICT: ' + w.a + ' overlaps ' + w.b + ' by ' + _fwH(w.overlapHrs) + ' (' + fmtDT(w.overlapStart) + ' → ' + fmtDT(w.overlapEnd) + ')';
+        else detail = (w.status === 'short' ? (w.shortReason === 'stock' ? 'No spare stock — ' : 'Too short — ') : '') + _fwBreakdown(w) +
+          (w.continuesPastRange && !w.openEnded ? '; gap runs to ' + fmtDT(w.gapEnd) : '') + '. ' + _fwAtpText(w);
         var vals = [
-          b.name,
-          w.status === 'busy' ? 'Busy' : 'Free',
-          fmtDT(w.start),
-          fmtDT(w.end),
-          Math.round((w.end - w.start) / 3600000),
+          b.name, statusLbl, fmtDT(w.start), fmtDT(w.end), Math.round((w.end - w.start) / 3600000),
+          isGap ? (w.openEnded ? 'open' : Math.round(Math.max(0, w.usableHrs) * 10) / 10) : '',
           detail,
-          w.status === 'free' ? w.estV : '',
-          w.status === 'free' ? w.estM : '',
+          isGap ? w.estV : '', isGap ? w.estM : '', isGap ? w.atpV : '', isGap ? w.atpM : '',
         ];
-        var fillColor = w.status === 'free' ? 'FFE2F2EB' : (isLoading ? (isM ? 'FFFFF6EC' : 'FFEFF5FF') : 'FFFAEAE8');
-        var textColor = w.status === 'free' ? 'FF147A58' : (isLoading ? (isM ? 'FFC2570A' : 'FF1D4ED8') : 'FFAE3A2E');
+        var fillColor = w.status === 'free' ? 'FFE2F2EB' : w.status === 'short' ? 'FFEEF1F5' : w.status === 'unavailable' ? 'FFE4E8EE'
+          : w.status === 'conflict' ? 'FFF3CCC5' : (isLoading ? (isM ? 'FFFFF6EC' : 'FFEFF5FF') : 'FFFAEAE8');
+        var textColor = w.status === 'free' ? 'FF147A58' : (w.status === 'short' || w.status === 'unavailable') ? 'FF5B6B7D'
+          : w.status === 'conflict' ? 'FFAE3A2E' : (isLoading ? (isM ? 'FFC2570A' : 'FF1D4ED8') : 'FFAE3A2E');
         vals.forEach(function(v, c) {
           var cell = row.getCell(c+1);
           cell.value = v;
           cell.border = border;
-          cell.alignment = { vertical:'middle', horizontal: (c===6||c===7) ? 'right' : 'left' };
+          cell.alignment = { vertical:'middle', wrapText: c === 6, horizontal: (c >= 7 || c === 5) ? 'right' : 'left' };
           cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: fillColor} };
           if (c === 1) cell.font = { bold:true, color:{argb: textColor} };
         });
@@ -13430,38 +13757,28 @@ function renderFreeWindowsPanel() {
     panel.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:16px">No barges configured.</div>';
     return;
   }
-  var fmtDT = function(d) {
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) + ' ' + d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
-  };
+  var fmtDT = _fwFmtDT;
+  var operator = !isTrader();
   // Match the SAME week the Weekly Planned Supply calendar above is
-  // currently showing (respects _calWeekOffset, so paging the calendar
-  // forward/back also moves Free Windows with it) — this used to just be
-  // "now + 7 raw days," which doesn't line up with the calendar's actual
-  // displayed week and was letting entries from the following week bleed
-  // in under what was labeled as "this week."
-  var today = new Date(); today.setHours(0,0,0,0);
+  // currently showing (respects _calWeekOffset).
   var range = _freeWindowsWeekRange();
   var weekStart = range.weekStart, weekEnd = range.weekEnd;
   var weekLabel = weekStart.toLocaleDateString('en-GB',{day:'2-digit',month:'short'}) + ' – ' +
     new Date(weekEnd.getTime() - 1).toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
+  var info = _fwStatusInfo(range);
+  var cont = _contingencyHrs();
+  var nowT = new Date();
 
   var liveROBsAll = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
   var cols = barges.map(function(b) {
     var windows = computeFreeWindows(b.id, b.name, weekStart, weekEnd);
     var liveRob = liveROBsAll[b.id] || {};
     var vtph = b.vtph || 300, mtph = b.mtph || 100;
-    // Total quantity this barge is already committed to supply within THIS
-    // week — sums every vessel-busy block's nominated quantity from the
-    // windows just computed, same "to be supplied" figure shown elsewhere
-    // (e.g. the Command Center ROB panel), just scoped to the week being
-    // viewed here instead of unbounded. Matters because ROB "onboard now"
-    // overstates real spare capacity if most of it is already spoken for.
+    var k = _fwKey(b.id), bid = escJs(String(b.id));
+    // Quantity this barge is already committed to supply within THIS week.
     var toSupplyV = 0, toSupplyM = 0;
     windows.forEach(function(w) {
-      if (w.status === 'busy' && w.kind === 'vessel') {
-        toSupplyV += (w.nomV || 0);
-        toSupplyM += (w.nomM || 0);
-      }
+      if (w.status === 'busy' && w.kind === 'vessel') { toSupplyV += (w.nomV || 0); toSupplyM += (w.nomM || 0); }
     });
     var robLine = '<div style="font-size:10px;color:var(--muted);margin-bottom:8px">' +
       'ROB now: <span style="color:var(--fuel-v);font-weight:700">' + Math.round(liveRob.liveV || 0).toLocaleString() + '</span>/' + Math.round(liveRob.vcap || 0).toLocaleString() + ' MT VLSFO' +
@@ -13469,55 +13786,133 @@ function renderFreeWindowsPanel() {
       ' &nbsp;·&nbsp; Supply rate: ' + vtph + '/' + mtph + ' MT/h' +
       '<br>To be supplied this week: <span style="color:var(--fuel-v);font-weight:700">' + Math.round(toSupplyV).toLocaleString() + ' MT VLSFO</span>' +
       ' · <span style="color:var(--fuel-m);font-weight:700">' + Math.round(toSupplyM).toLocaleString() + ' MT LSMGO</span>' +
+      '<br>Minimum-stock buffer kept back: ' + windows.meta.vbuf.toLocaleString() + ' / ' + windows.meta.mbuf.toLocaleString() + ' MT' +
     '</div>';
+
+    // Block-out controls — operator data, so never rendered for a trader.
+    var blockUi = '';
+    if (operator) {
+      var blocks = _blocksForBarge(b.id, b.name).filter(function(x) { return new Date(x.end) > nowT; })
+        .sort(function(x, y) { return new Date(x.start) - new Date(y.start); });
+      var inp = 'style="padding:5px 7px;font-size:11px"';
+      blockUi = '<div style="margin-bottom:8px">' +
+        '<button class="btn btn-secondary btn-sm" id="fw-blk-btn-' + k + '" onclick="fwToggleBlockForm(\'' + bid + '\')">+ Block out time</button>' +
+        '<div id="fw-blk-form-' + k + '" style="display:none;margin-top:6px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:6px">' +
+          '<div style="display:grid;grid-template-columns:1fr 70px;gap:6px">' +
+            '<div class="field"><label for="fw-blk-sd-' + k + '">From</label><input type="date" id="fw-blk-sd-' + k + '" ' + inp + '></div>' +
+            '<div class="field"><label for="fw-blk-st-' + k + '">Time</label><input type="text" id="fw-blk-st-' + k + '" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_fwNormTime(this)" ' + inp + '></div>' +
+            '<div class="field"><label for="fw-blk-ed-' + k + '">To</label><input type="date" id="fw-blk-ed-' + k + '" ' + inp + '></div>' +
+            '<div class="field"><label for="fw-blk-et-' + k + '">Time</label><input type="text" id="fw-blk-et-' + k + '" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="18:00" oninput="_maskTime24Input(this)" onblur="_fwNormTime(this)" ' + inp + '></div>' +
+          '</div>' +
+          '<div class="field" style="margin-top:6px"><label for="fw-blk-reason-' + k + '">Reason</label><input type="text" id="fw-blk-reason-' + k + '" maxlength="120" placeholder="Maintenance, off-hire, crew change, weather…" ' + inp + '></div>' +
+          '<div style="display:flex;gap:6px;margin-top:8px">' +
+            '<button class="btn btn-primary btn-sm" id="fw-blk-save-' + k + '" onclick="addBargeBlock(\'' + bid + '\')">Save block</button>' +
+            '<button class="btn btn-secondary btn-sm" onclick="fwToggleBlockForm(\'' + bid + '\')">Cancel</button>' +
+          '</div>' +
+        '</div>' +
+        (blocks.length ? '<div style="margin-top:6px">' + blocks.map(function(x) {
+          return '<div class="fw-blk-item" data-block-id="' + esc(x.id) + '" style="display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10.5px;color:var(--sub);padding:3px 0;border-top:1px solid var(--border2)">' +
+            '<span>' + fmtDT(new Date(x.start)) + ' → ' + fmtDT(new Date(x.end)) + ' · ' + esc(x.reason || 'No reason given') + (x.createdBy ? ' <span style="color:var(--muted)">(' + esc(x.createdBy) + ')</span>' : '') + '</span>' +
+            '<button class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:10px" title="Remove this block" onclick="deleteBargeBlock(\'' + escJs(x.id) + '\')">Remove</button>' +
+          '</div>';
+        }).join('') + '</div>' : '') +
+      '</div>';
+    }
+
     var rows = windows.length ? windows.map(function(w) {
+      var range2 = fmtDT(w.start) + ' → ' + fmtDT(w.end);
+      if (w.status === 'conflict') {
+        return '<div class="fw-row fw-conflict" style="padding:7px 10px;background:var(--red-lt);border:1px solid var(--red-bd);border-left:3px solid var(--red);border-radius:4px;margin-bottom:5px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<div style="font-size:11.5px;font-weight:700;color:var(--red)">⚠ Conflict · ' + range2 + '</div>' +
+            '<div style="font-size:10.5px;font-weight:700;color:var(--red)">' + _fwH(w.overlapHrs) + ' overlap</div>' +
+          '</div>' +
+          '<div style="font-size:10.5px;color:var(--red);margin-top:2px">' + esc(w.a) + ' overlaps ' + esc(w.b) + ' — the barge can\'t do both; fix one of them.</div>' +
+        '</div>';
+      }
+      if (w.status === 'unavailable') {
+        return '<div class="fw-row fw-unavailable" style="padding:7px 10px;background:repeating-linear-gradient(135deg,var(--surface2) 0 6px,var(--surface) 6px 12px);border:1px solid var(--border2);border-left:3px solid var(--muted);border-radius:4px;margin-bottom:5px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<div style="font-size:11.5px;font-weight:700;color:var(--sub)">' + range2 + '</div>' +
+            '<div style="font-size:10.5px;color:var(--sub);text-align:right">Unavailable — ' + esc(w.reason || 'no reason given') + '</div>' +
+          '</div>' +
+        '</div>';
+      }
       if (w.status === 'busy') {
-        // Loading gets its own grade color (matching how the rest of the
-        // app already colors VLSFO/LSMGO) instead of being lumped in with
-        // vessel-busy red — makes it obvious at a glance which kind of
-        // "busy" this is. Vessel-busy keeps red, just a more intense tint
-        // (red-lt2) than the app's default pale red-lt, per request.
+        // Loading gets its own grade colour; vessel-busy keeps red.
         var isLoading = w.kind === 'loading';
         var isM = isLoading && w.grade === 'LSMGO';
         var busyColor = isLoading ? (isM ? 'var(--fuel-m)' : 'var(--fuel-v)') : 'var(--red)';
         var busyBg = isLoading ? (isM ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)') : 'var(--red-lt2)';
-        // For a Loading block specifically, show what's onboard right
-        // before it starts and what that grade will be once it's done —
-        // the whole point of a Loading is to top the barge back up, so
-        // seeing the before/after figure right there is more useful than
-        // just knowing the terminal and quantity.
+        // Loading: what's onboard right before vs. once it's done.
         var robChangeText = '';
         if (isLoading) {
-          var beforeVal = isM ? w.beforeM : w.beforeV;
-          var afterVal = isM ? w.afterM : w.afterV;
           robChangeText = '<div style="font-size:10px;color:' + busyColor + ';margin-top:2px">' +
-            'ROB ' + Math.round(beforeVal || 0).toLocaleString() + ' → ' + Math.round(afterVal || 0).toLocaleString() + ' MT ' + esc(w.grade) +
+            'ROB ' + Math.round((isM ? w.beforeM : w.beforeV) || 0).toLocaleString() + ' → ' + Math.round((isM ? w.afterM : w.afterV) || 0).toLocaleString() + ' MT ' + esc(w.grade) +
           '</div>';
         }
-        return '<div style="padding:7px 10px;background:' + busyBg + ';border-left:3px solid ' + busyColor + ';border-radius:4px;margin-bottom:5px">' +
-          '<div style="display:flex;justify-content:space-between;align-items:center">' +
-            '<div style="font-size:11.5px;font-weight:700;color:' + busyColor + '">' + fmtDT(w.start) + ' → ' + fmtDT(w.end) + '</div>' +
+        return '<div class="fw-row fw-busy" style="padding:7px 10px;background:' + busyBg + ';border-left:3px solid ' + busyColor + ';border-radius:4px;margin-bottom:5px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<div style="font-size:11.5px;font-weight:700;color:' + busyColor + '">' + range2 + '</div>' +
             '<div style="font-size:10.5px;color:' + busyColor + ';text-align:right">Busy — ' + esc(w.label || '') + '</div>' +
           '</div>' +
           robChangeText +
         '</div>';
       }
-      var rangeText = fmtDT(w.start) + ' → ' + fmtDT(w.end);
-      var capText = '<div style="font-size:10px;color:var(--green)">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max</div>';
-      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:var(--green-lt2);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px;gap:8px;flex-wrap:wrap">' +
-        '<div>' +
-          '<div style="font-size:11.5px;font-weight:700;color:var(--green)">' + rangeText + '</div>' +
-          '<div style="font-size:10px;color:var(--green)">' + Math.round(w.hrs) + 'h free</div>' +
+      var tip = _fwBreakdown(w) + '\n' +
+        (w.openEnded ? 'Pump capacity: unlimited (nothing booked after)' : 'Pump capacity: ' + w.pumpV.toLocaleString() + ' MT VLSFO or ' + w.pumpM.toLocaleString() + ' MT LSMGO') + '\n' +
+        _fwAtpText(w) + (w.continuesPastRange && !w.openEnded ? '\nGap runs to ' + fmtDT(w.gapEnd) : '');
+      var usableTxt = w.openEnded ? 'open-ended' : _fwH(Math.max(0, w.usableHrs)) + ' usable';
+      if (w.status === 'short') {
+        var why = w.shortReason === 'stock' ? 'No spare stock — committed to later jobs / buffer' : 'Too short';
+        return '<div class="fw-row fw-short" title="' + esc(tip) + '" style="padding:7px 10px;background:var(--surface2);border-left:3px solid var(--muted);border-radius:4px;margin-bottom:5px">' +
+          '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+            '<div style="font-size:11.5px;font-weight:700;color:var(--sub)">' + range2 + '</div>' +
+            '<div style="font-size:10.5px;font-weight:700;color:var(--sub);text-align:right">' + why + '</div>' +
+          '</div>' +
+          '<div style="font-size:10px;color:var(--muted);margin-top:2px">' + _fwBreakdown(w) + '</div>' +
+        '</div>';
+      }
+      return '<div class="fw-row fw-free" title="' + esc(tip) + '" style="padding:7px 10px;background:var(--green-lt2);border-left:3px solid var(--green);border-radius:4px;margin-bottom:5px">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">' +
+          '<div>' +
+            '<div style="font-size:11.5px;font-weight:700;color:var(--green)">' + range2 + '</div>' +
+            '<div style="font-size:10px;color:var(--green)">' + (w.openEnded ? 'Free from here' : _fwH(w.gapHrs) + ' gap') + ' · ' + usableTxt + '</div>' +
+          '</div>' +
+          '<div style="font-size:10px;color:var(--green);text-align:right">~' + w.estV.toLocaleString() + ' MT VLSFO or ~' + w.estM.toLocaleString() + ' MT LSMGO max' +
+            '<div style="color:var(--sub)">ATP ' + w.atpV.toLocaleString() + ' / ' + w.atpM.toLocaleString() + ' MT</div></div>' +
         '</div>' +
-        capText +
+        '<div style="font-size:10px;color:var(--sub);margin-top:2px">' + _fwBreakdown(w) + (w.continuesPastRange && !w.openEnded ? ' · gap runs to ' + fmtDT(w.gapEnd) : '') + '</div>' +
       '</div>';
     }).join('') : '<div style="font-size:11px;color:var(--muted);padding:8px 0">Fully busy this week.</div>';
-    return '<div style="flex:1;min-width:240px">' +
+    return '<div class="fw-col" data-barge-id="' + esc(b.id) + '" style="flex:1;min-width:240px">' +
       '<div style="font-size:12.5px;font-weight:700;color:var(--ink);margin-bottom:4px">' + esc(b.name || '') + '</div>' +
-      robLine +
-      rows +
+      robLine + blockUi + rows +
     '</div>';
   }).join('');
+
+  var genLine = '<div id="fw-sched-gen" style="font-size:10.5px;color:var(--muted);margin-bottom:6px">' + esc(info.genText) +
+    (!info.staleText && operator && (!info.hasSched || !info.stale.known) && (document.querySelectorAll('.vcard[id^="vessel-"]').length) ?
+      ' <button class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:10px;margin-left:4px" onclick="fwRegenerateSchedule()">Generate schedule</button>' : '') + '</div>';
+  var staleBox = info.staleText ? '<div id="fw-stale-warning" style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;background:var(--amber-lt);border:1px solid var(--amber-bd);border-left:3px solid var(--amber);border-radius:6px;padding:7px 10px;margin-bottom:8px">' +
+      '<div style="font-size:11px;font-weight:700;color:var(--amber)">⚠ ' + esc(info.staleText) + '</div>' +
+      (operator ? '<button class="btn btn-secondary btn-sm" id="fw-regenerate-btn" onclick="fwRegenerateSchedule()">Regenerate schedule</button>' : '') +
+    '</div>' : '';
+  var u = info.unassigned;
+  var unassignedLine = '<div id="fw-unassigned" style="font-size:11px;margin-bottom:8px;' + (u.count ? 'color:var(--amber);font-weight:700' : 'color:var(--muted)') + '">' +
+    'Unassigned demand this week: ' + (u.count
+      ? u.count + ' vessel' + (u.count > 1 ? 's' : '') + ' — ' + Math.round(u.v).toLocaleString() + ' MT VLSFO / ' + Math.round(u.m).toLocaleString() + ' MT LSMGO' +
+        '<span style="font-weight:400;color:var(--sub)"> · ' + u.items.map(function(x) { return esc(x.name); }).join(', ') + ' — not on any barge yet, so free time below is not spare capacity for them</span>'
+      : 'none') +
+  '</div>';
+  var legendChip = function(bg, bd, txt, col) { return '<span style="display:inline-flex;align-items:center;gap:4px;margin-right:10px"><span style="width:10px;height:10px;border-radius:2px;background:' + bg + ';border-left:3px solid ' + bd + '"></span><span style="color:' + col + '">' + txt + '</span></span>'; };
+  var legend = '<div style="font-size:10px;margin-bottom:8px;display:flex;flex-wrap:wrap;row-gap:4px">' +
+    legendChip('var(--green-lt2)', 'var(--green)', 'Free', 'var(--sub)') +
+    legendChip('var(--surface2)', 'var(--muted)', 'Too short', 'var(--sub)') +
+    legendChip('var(--red-lt2)', 'var(--red)', 'Busy', 'var(--sub)') +
+    legendChip('repeating-linear-gradient(135deg,var(--surface2) 0 3px,var(--surface) 3px 6px)', 'var(--muted)', 'Unavailable', 'var(--sub)') +
+    legendChip('var(--red-lt)', 'var(--red)', 'Conflict', 'var(--sub)') +
+  '</div>';
 
   panel.innerHTML =
     '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:2px">' +
@@ -13527,7 +13922,9 @@ function renderFreeWindowsPanel() {
         'Download' +
       '</button>' +
     '</div>' +
-    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:10px">Free windows (green) are gaps in the schedule below — vessel supply and Loading both count as busy. Estimated deliverable quantity uses each barge\'s vessel-supply rate plus the ' + ((_calcParams && _calcParams.hoseHrs) || 6) + 'h hook-up time (same numbers the scheduler itself uses), capped at what\'s actually onboard or the tank capacity — never more than the barge could physically carry. Purely informational — nothing here books anything.</div>' +
+    genLine + staleBox + unassignedLine +
+    '<div style="font-size:10.5px;color:var(--muted);margin-bottom:8px">Free windows (green) are gaps in the schedule — vessel supply, Loading and Unavailable blocks all count as busy, and every job\'s ETC is padded by a ' + cont + 'h overrun contingency. Usable pumping time = gap − ' + ((_calcParams && _calcParams.travelHrs) || 0) + 'h travel each way between jobs − ' + ((_calcParams && _calcParams.hoseHrs != null) ? _calcParams.hoseHrs : 6) + 'h hook-up − ' + cont + 'h contingency (same numbers the scheduler uses). The estimate is also capped by available-to-promise: the lowest ROB the barge is projected to hold before its next loading of that grade (later jobs up to ' + FW_LOOKAHEAD_DAYS + ' days ahead included), less its minimum-stock buffer. Gaps under ' + FW_MIN_PARCEL_MT + ' MT show as Too short; overlapping bookings show as Conflict. Purely informational — nothing here books anything.</div>' +
+    legend +
     '<div style="display:flex;gap:16px;flex-wrap:wrap">' + cols + '</div>';
 }
 
@@ -13539,7 +13936,7 @@ function renderFreeWindowsPanel() {
 function _doesJobConflict(jobStart, jobEnd, op, travelHrs, toleranceHrs) {
   var tol = toleranceHrs || 0;
   var opBusyFrom  = addHrs(op.start, -travelHrs);
-  var opBusyUntil = addHrs(op.etc,    travelHrs);
+  var opBusyUntil = addHrs(_opBusyEnd(op), travelHrs); // ETC + contingency + transit
   var overlap = jobStart < opBusyUntil && jobEnd > opBusyFrom;
   if (!overlap) return false;
   var overlapHrs = (
@@ -13587,7 +13984,7 @@ function _findAllGaps(ops, freeFrom) {
 
   // Gaps between consecutive ops
   for (var i = 0; i < ops.length - 1; i++) {
-    var rawOpen  = addHrs(ops[i].etc, _calcParams.travelHrs);
+    var rawOpen  = addHrs(_opBusyEnd(ops[i]), _calcParams.travelHrs);
     var gapOpen  = new Date(Math.max(rawOpen.getTime(), now.getTime()));
     var gapClose = ops[i + 1].start;
     var hrs      = (gapClose - gapOpen) / 3600000;
@@ -13601,7 +13998,7 @@ function _findAllGaps(ops, freeFrom) {
   }
 
   // Open-ended gap after last op (Phase 6: future commitment ≠ blocker for past slot)
-  var afterRaw   = addHrs(ops[ops.length - 1].etc, _calcParams.travelHrs);
+  var afterRaw   = addHrs(_opBusyEnd(ops[ops.length - 1]), _calcParams.travelHrs);
   var afterStart = new Date(Math.max(afterRaw.getTime(), now.getTime()));
   gaps.push({
     type: 'after_last', gapStart: afterStart, gapEnd: null, gapHrs: Infinity,
@@ -13617,7 +14014,9 @@ function _findAllGaps(ops, freeFrom) {
    ───────────────────────────────────────────────────────────────────── */
 function _evalGapForJob(gap, requestedETA, jobDurationHrs, travelBuffer) {
   var now    = new Date();
-  var TOTAL  = jobDurationHrs + travelBuffer;
+  // The new job gets the same overrun contingency as committed ones, so a
+  // gap fits here exactly when Free Windows calls it usable.
+  var TOTAL  = jobDurationHrs + travelBuffer + _contingencyHrs();
   var earliest = new Date(Math.max(gap.gapStart.getTime(), now.getTime()));
   var latestStart = null;
 
@@ -13664,12 +14063,13 @@ function _findEarliestStart(timeline, freeFrom, requestedETA, jobHrs, travelHrs)
   if (requestedETA) candidates.push(requestedETA);
   candidates.push(freeFrom || now);
   candidates.push(now);
-  timeline.forEach(function (op) { candidates.push(addHrs(op.etc, travelHrs)); });
+  timeline.forEach(function (op) { candidates.push(addHrs(_opBusyEnd(op), travelHrs)); });
   candidates.sort(function (a, b) { return a - b; });
+  var cont = _contingencyHrs();
 
   for (var ci = 0; ci < candidates.length; ci++) {
     var tryStart = new Date(Math.max(candidates[ci].getTime(), now.getTime(), freeFrom ? freeFrom.getTime() : 0));
-    var tryEndTravel = addHrs(tryStart, jobHrs + travelHrs);
+    var tryEndTravel = addHrs(tryStart, jobHrs + cont + travelHrs);
 
     var conflict = timeline.some(function (op) {
       return _doesJobConflict(tryStart, tryEndTravel, op, travelHrs, TOL);
@@ -13678,22 +14078,22 @@ function _findEarliestStart(timeline, freeFrom, requestedETA, jobHrs, travelHrs)
     if (!conflict) {
       var prevOp = null;
       for (var pi = timeline.length - 1; pi >= 0; pi--) {
-        if (addHrs(timeline[pi].etc, travelHrs) <= tryStart) {
+        if (addHrs(_opBusyEnd(timeline[pi]), travelHrs) <= tryStart) {
           prevOp = timeline[pi]; break;
         }
       }
       var lbl = (requestedETA && Math.abs(tryStart - requestedETA) < 300000)
         ? 'On vessel arrival'
         : prevOp
-          ? 'After ' + prevOp.vessel + ' ETC ' + fmt24(prevOp.etc)
+          ? (prevOp.isBlock ? 'After unavailable block (' + (prevOp.reason || 'blocked') + ') ends ' + fmt24(prevOp.etc) : 'After ' + prevOp.vessel + ' ETC ' + fmt24(prevOp.etc))
           : 'At earliest available time';
       return { start: tryStart, etc: addHrs(tryStart, jobHrs), label: lbl, onTime: requestedETA && Math.abs(tryStart - requestedETA) < 300000 };
     }
   }
 
   // Ultimate fallback: after all ops
-  var lastOp  = timeline[timeline.length - 1];
-  var afterAll = addHrs(lastOp.etc, travelHrs);
+  var lastOp  = timeline.reduce(function (a, b) { return _opBusyEnd(b) > _opBusyEnd(a) ? b : a; }, timeline[0]);
+  var afterAll = addHrs(_opBusyEnd(lastOp), travelHrs);
   afterAll = new Date(Math.max(afterAll.getTime(), now.getTime()));
   return { start: afterAll, etc: addHrs(afterAll, jobHrs), label: 'After all ops (' + fmt24(lastOp.etc) + ')', onTime: false };
 }
@@ -13843,15 +14243,15 @@ function _checkNSCUnifiedInner() {
     } else {
       var blockingOps = timeline.filter(function (op) {
         var opBusyFrom  = addHrs(op.start, -travelHrs);
-        var opBusyUntil = addHrs(op.etc,    travelHrs);
+        var opBusyUntil = addHrs(_opBusyEnd(op), travelHrs);
         return reqStart < opBusyUntil && reqJobEnd > opBusyFrom;
       });
 
       if (blockingOps.length === 0) {
         freeFrom = now; // Phase 6: no genuine block → barge available
       } else {
-        var lastBlocker = blockingOps.reduce(function (lat, op) { return op.etc > lat.etc ? op : lat; }, blockingOps[0]);
-        freeFrom = addHrs(lastBlocker.etc, travelHrs);
+        var lastBlocker = blockingOps.reduce(function (lat, op) { return _opBusyEnd(op) > _opBusyEnd(lat) ? op : lat; }, blockingOps[0]);
+        freeFrom = addHrs(_opBusyEnd(lastBlocker), travelHrs);
       }
     }
 
@@ -13940,12 +14340,13 @@ function _checkNSCUnifiedInner() {
       });
       if (directConflicts.length) {
         directConflicts.forEach(function (op) {
+          if (op.isBlock) { blockingReasons.push('Barge unavailable: ' + (op.reason || 'blocked') + ' (' + fmt24(op.start) + ' → ' + fmt24(op.etc) + ')'); return; }
           blockingReasons.push('Conflicts with committed supply: ' + op.vessel +
             ' (' + fmt24(op.start) + ' → ' + fmt24(op.etc) + ')' +
             (op.noFirmETA ? ' — ETA not firm yet, this conflict is provisional' : ''));
         });
       } else if (freeFrom > requestedETA) {
-        var blockOp = timeline.filter(function (op) { return addHrs(op.etc, travelHrs) > requestedETA; })
+        var blockOp = timeline.filter(function (op) { return addHrs(_opBusyEnd(op), travelHrs) > requestedETA; })
           .sort(function (a, b) { return a.etc - b.etc; })[0];
         blockingReasons.push('Barge free from ' + fmt24(freeFrom) +
           (blockOp ? ' (after ' + blockOp.vessel + ' ETC ' + fmt24(blockOp.etc) + ' + ' + travelHrs + 'h transit)' : ''));
@@ -14703,7 +15104,7 @@ function _evaluateSplitSupply(bargeResults, vReq, mReq, requestedETA, travelHrs,
         var mFreeAt   = timingForHrs(mRestB, mJobHrs, berthClear, berthClear).start;
         mFreeAt       = new Date(Math.max(mFreeAt.getTime(), berthClear.getTime()));
         var mEtc      = addHrs(mFreeAt, mJobHrs);
-        var mPrevOps  = mTl.filter(function (op) { return addHrs(op.etc, travelHrs) <= mFreeAt; });
+        var mPrevOps  = mTl.filter(function (op) { return addHrs(_opBusyEnd(op), travelHrs) <= mFreeAt; });
         return {
           type: 'partial_mgo',
           vBarge: vOnlyBarge, mBarge: mRestB,
@@ -17342,6 +17743,7 @@ function refreshAllModules() {
   refreshNominationKPIs();
   refreshScheduleKPIs();
   refreshDashboard();
+  if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen();
 }
 
 /* ── Alerts page — mirror data from rendered panels ── */
@@ -18636,6 +19038,7 @@ async function saveReloadQty() {
 function openCalcParamsEdit() {
   document.getElementById('calc-hose-input').value   = _calcParams.hoseHrs;
   document.getElementById('calc-travel-input').value = _calcParams.travelHrs;
+  document.getElementById('calc-contingency-input').value = _contingencyHrs();
   document.getElementById('calc-view').style.display  = 'none';
   document.getElementById('calc-edit').style.display  = '';
   const btn = document.getElementById('calc-edit-btn');
@@ -18650,10 +19053,15 @@ function closeCalcParamsEdit() {
 function saveCalcParamsEdit() {
   const h = parseFloat(document.getElementById('calc-hose-input').value);
   const t = parseFloat(document.getElementById('calc-travel-input').value);
-  if (isNaN(h)||h<0||isNaN(t)||t<0) { alert('Enter valid positive numbers for both fields.'); return; }
+  const c = parseFloat(document.getElementById('calc-contingency-input').value);
+  if (isNaN(h)||h<0||isNaN(t)||t<0||isNaN(c)||c<0) { alert('Enter valid positive numbers for all fields.'); return; }
   _calcParams.hoseHrs   = h;
   _calcParams.travelHrs = t;
+  _calcParams.contingencyHrs = c;
   saveCalcParams();
+  // Push to the shared workspace now — otherwise the next cloud pull (e.g. a
+  // reload) hands back the old values before anything else got saved.
+  if (!isTrader() && typeof saveSharedState === 'function') { try { saveSharedState(); } catch(e) {} }
   renderCalcParamsView();
   closeCalcParamsEdit();
   const card = document.getElementById('calc-params-card');
@@ -18666,7 +19074,9 @@ function renderCalcParamsView() {
   const fEl = document.getElementById('calc-view-formulas');
   if (hEl) hEl.textContent = h + (h===1?' hr':' hrs');
   if (tEl) tEl.textContent = t + (t===1?' hr':' hrs');
-  if (fEl) fEl.innerHTML = `ETC = Supply Start + ${h}h + (Qty ÷ TPH)<br>Next Start ≥ ETC + ${t}h travel`;
+  const c = _contingencyHrs(), cEl = document.getElementById('calc-view-contingency');
+  if (cEl) cEl.textContent = c + (c===1?' hr':' hrs');
+  if (fEl) fEl.innerHTML = `ETC = Supply Start + ${h}h + (Qty ÷ TPH)<br>Next Start ≥ ETC + ${t}h travel<br>Free Windows / Availability: ETC + ${c}h contingency`;
 }
 
 function addBarge(def = {}) {
@@ -19102,6 +19512,7 @@ async function fullReset() {
   document.getElementById('barge-list').innerHTML = '';
   bc = 0; _barges = [];
   _lastSched=[]; _bargeStates={}; _bargeConfig=[];
+  _lastSchedMeta=null; _bargeBlocks=[];
   _lastETC=null; _closingV=0; _closingM=0;
   _checklist={}; _checklistRecords={}; _trashBin=[];
   Object.values(_lcPickers).forEach(p=>{try{p.destroy();}catch(e){}});
@@ -19307,7 +19718,9 @@ async function nuclearClear() {
   _lastKnownVersion = 0;
   _nomEmailLog      = {};
   _nomEmailLogLoaded = true; // nothing to load — we just wiped it, this is now the true (empty) state
-  _calcParams       = { hoseHrs: 6, travelHrs: 1 };
+  _calcParams       = { hoseHrs: 6, travelHrs: 1, contingencyHrs: 1 };
+  _bargeBlocks      = []; // blocks belong to the wiped barges
+  _lastSchedMeta    = null;
   saveCalcParams();
   renderCalcParamsView();
   if (typeof _ciClearTemplates === 'function') _ciClearTemplates();
@@ -19483,12 +19896,19 @@ async function wipeSupabaseWorkspace() {
 
 /* ═══ CALCULATION PARAMETERS (editable) ═══ */
 const CALC_PARAMS_KEY = 'abps_calc_params_v1';
-let _calcParams = { hoseHrs: 6, travelHrs: 1 };
+// contingencyHrs: planning margin added after each job's ETC by Free Windows
+// and the Availability Check (never changes the scheduler's own ETCs).
+let _calcParams = { hoseHrs: 6, travelHrs: 1, contingencyHrs: 1 };
 function loadCalcParams() {
   try {
     const raw = localStorage.getItem(CALC_PARAMS_KEY);
-    if (raw) { const p = JSON.parse(raw); _calcParams.hoseHrs = p.hoseHrs ?? 6; _calcParams.travelHrs = p.travelHrs ?? 1; }
+    if (raw) { const p = JSON.parse(raw); _calcParams.hoseHrs = p.hoseHrs ?? 6; _calcParams.travelHrs = p.travelHrs ?? 1; _calcParams.contingencyHrs = p.contingencyHrs ?? 1; }
   } catch(e) {}
+}
+// Older saves/payloads carry no contingencyHrs — treat as the 1h default.
+function _contingencyHrs() {
+  const c = _calcParams ? _calcParams.contingencyHrs : null;
+  return (c === null || c === undefined || isNaN(Number(c)) || Number(c) < 0) ? 1 : Number(c);
 }
 function saveCalcParams() {
   try { localStorage.setItem(CALC_PARAMS_KEY, JSON.stringify(_calcParams)); } catch(e) {}
