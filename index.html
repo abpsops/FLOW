@@ -18,11 +18,24 @@
     var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+  /* Skin: 'harbour' (default, the "Harbour Light" look — light only) or
+     'classic' (the original look, with its own light/dark toggle). A stored
+     legacy value 'premium' counts as harbour. Harbour forces
+     data-theme="light" for this page view only — the visitor's saved
+     'flow-theme' is left untouched and comes back on switching to Classic. */
+  try{
+    var skin = localStorage.getItem('flow-skin') === 'classic' ? 'classic' : 'harbour';
+    document.documentElement.setAttribute('data-skin', skin);
+    if (skin === 'harbour') document.documentElement.setAttribute('data-theme', 'light');
+  }catch(e){
+    document.documentElement.setAttribute('data-skin','harbour');
+    document.documentElement.setAttribute('data-theme','light');
+  }
 })();
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
 <!-- Exact version + SRI: a floating @2 tag would run whatever jsdelivr serves next with full access to the session. -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
@@ -85,13 +98,29 @@ function _isScheduleItemCompleted(item) {
    give it colors that hold legible contrast on both a white and a near-black
    canvas, and re-apply whenever the theme toggle flips. Individual charts
    still override these per-dataset colors (fuel-v/fuel-m/etc.) as before. */
+/* Harbour Light skin helpers: _isPremiumSkin() (name kept from the earlier
+   skin; true while the Harbour skin is active), _skinPal(c), which maps the
+   classic chart colours to the Harbour palette (ocean blue + teal), and
+   _skinFont(f) for chart tick fonts — only while Harbour is active; Classic
+   gets its exact colours and fonts back. */
+function _isPremiumSkin() { return document.documentElement.getAttribute('data-skin') === 'harbour'; }
+function _skinPal(c) {
+  if (!_isPremiumSkin() || typeof c !== 'string') return c;
+  return c.replace(/^rgba\((47,111,237|37,99,235|14,122,155),/, 'rgba(21,101,192,')
+          .replace(/^rgba\((255,122,26|249,115,22),/, 'rgba(14,159,142,');
+}
+function _skinFont(f) {
+  if (!_isPremiumSkin()) return f;
+  return f === 'DM Mono' ? 'IBM Plex Mono' : f === 'DM Sans' ? 'Plus Jakarta Sans' : f;
+}
 function _applyChartJsTheme() {
   if (typeof Chart === 'undefined') return;
   var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-  var textColor = dark ? '#C8D6E8' : '#47617D';
+  var harbour = _isPremiumSkin();
+  var textColor = harbour ? '#5B6E86' : (dark ? '#C8D6E8' : '#47617D');
   Chart.defaults.color = textColor;
-  Chart.defaults.borderColor = dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)';
-  Chart.defaults.font.family = "'DM Sans', sans-serif";
+  Chart.defaults.borderColor = harbour ? '#E6ECF3' : (dark ? 'rgba(255,255,255,.09)' : 'rgba(19,38,62,.08)');
+  Chart.defaults.font.family = harbour ? "'Plus Jakarta Sans', 'Inter', sans-serif" : "'DM Sans', sans-serif";
   // Chart.defaults.color alone doesn't reliably reach the legend plugin's own
   // nested default in every Chart.js code path — set it explicitly too so
   // legends never silently fall back to Chart.js's built-in near-black '#666'.
@@ -119,6 +148,7 @@ document.addEventListener('keydown', function(e) {
    above, since some Chart.js legend configs don't reliably fall back to
    the global default. */
 function _chartTextColor() {
+  if (_isPremiumSkin()) return '#5B6E86';
   return document.documentElement.getAttribute('data-theme') === 'dark' ? '#C8D6E8' : '#47617D';
 }
 </script>
@@ -1303,6 +1333,499 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   box-shadow: none;
 }
 </style>
+<style id="skin-harbour">
+/* ═══════════════════════════════════════════════════════════════════════
+   HARBOUR LIGHT SKIN — delete this block + the skin switch to remove
+   (the switch = #skin-toggle-btn in the topbar, toggleSkin()/_syncSkinUI()
+   next to toggleColorTheme(), the 'flow-skin' lines in the <head> script,
+   the #dash-hero banner + _renderDashHero(), and
+   _isPremiumSkin()/_skinPal()/_skinFont()/_skinWrapH2C() — all of which
+   fall back to the Classic look when data-skin is not "harbour").
+   Light ground, white borderless cards with soft layered shadows, deep navy
+   frame, one coral accent. Everything is scoped to html[data-skin="harbour"]
+   and to screen media, so Classic (light + dark) and all print output are
+   untouched.
+═══════════════════════════════════════════════════════════════════════ */
+
+/* Skin switch button — shared by both skins (Classic: styled like the
+   neighbouring theme toggle). */
+.skin-toggle-btn{
+  display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;
+  height:30px;padding:0 11px;border-radius:999px;
+  background:rgba(255,255,255,.12);border:1.5px solid rgba(255,255,255,.30);
+  color:#fff;cursor:pointer;transition:all .15s;white-space:nowrap;
+  font-size:11px;font-weight:700;letter-spacing:.02em;font-family:inherit;
+}
+.skin-toggle-btn:hover{background:rgba(255,255,255,.24);border-color:#fff}
+.dash-hero{display:none}
+@media print{ .skin-toggle-btn,.dash-hero{display:none!important} }
+
+@media screen {
+
+/* ── 1. TOKENS ─────────────────────────────────────────────────────── */
+html[data-skin="harbour"]{
+  --navy:#0B2545; --navy2:#0B2545; --ink:#0B2545; --ink-solid:#0B2545;
+  --azure:#1565C0; --azure-lt:#E3EEFB; --azure-bd:#BBD3F2; --azure-dk:#0B3D6B;
+  --teal:#0E9F8E; --teal-lt:#E2F5F2; --teal-bd:#A9DDD5;
+  --amber:#A15C00; --amber-lt:#FFF1D9; --amber-bd:#F1D19C;
+  --red:#C0392B; --red-lt:#FDE8E4; --red-lt2:#F9D0C8; --red-bd:#F2B9AE;
+  --green:#0B7A6D; --green-lt:#E2F5F2; --green-lt2:#C4EAE3; --green-bd:#A9DDD5;
+  --purple:#5B4FBF; --purple-lt:#ECEAFA; --purple-bd:#C7BFEF; --slate:#5B6E86;
+  --fuel-v:#1565C0; --fuel-v-lt:#E3EEFB; --fuel-v-bd:#BBD3F2;
+  --fuel-m:#0E9F8E; --fuel-m-lt:#E2F5F2; --fuel-m-bd:#A9DDD5;
+  --pg-dashboard:#0B2545; --pg-nominations:#0B2545; --pg-schedule:#0B2545; --pg-loading:#0B2545;
+  --pg-timeline:#0B2545; --pg-alerts:#0B2545; --pg-bargefleet:#0B2545; --pg-availability:#0B2545;
+  --pg-agents:#0B2545; --pg-reports:#0B2545; --pg-commandcenter:#0B2545; --pg-checklist:#0B2545;
+  --pg-records:#0B2545; --pg-deliverylog:#0B2545; --pg-archives:#0B2545; --pg-trash:#0B2545;
+  --pg-bargetracking:#0B2545;
+  --bg:#EEF2F7; --surface:#FFFFFF; --surface2:#F6F8FB; --surface3:#EEF2F7;
+  --border:#E3E9F1; --border2:#EEF2F7;
+  --text:#13233A; --sub:#33475F; --muted:#5B6E86;
+  --overlay:rgba(11,37,69,.45);
+  --radius:20px; --radius-sm:14px; --radius-xs:10px;
+  --sh-xs:0 1px 2px rgba(19,35,58,.06), 0 8px 20px rgba(19,35,58,.06);
+  --sh-sm:0 1px 2px rgba(19,35,58,.06), 0 8px 20px rgba(19,35,58,.06);
+  --sh-md:0 1px 2px rgba(19,35,58,.06), 0 12px 28px rgba(19,35,58,.10);
+  --sh-lg:0 2px 6px rgba(19,35,58,.08), 0 18px 44px rgba(19,35,58,.16);
+  --sh-xl:0 4px 10px rgba(19,35,58,.08), 0 28px 64px rgba(19,35,58,.20);
+  --sh-in-xs:none; --sh-in-sm:none;
+  --glow-azure:0 0 0 3px rgba(21,101,192,.16); --glow-green:0 0 0 3px rgba(14,159,142,.18);
+  --sidebar-w:236px;
+  --hl-coral:#F26A4B; --hl-coral-dk:#DE5537; --hl-coral-lt:#FDECE7;
+  --hl-line:#D5DEEA;
+  --hl-shadow:0 1px 2px rgba(19,35,58,.06), 0 8px 20px rgba(19,35,58,.06);
+  --hl-shadow-up:0 1px 2px rgba(19,35,58,.06), 0 12px 28px rgba(19,35,58,.10);
+  --font-ui:'Plus Jakarta Sans','Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-num:'IBM Plex Mono',ui-monospace,'SFMono-Regular',Menlo,monospace;
+  color-scheme:light;
+}
+
+/* ── 2. TYPE ───────────────────────────────────────────────────────── */
+html[data-skin="harbour"] body{background:#EEF2F7;color:var(--text);font-family:var(--font-ui);font-size:13.5px}
+html[data-skin="harbour"] body *{font-family:inherit}
+html[data-skin="harbour"] [style*="DM Sans"]{font-family:var(--font-ui)!important}
+html[data-skin="harbour"] :is([style*="DM Mono"],[style*="DM+Mono"],[style*="monospace"],.kpi-value,.kpi-chip-value,.sync-msg,.vcard-num,.etc-prev,.formula-strip,.tmi span,.rbv,.sno,.lc-rng,.rec-meta,.activity-time,.aq-tag,.data-tbl .num,.data-tbl .mono,.scard span,#live-clock-time,#live-clock-date,pre,code){
+  font-family:var(--font-num)!important;font-variant-numeric:tabular-nums;
+}
+html[data-skin="harbour"] ::selection{background:rgba(242,106,75,.22);color:#0B2545}
+html[data-skin="harbour"] ::-webkit-scrollbar{width:8px;height:8px}
+html[data-skin="harbour"] ::-webkit-scrollbar-thumb{background:#C9D4E2;border-radius:999px;border:2px solid transparent;background-clip:padding-box}
+html[data-skin="harbour"] [role="button"][tabindex]:focus-visible,
+html[data-skin="harbour"] :is(button,a,.btn):focus-visible{outline:2px solid #F26A4B;outline-offset:2px}
+html[data-skin="harbour"] a{color:#1565C0}
+
+/* ── 3. HEADER (sync bar + topbar) — deep navy frame ───────────────── */
+html[data-skin="harbour"] #app-header{background:#0B2545}
+html[data-skin="harbour"] .sync-banner{background:#081D38;border-bottom:1px solid rgba(255,255,255,.05)}
+html[data-skin="harbour"] .sync-msg{color:#8FA6C4;font-size:10px}
+html[data-skin="harbour"] .sync-dot{background:#4FC3B5}
+html[data-skin="harbour"] .sync-dot.syncing{background:#F5B84A}
+html[data-skin="harbour"] .sync-dot.error{background:#FF8A73}
+html[data-skin="harbour"] .sync-btn{background:transparent;border:1px solid #2A4A73;color:#B5C5DA;border-radius:999px;padding:2px 11px}
+html[data-skin="harbour"] .sync-btn:hover{border-color:#F26A4B;color:#fff;background:rgba(242,106,75,.18)}
+html[data-skin="harbour"] .topbar{background:#0B2545;border-bottom:0;box-shadow:none;height:64px;padding:0 22px 0 18px}
+html[data-skin="harbour"] .topbar-logo-wrap > div{background:#F26A4B!important;border-radius:12px!important;box-shadow:0 6px 16px rgba(242,106,75,.35)!important;width:38px!important;height:38px!important}
+html[data-skin="harbour"] .topbar > div[style*="width:1px"]{background:rgba(255,255,255,.12)!important}
+html[data-skin="harbour"] #topbar-page-info{border-left:0;padding-left:4px}
+html[data-skin="harbour"] .topbar-section-label{color:#8FA6C4;font-size:10px;letter-spacing:.16em}
+html[data-skin="harbour"] .topbar-page-title{color:#FFFFFF;font-size:15px;font-weight:800;letter-spacing:-.01em}
+html[data-skin="harbour"] .topbar-page-sub{color:#B5C5DA}
+html[data-skin="harbour"] .hamburger,
+html[data-skin="harbour"] #global-alerts-btn,
+html[data-skin="harbour"] #topbar-menu-btn{
+  width:38px!important;height:38px!important;border-radius:12px!important;
+  background:#12325C!important;border:0!important;color:#DCE6F2!important;
+}
+html[data-skin="harbour"] .hamburger:hover,
+html[data-skin="harbour"] #global-alerts-btn:hover,
+html[data-skin="harbour"] #topbar-menu-btn:hover{background:#16406F!important;color:#fff!important}
+html[data-skin="harbour"] #global-alerts-badge{background:#F26A4B!important;color:#fff!important;border-color:#0B2545!important}
+html[data-skin="harbour"] #global-search-input{
+  background:#FFFFFF!important;border:1px solid #D5DEEA!important;border-radius:14px!important;
+  color:#13233A!important;height:44px;padding-left:36px!important;font-size:13.5px!important;
+}
+html[data-skin="harbour"] #global-search-wrap > svg{left:14px!important;color:#5B6E86!important}
+html[data-skin="harbour"] #global-search-input::placeholder{color:#5B6E86}
+html[data-skin="harbour"] #global-search-input:focus{border-color:#F26A4B!important;box-shadow:0 0 0 3px rgba(242,106,75,.22)}
+html[data-skin="harbour"] #live-clock{border-left-color:rgba(255,255,255,.12)!important;padding-left:14px!important}
+html[data-skin="harbour"] #live-clock-time{color:#FFFFFF!important;font-weight:500!important}
+html[data-skin="harbour"] #live-clock-date{color:#9EC3EA!important}
+html[data-skin="harbour"] #theme-toggle-btn{display:none!important}
+html[data-skin="harbour"] .skin-toggle-btn{
+  height:38px;padding:0 14px;background:#12325C;border:0;color:#DCE6F2;border-radius:12px;
+  font-size:12px;font-weight:700;letter-spacing:.01em;
+}
+html[data-skin="harbour"] .skin-toggle-btn:hover{background:#16406F;color:#fff}
+html[data-skin="harbour"] .topbar-menu-item{color:#13233A;border-radius:10px}
+html[data-skin="harbour"] .topbar-menu-item:hover{background:#F6F8FB}
+html[data-skin="harbour"] #topbar-menu-dropdown,
+html[data-skin="harbour"] #global-alerts-dropdown,
+html[data-skin="harbour"] #global-search-results{background:#FFFFFF!important;border:0!important;border-radius:16px!important;box-shadow:var(--sh-lg)!important}
+
+/* ── 4. SIDEBAR — deep navy, coral active dot ──────────────────────── */
+html[data-skin="harbour"] .layout{background:#0B2545}
+html[data-skin="harbour"] .sidebar{background:#0B2545;border-right:0;padding:6px 0 24px}
+html[data-skin="harbour"] .sidebar-section-label{font-size:10.5px;letter-spacing:.16em;color:#6F88AA;padding:18px 24px 8px}
+html[data-skin="harbour"] .sidebar-item{
+  color:#B5C5DA;font-weight:600;font-size:13.5px;padding:0 14px;min-height:42px;margin:2px 12px;
+  border-radius:12px;border-left:0;
+}
+html[data-skin="harbour"] .sidebar-item:hover{background:#12325C;color:#FFFFFF}
+html[data-skin="harbour"] .sidebar-item.active{background:#16406F;color:#FFFFFF;border-left:0;font-weight:700}
+html[data-skin="harbour"] .sidebar-item.active::after{content:'';width:8px;height:8px;border-radius:3px;background:#F26A4B;flex-shrink:0;margin-left:auto}
+html[data-skin="harbour"] .sidebar-item.active:has(.sidebar-badge:not([style*="display:none"]))::after{margin-left:0}
+html[data-skin="harbour"] .sidebar-icon{opacity:.75;color:#8FA6C4}
+html[data-skin="harbour"] .sidebar-item:hover .sidebar-icon{opacity:1;color:#DCE6F2}
+html[data-skin="harbour"] .sidebar-item.active .sidebar-icon{color:#FFFFFF;opacity:1}
+html[data-skin="harbour"] .sidebar-badge,
+html[data-skin="harbour"] .sidebar-badge.amber,
+html[data-skin="harbour"] .sidebar-badge.red{background:#F26A4B;color:#FFFFFF;border-radius:999px;padding:2px 7px;min-width:22px;font-size:11px;font-weight:700}
+html[data-skin="harbour"] .sidebar-divider{background:rgba(255,255,255,.07);margin:10px 24px}
+html[data-skin="harbour"] .sidebar-item[style*="color:var(--red)"]{color:#FF9B85!important}
+html[data-skin="harbour"] .sidebar-item[style*="color:var(--amber)"]{color:#F5C26B!important}
+
+/* ── 5. PAGE FRAME ─────────────────────────────────────────────────── */
+html[data-skin="harbour"] .main{background:#EEF2F7;border-top-left-radius:28px}
+html[data-skin="harbour"] body.sidebar-collapsed .main{border-top-left-radius:0}
+html[data-skin="harbour"] .page{padding:28px clamp(16px,2.6vw,40px) 48px}
+html[data-skin="harbour"] .page-title,
+html[data-skin="harbour"] .page .page-title{color:#0B2545!important;font-size:26px;font-weight:800;letter-spacing:-.02em;margin-bottom:4px}
+html[data-skin="harbour"] .page-subtitle{color:#5B6E86;font-size:13px}
+html[data-skin="harbour"] .page-header-row{border-bottom:0;padding-bottom:0;margin-bottom:22px;align-items:center}
+html[data-skin="harbour"] .sec-hdr{margin:28px 0 12px}
+html[data-skin="harbour"] .sec-label,
+html[data-skin="harbour"] .slabel{font-size:12px;letter-spacing:.06em;color:#5B6E86;font-weight:700}
+html[data-skin="harbour"] .sec-label{font-size:15px;letter-spacing:-.005em;text-transform:none;color:#0B2545;font-weight:800}
+html[data-skin="harbour"] .sec-label::before{width:8px;height:8px;border-radius:3px;background:#F26A4B}
+html[data-skin="harbour"] .hint{color:#5B6E86}
+
+/* ── 6. DASHBOARD HERO + KPI chips ────────────────────────────────── */
+html[data-skin="harbour"] #page-dashboard.active{display:flex;flex-direction:column}
+html[data-skin="harbour"] #page-dashboard > *{order:5}
+html[data-skin="harbour"] #page-dashboard > .page-header-row{order:0}
+html[data-skin="harbour"] #page-dashboard > .dash-hero{order:1}
+html[data-skin="harbour"] #page-dashboard > .kpi-strip{order:2}
+html[data-skin="harbour"] .dash-hero{
+  display:block;position:relative;overflow:hidden;border-radius:26px;background:#0B3D6B;color:#FFFFFF;
+  padding:34px 40px 150px;box-shadow:0 24px 48px rgba(11,61,107,.25);margin-bottom:0;flex-shrink:0;
+}
+html[data-skin="harbour"] .dash-hero-waves{position:absolute;left:0;right:0;bottom:0;width:100%;height:200px;display:block}
+html[data-skin="harbour"] .dash-hero-body{position:relative;display:flex;flex-direction:column;gap:10px;max-width:660px}
+html[data-skin="harbour"] .dash-hero-date{font-size:12.5px;letter-spacing:.14em;color:#9EC3EA;font-weight:700}
+html[data-skin="harbour"] .dash-hero-title{margin:0;font-size:36px;font-weight:800;letter-spacing:-.02em;line-height:1.12;color:#FFFFFF}
+html[data-skin="harbour"] .dash-hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+html[data-skin="harbour"] .dash-hero-btn{
+  display:inline-flex;align-items:center;min-height:44px;padding:0 18px;border-radius:12px;border:0;cursor:pointer;
+  background:rgba(255,255,255,.14);color:#FFFFFF;font-weight:700;font-size:13.5px;
+}
+html[data-skin="harbour"] .dash-hero-btn:hover{background:rgba(255,255,255,.22)}
+html[data-skin="harbour"] .dash-hero-btn.primary{background:#FFFFFF;color:#0B3D6B;font-weight:800}
+html[data-skin="harbour"] .dash-hero-btn.primary:hover{background:#F2F6FB}
+
+html[data-skin="harbour"] .kpi-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px;margin-bottom:24px}
+html[data-skin="harbour"] #page-dashboard > .kpi-strip{margin-top:-62px;padding:0 22px;position:relative;z-index:1}
+html[data-skin="harbour"] .kpi-chip{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;grid-template-areas:"label icon" "value value";
+  align-items:center;gap:12px 10px;min-width:0;
+  background:#FFFFFF;border:0;border-radius:20px;padding:18px 20px;box-shadow:var(--hl-shadow-up);
+}
+html[data-skin="harbour"] .kpi-chip:hover{transform:translateY(-1px);box-shadow:0 1px 2px rgba(19,35,58,.06),0 16px 32px rgba(19,35,58,.14)}
+html[data-skin="harbour"] .kpi-chip-body{display:contents}
+html[data-skin="harbour"] .kpi-chip-icon{grid-area:icon;width:36px;height:36px;border-radius:11px}
+html[data-skin="harbour"] .kpi-chip-label{grid-area:label;font-size:13px;font-weight:600;color:#5B6E86;text-transform:none;letter-spacing:0;white-space:normal;line-height:1.3}
+html[data-skin="harbour"] .kpi-chip-value{grid-area:value;font-size:28px;font-weight:600;color:#0B2545;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
+html[data-skin="harbour"] .kpi-chip-value[style*="font-size:13px"]{font-size:13px!important;line-height:1.55!important;font-weight:600;letter-spacing:0;white-space:normal}
+html[data-skin="harbour"] .kpi-chip-azure .kpi-chip-icon{background:#E3EEFB;color:#1565C0}
+html[data-skin="harbour"] .kpi-chip-teal .kpi-chip-icon,
+html[data-skin="harbour"] .kpi-chip-green .kpi-chip-icon{background:#E2F5F2;color:#0B7A6D}
+html[data-skin="harbour"] .kpi-chip-amber .kpi-chip-icon{background:#FFF1D9;color:#A15C00}
+html[data-skin="harbour"] .kpi-chip-fuelv .kpi-chip-icon{background:#FDECE7;color:#F26A4B}
+html[data-skin="harbour"] .kpi-chip-fuelm .kpi-chip-icon{background:#E2F5F2;color:#0E9F8E}
+html[data-skin="harbour"] .kpi-chip-red .kpi-chip-icon{background:#FDE8E4;color:#C0392B}
+html[data-skin="harbour"] .kpi-chip-ink .kpi-chip-icon{background:#EEF2F7;color:#0B2545}
+
+/* Quick actions: white pills, coral for the first (primary) one */
+html[data-skin="harbour"] .qa-btn{
+  background:#FFFFFF;color:#0B2545;border:0;border-radius:14px;padding:0 18px;min-height:46px;font-weight:700;font-size:13px;
+  box-shadow:var(--hl-shadow);
+}
+html[data-skin="harbour"] .qa-btn svg{color:#1565C0}
+html[data-skin="harbour"] .qa-btn:first-child{background:#F26A4B;color:#FFFFFF;box-shadow:0 8px 20px rgba(242,106,75,.35)}
+html[data-skin="harbour"] .qa-btn:first-child svg{color:#FFFFFF}
+html[data-skin="harbour"] .qa-btn:hover{filter:none;transform:translateY(-1px);box-shadow:var(--hl-shadow-up)}
+html[data-skin="harbour"] .qa-btn:first-child:hover{background:#DE5537;box-shadow:0 10px 24px rgba(242,106,75,.42)}
+
+/* ── 7. KPI CARDS (other pages) ───────────────────────────────────── */
+html[data-skin="harbour"] .kpi-grid{gap:16px;margin-bottom:22px}
+html[data-skin="harbour"] .kpi-card,
+html[data-skin="harbour"] :is(.kpi-azure,.kpi-teal,.kpi-amber,.kpi-red,.kpi-green,.kpi-ink,.kpi-fuelv,.kpi-fuelm){
+  background:#FFFFFF;border:0!important;border-radius:20px;padding:18px 20px;box-shadow:var(--hl-shadow-up)!important;
+}
+html[data-skin="harbour"] .kpi-card::before{display:none}
+html[data-skin="harbour"] .kpi-card:hover{transform:translateY(-1px)}
+html[data-skin="harbour"] .kpi-label{font-size:13px;letter-spacing:0;text-transform:none;color:#5B6E86;font-weight:600;margin-bottom:12px;padding-right:44px}
+html[data-skin="harbour"] .kpi-value{font-size:28px;font-weight:600;letter-spacing:-.02em;color:#0B2545!important}
+html[data-skin="harbour"] .kpi-sub{font-size:12.5px;font-weight:600;color:#5B6E86}
+html[data-skin="harbour"] .kpi-card-icon{width:36px;height:36px;border-radius:11px;opacity:1;right:18px;top:16px}
+html[data-skin="harbour"] .kpi-azure .kpi-sub,html[data-skin="harbour"] .kpi-fuelv .kpi-sub{color:#1565C0}
+html[data-skin="harbour"] :is(.kpi-teal,.kpi-green,.kpi-fuelm) .kpi-sub{color:#0B7A6D}
+html[data-skin="harbour"] .kpi-amber .kpi-sub{color:#A15C00}
+html[data-skin="harbour"] .kpi-red .kpi-sub{color:#C0392B}
+html[data-skin="harbour"] .scard{background:#FFFFFF;border:0;border-radius:20px;box-shadow:var(--hl-shadow-up)}
+html[data-skin="harbour"] .scard::before{display:none}
+html[data-skin="harbour"] .scard label{font-size:12.5px;letter-spacing:0;text-transform:none;color:#5B6E86;font-weight:600}
+html[data-skin="harbour"] .scard span{color:#0B2545!important;font-weight:600}
+
+/* ── 8. CARDS & PANELS ─────────────────────────────────────────────── */
+html[data-skin="harbour"] :is(.card,.chart-card,.ci-card,.vcard,.bcard,.tlc,.nsc-result,.legend,.tbl-wrap,.voy-wrap,.rec-row){
+  background:#FFFFFF;border:0;box-shadow:var(--hl-shadow);
+}
+html[data-skin="harbour"] :is(.card,.chart-card){border-radius:20px;padding:22px 24px;margin-bottom:18px}
+html[data-skin="harbour"] :is(.vcard,.bcard,.ci-card){border-radius:20px;padding:20px 22px;margin-bottom:14px}
+html[data-skin="harbour"] :is(.vcard,.bcard,.tlc,.rec-row):hover{box-shadow:var(--hl-shadow-up)}
+html[data-skin="harbour"] :is(.vcard-hdr,.bcard-hdr){border-bottom-color:#EEF2F7;padding-bottom:12px;margin-bottom:14px}
+html[data-skin="harbour"] :is(.card-title,.chart-title){color:#0B2545;font-size:16px;font-weight:800;letter-spacing:-.01em}
+html[data-skin="harbour"] :is(.card-subtitle,.chart-subtitle){color:#5B6E86;font-size:12.5px}
+html[data-skin="harbour"] .vcard-num{color:#1565C0;background:#E3EEFB;border:0;border-radius:999px;padding:3px 10px;font-size:11px}
+html[data-skin="harbour"] .vcard-num.barge{color:#0B7A6D;background:#E2F5F2}
+html[data-skin="harbour"] .rec-row{border-radius:16px;padding:14px 18px;margin-bottom:10px}
+html[data-skin="harbour"] .rec-vessel{color:#0B2545;font-weight:800}
+html[data-skin="harbour"] .formula-strip{background:#F6F8FB;border:0;color:#1565C0;border-radius:14px}
+html[data-skin="harbour"] .tmi{background:#F6F8FB;border:0;border-radius:12px;padding:8px 10px}
+html[data-skin="harbour"] .tmi label{color:#5B6E86;letter-spacing:.04em;font-size:10px}
+html[data-skin="harbour"] .tmi span{color:#0B2545}
+html[data-skin="harbour"] .tlvn{color:#0B2545;font-weight:800;font-size:14.5px}
+html[data-skin="harbour"] :is(.rbt,.progress-track){background:#EEF2F7;border:0;height:8px;border-radius:999px}
+html[data-skin="harbour"] :is(.progress-fill,.rbf){border-radius:999px}
+html[data-skin="harbour"] .tlc{border-radius:18px;padding:16px 18px}
+html[data-skin="harbour"] .tlc:is(.wv,.wvm){box-shadow:inset 3px 0 0 #C0392B,var(--hl-shadow);border-left:0}
+html[data-skin="harbour"] .tlc:is(.wm,.del){box-shadow:inset 3px 0 0 #F0A433,var(--hl-shadow);border-left:0}
+html[data-skin="harbour"] .tld{box-shadow:0 0 0 3px #EEF2F7,0 0 0 4px #D5DEEA}
+html[data-skin="harbour"] .tll{background:#D5DEEA}
+html[data-skin="harbour"] .activity-item{border-bottom-color:#EEF2F7;padding:12px 0}
+html[data-skin="harbour"] .activity-title{color:#0B2545}
+html[data-skin="harbour"] .aq-row{border-bottom-color:#EEF2F7;padding:14px 20px}
+html[data-skin="harbour"] .aq-name{color:#0B2545;font-weight:800;font-size:13.5px}
+html[data-skin="harbour"] .aq-detail{color:#5B6E86;font-size:12px}
+html[data-skin="harbour"] .aq-tag{border-radius:999px;padding:4px 10px;border:0;font-size:10px}
+html[data-skin="harbour"] .barge-tl-tabs{background:transparent;border-bottom:0;gap:6px;flex-wrap:wrap}
+html[data-skin="harbour"] .barge-tl-tab{color:#33475F;font-weight:700;border:0;border-radius:999px;padding:9px 16px;margin:0;background:#FFFFFF;box-shadow:var(--hl-shadow)}
+html[data-skin="harbour"] .barge-tl-tab.active{color:#FFFFFF;background:#0B2545}
+html[data-skin="harbour"] .barge-tl-tab:hover:not(.active){background:#FFFFFF;color:#0B2545}
+html[data-skin="harbour"] .legend{border-radius:14px;padding:10px 16px}
+html[data-skin="harbour"] .nsc-result{border-radius:18px;padding:16px}
+
+/* Alert strips & refuel panels: rounded tinted banners */
+html[data-skin="harbour"] .alert-strip{border-radius:16px;padding:13px 18px;border:0;font-weight:600;font-size:12.5px;margin-bottom:10px}
+html[data-skin="harbour"] .alert-strip.critical{background:#FDE8E4;color:#C0392B}
+html[data-skin="harbour"] .alert-strip.warning{background:#FFF1D9;color:#A15C00}
+html[data-skin="harbour"] :is(.alert-strip.info,.alert-strip.early){background:#E3EEFB;color:#1565C0}
+html[data-skin="harbour"] .alert-strip strong{color:inherit}
+html[data-skin="harbour"] .alert-strip[onclick]:hover{filter:none;transform:none;box-shadow:var(--hl-shadow)}
+html[data-skin="harbour"] .apanel{border-radius:20px;padding:18px 20px;border:0}
+html[data-skin="harbour"] .apanel.fired{background:#FDE8E4}
+html[data-skin="harbour"] .apanel.clear{background:#E2F5F2}
+html[data-skin="harbour"] .apanel.fired :is(.apt,.arow){color:#C0392B}
+html[data-skin="harbour"] .apanel.clear :is(.apt,.arow){color:#0B7A6D}
+html[data-skin="harbour"] .apanel .arow{border-top-color:rgba(19,35,58,.08)}
+html[data-skin="harbour"] .apanel.fired .apdot{background:#C0392B}
+html[data-skin="harbour"] .apanel.clear .apdot{background:#0E9F8E}
+html[data-skin="harbour"] .apanel .snum{background:#FFFFFF}
+
+/* ── 9. TABLES ─────────────────────────────────────────────────────── */
+html[data-skin="harbour"] :is(.tbl-wrap,.voy-wrap){border-radius:20px;overflow:auto}
+html[data-skin="harbour"] :is(.data-tbl,.voy-tbl,.cl-tbl){background:transparent}
+html[data-skin="harbour"] :is(.data-tbl,.voy-tbl) thead{background:#F6F8FB}
+html[data-skin="harbour"] :is(.data-tbl,.voy-tbl,.cl-tbl) th{
+  background:#F6F8FB;color:#5B6E86;font-size:12px;letter-spacing:0;text-transform:none;font-weight:700;
+  padding:13px 14px;border-bottom:0;
+}
+html[data-skin="harbour"] :is(.data-tbl,.voy-tbl,.cl-tbl) td{border-bottom:1px solid #EEF2F7;color:#13233A;padding:12px 14px}
+html[data-skin="harbour"] :is(.data-tbl,.voy-tbl,.cl-tbl) tbody tr:hover td{background:#F8FAFD}
+html[data-skin="harbour"] .main table :is(thead,tr,th)[style*="background:var(--navy)"],
+html[data-skin="harbour"] .main table :is(thead,tr,th)[style*="background:var(--ink"],
+html[data-skin="harbour"] [id$="-modal"] table :is(thead,tr,th)[style*="background:var(--navy)"],
+html[data-skin="harbour"] [id$="-modal"] table :is(thead,tr,th)[style*="background:var(--ink"]{background:#F6F8FB!important;color:#5B6E86!important}
+html[data-skin="harbour"] .main table :is(thead,tr)[style*="background:var(--navy)"] th,
+html[data-skin="harbour"] .main table :is(thead,tr)[style*="background:var(--ink"] th{color:#5B6E86!important}
+html[data-skin="harbour"] .sno{color:#5B6E86}
+/* vessel initials-style badge on the first data cell is skipped (needs logic) */
+html[data-skin="harbour"] .main table tr[style*="background:var(--navy2)"],
+html[data-skin="harbour"] .main table tr[style*="background:var(--navy2)"] th{background:#F6F8FB!important;color:#5B6E86!important}
+html[data-skin="harbour"] .main table th[style*="border-left:1px solid rgba(255,255,255"]{border-left-color:#E3E9F1!important}
+html[data-skin="harbour"] .cl-tbl :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){border:1px solid #D5DEEA!important;border-radius:10px!important;background:#FFFFFF!important}
+html[data-skin="harbour"] .rst-barge-block{border-radius:16px;overflow:hidden;box-shadow:0 0 0 1px #EEF2F7}
+/* Dashboard action queue ("Needs attention") — white card, real heading */
+html[data-skin="harbour"] #dash-action-queue > div{border:0!important;border-radius:20px!important;box-shadow:var(--hl-shadow)!important;margin-bottom:18px!important}
+html[data-skin="harbour"] #dash-action-queue > div > div:first-child{background:#FFFFFF!important;border-bottom:1px solid #EEF2F7!important;padding:18px 20px 14px!important}
+html[data-skin="harbour"] #dash-action-queue > div > div:first-child > span{font-family:var(--font-ui)!important;font-size:16px!important;font-weight:800!important;color:#0B2545!important;text-transform:none!important;letter-spacing:-.01em!important}
+/* Weekly calendar loading tickets → "loading" amber tint */
+html[data-skin="harbour"] .cal-ticket-loading{background:#FFF1D9!important;border-color:#F1D19C!important;border-radius:10px!important}
+html[data-skin="harbour"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#A15C00!important}
+html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(161,92,0,.35)!important}
+html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(161,92,0,.2)!important}
+/* Command Center wallboard stays a dark TV screen by design — just framed */
+html[data-skin="harbour"] #cc-wallboard{border:0!important;border-radius:20px!important;box-shadow:0 1px 2px rgba(19,35,58,.06),0 18px 40px rgba(19,35,58,.18)!important}
+
+/* ── 10. STATUS: badges / tags — tinted pills ─────────────────────── */
+html[data-skin="harbour"] :is(.badge,.stag,.tb,.cat,.pt-tag){border-radius:999px;padding:4px 10px;font-size:10.5px;letter-spacing:.02em;font-weight:800;border:0}
+html[data-skin="harbour"] :is(.badge-green,.badge-teal,.st-ok,.tb-ok,.tb-on,.lc-box.ok,.nsc-ok,.send-email-btn.sent){background:#E2F5F2;color:#0B7A6D;border-color:transparent}
+html[data-skin="harbour"] :is(.badge-azure,.st-early,.tb-early,.lc-box.early,.travel-notice){background:#E3EEFB;color:#1565C0;border-color:transparent}
+html[data-skin="harbour"] :is(.badge-red,.st-dl,.tb-dl,.tb-wv,.cat-v,.lc-box.late,.nsc-warn){background:#FDE8E4;color:#C0392B;border-color:transparent}
+html[data-skin="harbour"] :is(.badge-amber,.tb-pt,.tb-wm,.cat-m,.pt-tag,.lc-box.warn,.dl-note){background:#FFF1D9;color:#A15C00;border-color:transparent}
+html[data-skin="harbour"] .badge-slate{background:#EEF2F7;color:#33475F;border-color:transparent}
+html[data-skin="harbour"] .badge-purple{border-color:transparent}
+html[data-skin="harbour"] .lc-rng.in{color:#0B7A6D}
+html[data-skin="harbour"] .lc-rng.out{color:#C0392B}
+html[data-skin="harbour"] .badge-dual{border-radius:999px;border:0}
+html[data-skin="harbour"] .badge-dual .v{background:#E3EEFB;color:#1565C0}
+html[data-skin="harbour"] .badge-dual .m{background:#E2F5F2;color:#0B7A6D}
+html[data-skin="harbour"] :is(.lc-box,.etc-prev,.dl-note,.travel-notice,.nsc-ok,.nsc-warn){border-radius:12px;border:0}
+html[data-skin="harbour"] .etc-prev{background:#E3EEFB;color:#1565C0}
+
+/* ── 11. BUTTONS ───────────────────────────────────────────────────── */
+html[data-skin="harbour"] .btn{border-radius:12px;font-weight:700;letter-spacing:0;padding:9px 16px;font-size:12.5px}
+html[data-skin="harbour"] .btn-primary,
+html[data-skin="harbour"] .btn-generate,
+html[data-skin="harbour"] #og-submit-btn{background:#F26A4B;color:#FFFFFF;border:0;box-shadow:0 8px 20px rgba(242,106,75,.35)}
+html[data-skin="harbour"] .btn-primary:hover,
+html[data-skin="harbour"] .btn-generate:hover,
+html[data-skin="harbour"] #og-submit-btn:hover{background:#DE5537;color:#FFFFFF;box-shadow:0 10px 24px rgba(242,106,75,.42)}
+html[data-skin="harbour"] .btn-primary:not(.btn-sm),
+html[data-skin="harbour"] .btn-lg{min-height:46px;padding:0 20px;border-radius:14px}
+html[data-skin="harbour"] .btn-primary.btn-sm{box-shadow:0 6px 14px rgba(242,106,75,.30)}
+html[data-skin="harbour"] .btn-generate{border-radius:16px;font-weight:800;min-height:52px;font-size:14px}
+html[data-skin="harbour"] .btn-generate svg{opacity:1}
+html[data-skin="harbour"] .btn-secondary{background:#FFFFFF;color:#0B2545;border:1px solid #D5DEEA}
+html[data-skin="harbour"] .btn-secondary:hover{color:#0B2545;border-color:#B7C6D9;background:#F6F8FB}
+html[data-skin="harbour"] .btn-ghost{background:#EEF2F7;color:#33475F;border:0}
+html[data-skin="harbour"] .btn-ghost:hover{background:#E3E9F1;color:#0B2545}
+html[data-skin="harbour"] .btn-success{background:#0E9F8E;color:#FFFFFF;border:0}
+html[data-skin="harbour"] .btn-success:hover{background:#0B7A6D;box-shadow:0 8px 18px rgba(14,159,142,.30)}
+html[data-skin="harbour"] .btn-danger{background:#FFFFFF;color:#C0392B;border:1px solid #F2B9AE}
+html[data-skin="harbour"] .btn-danger:hover{background:#FDE8E4;color:#C0392B;border-color:#F2B9AE;box-shadow:none}
+html[data-skin="harbour"] .btn-sm{padding:6px 12px;border-radius:10px;font-size:12px}
+html[data-skin="harbour"] .aq-btn{background:#FFFFFF;border:1px solid #D5DEEA;color:#0B2545;border-radius:11px;padding:7px 13px;font-size:12px;font-weight:700}
+html[data-skin="harbour"] .aq-btn:hover{border-color:#B7C6D9;color:#0B2545;background:#F6F8FB}
+html[data-skin="harbour"] .aq-btn-primary{background:#E3EEFB;color:#1565C0;border-color:#E3EEFB}
+html[data-skin="harbour"] .aq-btn-primary:hover{background:#D3E3F8;color:#0B3D6B;border-color:#D3E3F8}
+html[data-skin="harbour"] .week-nav-btn{background:#FFFFFF;border:1px solid #D5DEEA;border-radius:10px;color:#33475F;width:34px;height:34px}
+html[data-skin="harbour"] .week-nav-btn:hover{border-color:#1565C0;color:#1565C0}
+html[data-skin="harbour"] .week-nav-btn-today{background:#E3EEFB;color:#1565C0;border:0;border-radius:10px;height:34px;font-size:12px}
+html[data-skin="harbour"] .week-nav-btn-today:hover{background:#D3E3F8;color:#0B3D6B}
+html[data-skin="harbour"] .btn-add{background:#FFFFFF;border:1.5px dashed #C9D4E2;border-radius:16px;color:#33475F;padding:14px;font-weight:700}
+html[data-skin="harbour"] .btn-add:hover{background:#FDECE7;border-color:#F26A4B;color:#C2401F;border-style:dashed}
+html[data-skin="harbour"] :is(.rm-btn,.send-email-btn,.cancel-email-btn){border-radius:10px;padding:5px 11px;font-weight:700}
+html[data-skin="harbour"] .rm-btn{background:#FFFFFF;border:1px solid #D5DEEA;color:#33475F}
+html[data-skin="harbour"] .rm-btn:hover{background:#FDE8E4;color:#C0392B;border-color:#F2B9AE}
+html[data-skin="harbour"] .send-email-btn{background:#E3EEFB;border-color:#E3EEFB;color:#1565C0}
+html[data-skin="harbour"] .send-email-btn:hover:not(:disabled){background:#1565C0;color:#FFFFFF;border-color:#1565C0}
+html[data-skin="harbour"] .cancel-email-btn{background:#FDE8E4;border-color:#FDE8E4;color:#C0392B}
+html[data-skin="harbour"] .cancel-email-btn:hover:not(:disabled){background:#C0392B;color:#FFFFFF;border-color:#C0392B}
+html[data-skin="harbour"] .topbar-btn-reset{border-radius:12px}
+
+/* ── 12. INPUTS / SELECTS / FLATPICKR ─────────────────────────────── */
+html[data-skin="harbour"] .field{gap:6px}
+html[data-skin="harbour"] .field label{font-size:12px;letter-spacing:0;text-transform:none;color:#5B6E86;font-weight:700}
+html[data-skin="harbour"] :is(.field input,.field select,.field textarea),
+html[data-skin="harbour"] .main :is(input[type="text"],input[type="number"],input[type="email"],input[type="date"],input[type="datetime-local"],input[type="search"],input[type="password"],input:not([type]),select,textarea),
+html[data-skin="harbour"] [id$="-modal"] :is(input[type="text"],input[type="number"],input[type="email"],input[type="password"],input:not([type]),select,textarea){
+  background-color:#FFFFFF;border:1px solid #D5DEEA;color:#13233A;border-radius:14px;box-shadow:none;
+}
+html[data-skin="harbour"] :is(.field input:not([type="checkbox"]):not([type="radio"]),.field select){min-height:46px;padding:0 14px}
+html[data-skin="harbour"] .field textarea{padding:12px 14px}
+html[data-skin="harbour"] :is(input,select,textarea)::placeholder{color:#8696AB}
+html[data-skin="harbour"] :is(input,select,textarea):hover{border-color:#B7C6D9}
+html[data-skin="harbour"] :is(input,select,textarea):focus{border-color:#F26A4B!important;box-shadow:0 0 0 3px rgba(242,106,75,.18)!important;outline:none}
+html[data-skin="harbour"] :is(.input-cal,.input-with-cal){background:#FFFFFF;border:1px solid #D5DEEA;border-radius:14px;box-shadow:none;min-height:46px}
+html[data-skin="harbour"] .input-cal:focus-within{border-color:#F26A4B;box-shadow:0 0 0 3px rgba(242,106,75,.18)}
+html[data-skin="harbour"] :is(.input-cal,.input-with-cal) input{background:transparent!important;border:0!important;min-height:44px}
+html[data-skin="harbour"] .cal-btn:hover{color:#F26A4B}
+html[data-skin="harbour"] input[type="checkbox"],html[data-skin="harbour"] input[type="radio"]{accent-color:#F26A4B}
+html[data-skin="harbour"] .flatpickr-calendar{background:#FFFFFF;border:0;box-shadow:var(--sh-xl);border-radius:18px;font-family:var(--font-ui)}
+html[data-skin="harbour"] .flatpickr-months .flatpickr-month,html[data-skin="harbour"] .flatpickr-weekdays,html[data-skin="harbour"] span.flatpickr-weekday{background:#FFFFFF;color:#0B2545;fill:#0B2545}
+html[data-skin="harbour"] .flatpickr-current-month{color:#0B2545}
+html[data-skin="harbour"] span.flatpickr-weekday{color:#5B6E86;font-weight:700}
+html[data-skin="harbour"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month){color:#33475F;fill:#33475F}
+html[data-skin="harbour"] .flatpickr-months :is(.flatpickr-prev-month,.flatpickr-next-month):hover svg{fill:#F26A4B}
+html[data-skin="harbour"] .flatpickr-day{border-radius:10px;color:#13233A}
+html[data-skin="harbour"] .flatpickr-day.today{border-color:#F26A4B}
+html[data-skin="harbour"] :is(.flatpickr-day.selected,.flatpickr-day.startRange,.flatpickr-day.endRange){background:#F26A4B;border-color:#F26A4B;color:#FFFFFF}
+html[data-skin="harbour"] .flatpickr-day.inRange{background:#FDECE7;border-color:#FDECE7;box-shadow:-5px 0 0 #FDECE7,5px 0 0 #FDECE7}
+
+/* ── 13. MODALS / TOASTS / OVERLAYS ───────────────────────────────── */
+html[data-skin="harbour"] [id$="-modal"]{background:rgba(11,37,69,.45)!important}
+html[data-skin="harbour"] [id$="-modal"] > div{border:0!important;border-radius:24px!important;box-shadow:0 30px 80px rgba(11,37,69,.30)!important}
+html[data-skin="harbour"] [id$="-modal"] button[style*="background:var(--surface"]{background:#FFFFFF!important;border:1px solid #D5DEEA!important;border-radius:12px!important;color:#0B2545!important}
+html[data-skin="harbour"] #_archiveModal > div{border:0!important;border-radius:24px!important}
+html[data-skin="harbour"] .toast{background:#FFFFFF;border:0;border-left:4px solid #5B6E86;border-radius:16px;color:#13233A;box-shadow:var(--sh-lg);padding:14px 16px}
+html[data-skin="harbour"] .toast-success{border-left-color:#0E9F8E}
+html[data-skin="harbour"] .toast-success .toast-icon{color:#0E9F8E}
+html[data-skin="harbour"] .toast-error{border-left-color:#C0392B}
+html[data-skin="harbour"] .toast-info{border-left-color:#1565C0}
+html[data-skin="harbour"] .toast-warning{border-left-color:#F0A433}
+html[data-skin="harbour"] .toast-warning .toast-icon{color:#A15C00}
+html[data-skin="harbour"] #print-only-container{background:#fff}
+
+/* ── 14. LOGIN GATE ────────────────────────────────────────────────── */
+html[data-skin="harbour"] #operator-gate{background:linear-gradient(180deg,#0B2545 0,#0B2545 42%,#EEF2F7 42%,#EEF2F7 100%)}
+html[data-skin="harbour"] #operator-gate > div[style*="pointer-events:none"]{display:none}
+html[data-skin="harbour"] #og-logo-badge{background:#F26A4B;border:0;box-shadow:0 12px 28px rgba(242,106,75,.40);border-radius:20px}
+html[data-skin="harbour"] #og-logo-tagline{color:#9EC3EA;letter-spacing:.2em}
+html[data-skin="harbour"] #og-card{background:#FFFFFF;border:0;border-radius:24px;box-shadow:0 1px 2px rgba(19,35,58,.06),0 24px 56px rgba(19,35,58,.16);padding:32px 30px 28px}
+html[data-skin="harbour"] .og-label{color:#5B6E86;letter-spacing:.02em;text-transform:none;font-size:12.5px}
+html[data-skin="harbour"] .og-input{background:#FFFFFF;border:1px solid #D5DEEA;border-radius:14px;box-shadow:none;color:#13233A;min-height:46px}
+html[data-skin="harbour"] .og-input:focus{border-color:#F26A4B;box-shadow:0 0 0 3px rgba(242,106,75,.18)}
+html[data-skin="harbour"] #og-error{background:#FDE8E4;color:#C0392B;border:0;border-radius:14px;box-shadow:none}
+html[data-skin="harbour"] #og-submit-btn{border-radius:14px;min-height:48px;font-weight:800;letter-spacing:.02em}
+html[data-skin="harbour"] #og-submit-btn:hover{transform:none}
+html[data-skin="harbour"] #og-footer-hint,html[data-skin="harbour"] #og-horizon-label{color:#5B6E86}
+
+/* ── 15. INLINE-STYLED FILLS in JS templates ───────────────────────────
+   Solid status fills with white text become tinted pills (same meaning).
+   Scoped to the app shell and modals only — never off-screen export
+   containers. */
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--green)"],[style*="background:var(--teal)"]){background:#E2F5F2!important;color:#0B7A6D!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--red)"]{background:#FDE8E4!important;color:#C0392B!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"][style*="background:var(--amber)"]{background:#FFF1D9!important;color:#A15C00!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#global-alerts-dropdown) [style*="color:#fff"]:is([style*="background:var(--azure)"],[style*="background: var(--azure)"]){background:#E3EEFB!important;color:#1565C0!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]{background:#F26A4B!important;border:0!important;color:#FFFFFF!important;border-radius:12px!important;box-shadow:0 8px 20px rgba(242,106,75,.30)!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"],#_archiveModal) button[style*="linear-gradient"]:hover{background:#DE5537!important}
+html[data-skin="harbour"] :is(.layout,[id$="-modal"]) div[style*="linear-gradient(135deg,var(--ink-solid)"]{background:#0B2545!important}
+html[data-skin="harbour"] .main table tr[style*="linear-gradient(135deg,var(--ink-solid)"],
+html[data-skin="harbour"] .main table tr[style*="linear-gradient(135deg,var(--ink-solid)"] th{background:#F6F8FB!important;color:#5B6E86!important}
+html[data-skin="harbour"] input[type="file"]::file-selector-button{background:#FFFFFF;color:#0B2545;border:1px solid #D5DEEA;border-radius:10px;padding:7px 12px;margin-right:10px;font:inherit;font-weight:700;cursor:pointer}
+
+/* ── 16. MOBILE ────────────────────────────────────────────────────── */
+@media (max-width:768px){
+  html[data-skin="harbour"] .topbar{height:auto;padding:10px 12px;row-gap:10px}
+  html[data-skin="harbour"] .skin-toggle-btn{padding:0 10px;font-size:11px}
+  html[data-skin="harbour"] .main{border-top-left-radius:0}
+  html[data-skin="harbour"] .layout{background:#EEF2F7}
+  html[data-skin="harbour"] .sidebar{background:#0B2545;box-shadow:24px 0 60px rgba(11,37,69,.35);width:268px}
+  html[data-skin="harbour"] .sidebar-item{min-height:46px;font-size:14px}
+  html[data-skin="harbour"] .page{padding:20px 16px 32px}
+  html[data-skin="harbour"] .page-title{font-size:22px}
+  html[data-skin="harbour"] :is(.card,.chart-card){padding:18px 16px;border-radius:18px}
+  html[data-skin="harbour"] :is(.vcard,.bcard,.ci-card){padding:16px 14px;border-radius:18px}
+  html[data-skin="harbour"] .dash-hero{padding:22px 20px 118px;border-radius:22px}
+  html[data-skin="harbour"] .dash-hero-title{font-size:23px}
+  html[data-skin="harbour"] .dash-hero-date{font-size:11px}
+  html[data-skin="harbour"] .dash-hero-waves{height:150px}
+  html[data-skin="harbour"] .dash-hero-btn{min-height:40px;padding:0 14px;font-size:13px}
+  html[data-skin="harbour"] .kpi-strip{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  html[data-skin="harbour"] #page-dashboard > .kpi-strip{margin-top:-44px;padding:0 10px}
+  html[data-skin="harbour"] .kpi-chip{padding:14px 14px;border-radius:18px;gap:8px 6px}
+  html[data-skin="harbour"] .kpi-chip-value{font-size:20px}
+  html[data-skin="harbour"] .kpi-chip-icon{width:30px;height:30px;border-radius:9px}
+  html[data-skin="harbour"] .kpi-chip-label{font-size:12px}
+  html[data-skin="harbour"] .kpi-card{padding:16px}
+  html[data-skin="harbour"] .kpi-value{font-size:22px}
+  html[data-skin="harbour"] .qa-btn{flex:1 1 auto;justify-content:center}
+  html[data-skin="harbour"] [id$="-modal"] > div{border-radius:20px!important}
+}
+} /* end @media screen */
+</style>
 </head>
 <!-- ═══════════════════════════════════════════════════════
      BODY — SYNC BANNER + TOPBAR + SIDEBAR + PAGES
@@ -1935,6 +2458,10 @@ function flowWelcomeGo(pageId) {
         </button>
       </div>
     </div>
+    <button id="skin-toggle-btn" onclick="toggleSkin()" class="skin-toggle-btn" aria-label="Switch look" title="Switch look">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l2.4 5.6L20 11l-5.6 2.4L12 19l-2.4-5.6L4 11l5.6-2.4z"/></svg>
+      <span id="skin-toggle-label">New look</span>
+    </button>
     <button id="theme-toggle-btn" onclick="toggleColorTheme()" aria-label="Toggle light / dark theme" title="Toggle light / dark theme" class="theme-toggle-btn">
       <svg id="theme-icon-sun" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4.5"/><line x1="12" y1="19.5" x2="12" y2="22"/><line x1="4.22" y1="4.22" x2="5.94" y2="5.94"/><line x1="18.06" y1="18.06" x2="19.78" y2="19.78"/><line x1="2" y1="12" x2="4.5" y2="12"/><line x1="19.5" y1="12" x2="22" y2="12"/><line x1="4.22" y1="19.78" x2="5.94" y2="18.06"/><line x1="18.06" y1="5.94" x2="19.78" y2="4.22"/></svg>
       <svg id="theme-icon-moon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
@@ -2069,6 +2596,27 @@ function flowWelcomeGo(pageId) {
       </button>
     </div>
   </div>
+
+  <!-- Harbour Light hero banner — shown only under html[data-skin="harbour"]
+       (display:none otherwise, so Classic is unchanged). Text is filled by
+       _renderDashHero() via textContent from values refreshDashboard()
+       already computes. -->
+  <section id="dash-hero" class="dash-hero" aria-label="Today">
+    <svg class="dash-hero-waves" aria-hidden="true" viewBox="0 0 1200 220" preserveAspectRatio="none">
+      <path d="M0 120 C 200 80, 400 160, 600 120 S 1000 80, 1200 120 L1200 220 L0 220 Z" fill="#0F4C82"></path>
+      <path d="M0 160 C 220 125, 420 195, 640 160 S 1020 125, 1200 160 L1200 220 L0 220 Z" fill="#14599A"></path>
+      <g transform="translate(860,58)" fill="#FFFFFF" opacity="0.92"><path d="M0 52 L210 52 L190 78 L22 78 Z"></path><rect x="140" y="24" width="44" height="28" rx="3"></rect><rect x="152" y="8" width="10" height="16"></rect><rect x="30" y="38" width="96" height="14" rx="2"></rect></g>
+      <g transform="translate(640,96)" fill="#FFC9B9" opacity="0.9"><path d="M0 30 L120 30 L110 44 L10 44 Z"></path><rect x="84" y="16" width="22" height="14" rx="2"></rect></g>
+    </svg>
+    <div class="dash-hero-body">
+      <span class="dash-hero-date" id="dash-hero-date"></span>
+      <h1 class="dash-hero-title" id="dash-hero-title">Good morning.</h1>
+      <div class="dash-hero-actions">
+        <button type="button" class="dash-hero-btn primary" onclick="showPage('alerts')">Review delays</button>
+        <button type="button" class="dash-hero-btn" onclick="showPage('schedule')">Open schedule</button>
+      </div>
+    </div>
+  </section>
 
   <!-- Quick Actions — the common day-to-day tasks, one click from the landing page.
        Each button is filled with the same accent its destination page's topbar
@@ -3866,6 +4414,48 @@ function toggleColorTheme() {
 }
 document.addEventListener('DOMContentLoaded', _syncThemeIcon);
 
+/* ── HARBOUR LIGHT / CLASSIC SKIN SWITCH ─────────────────────────────
+   Purely visual. Harbour is light-only (forces data-theme="light", hides
+   the light/dark toggle); Classic restores the original look and the
+   visitor's own saved light/dark choice. Persisted per device in
+   localStorage 'flow-skin'. To drop the Harbour skin entirely remove this,
+   the #skin-toggle-btn, the skin-harbour style block, the #dash-hero
+   markup + _renderDashHero(), and the 'flow-skin' lines in the <head>
+   script — everything else falls back to Classic by itself. ── */
+function _syncSkinUI() {
+  var harbour = _isPremiumSkin();
+  var lbl = document.getElementById('skin-toggle-label');
+  var btn = document.getElementById('skin-toggle-btn');
+  var t = harbour ? 'Classic look' : 'New look';
+  if (lbl) lbl.textContent = t;
+  if (btn) { btn.title = 'Switch to the ' + t; btn.setAttribute('aria-label', 'Switch to the ' + t); }
+  var tm = document.querySelector('meta[name="theme-color"]');
+  if (tm) tm.setAttribute('content', harbour ? '#0B2545' : '#0F1E30');
+}
+function toggleSkin() {
+  var html = document.documentElement;
+  var next = _isPremiumSkin() ? 'classic' : 'harbour';
+  html.setAttribute('data-skin', next);
+  try { localStorage.setItem('flow-skin', next); } catch(e) {}
+  if (next === 'harbour') {
+    html.setAttribute('data-theme', 'light');
+  } else {
+    var saved = null;
+    try { saved = localStorage.getItem('flow-theme'); } catch(e) {}
+    html.setAttribute('data-theme', saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+  }
+  _syncThemeIcon();
+  _syncSkinUI();
+  try {
+    if (typeof _applyChartJsTheme === 'function') _applyChartJsTheme();
+    if (typeof _savedSupplies !== 'undefined' && typeof renderReportCharts === 'function') renderReportCharts(_savedSupplies);
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+    if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
+  } catch(e) { /* charts/data not ready yet — safe to ignore */ }
+  if (typeof _flowWelcomeApplyTheme === 'function') _flowWelcomeApplyTheme();
+}
+document.addEventListener('DOMContentLoaded', _syncSkinUI);
+
 /* ── GLOBAL VESSEL SEARCH ──────────────────────────────────────────
    Searches across the three places a vessel name lives — live
    Nomination cards (DOM inputs), the generated Schedule (_lastSched),
@@ -4235,6 +4825,28 @@ function refreshDashboard() {
   _dashSafe('fleet',    () => renderDashFleetStatus());
   _dashSafe('watchlist',() => renderTrackRecordWatchlist());
   _dashSafe('activity', () => renderDashActivity(savedRecs, []));
+  _dashSafe('hero',     () => _renderDashHero(now, totalAlerts));
+}
+/* Harbour Light hero banner text (the banner itself is CSS-hidden in
+   Classic). "Supplies today" = schedule items whose barge start falls on
+   today's date; "need your attention" = the same PAQ + delayed total the
+   Alerts badge shows. textContent only — no markup from data. */
+function _renderDashHero(now, attention) {
+  const dateEl = document.getElementById('dash-hero-date');
+  const titleEl = document.getElementById('dash-hero-title');
+  if (!dateEl || !titleEl) return;
+  const todayStr = now.toDateString();
+  let today = 0;
+  (_lastSched || []).forEach(function(item) {
+    const d = new Date(item && (item.bargeStart || item.eta));
+    if (!isNaN(d) && d.toDateString() === todayStr) today++;
+  });
+  const h = now.getHours();
+  const greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  const att = attention > 0 ? attention + (attention === 1 ? ' needs' : ' need') + ' your attention.' : 'nothing needs your attention.';
+  dateEl.textContent = (now.toLocaleDateString('en-GB', { weekday: 'long' }) + ' · '
+    + now.toLocaleDateString('en-GB', { day: 'numeric', month: 'long' }) + ' · Fujairah').toUpperCase();
+  titleEl.textContent = greet + ' — ' + today + (today === 1 ? ' supply' : ' supplies') + ' today, ' + att;
 }
 function _dashSafe(name, fn) {
   try { fn(); } catch(e) { console.warn('ABPS: dashboard ' + name + ' render failed:', e); }
@@ -4542,7 +5154,7 @@ function renderDashCharts(records, vessels) {
     }
 
     const _fdTextColor = _chartTextColor();
-    const _fdColors = ['rgba(47,111,237,.85)','rgba(255,122,26,.78)'];
+    const _fdColors = [_skinPal('rgba(47,111,237,.85)'),_skinPal('rgba(255,122,26,.78)')];
     function _buildFuelDonut(key, canvasId, vVal, mVal) {
       const ctx = document.getElementById(canvasId);
       if (!ctx) return;
@@ -4557,7 +5169,7 @@ function renderDashCharts(records, vessels) {
         options: {
           responsive:true, maintainAspectRatio:false, cutout:'66%',
           plugins:{
-            legend:{ position:'bottom', labels:{ font:{size:10,family:'DM Sans'}, boxWidth:10, padding:10, color:_fdTextColor,
+            legend:{ position:'bottom', labels:{ font:{size:10,family:_skinFont('DM Sans')}, boxWidth:10, padding:10, color:_fdTextColor,
               generateLabels: chart => chart.data.labels.map((label,i) => ({
                 text: label+' — '+fmtMT(chart.data.datasets[0].data[i])+' MT',
                 fillStyle: chart.data.datasets[0].backgroundColor[i],
@@ -4743,14 +5355,14 @@ function renderReportCharts(records) {
       data:{
         labels: labels.length?labels:['No data'],
         datasets:[
-          {label:'VLSFO (MT)',data:labels.map(k=>buckets[k].v),backgroundColor:'rgba(47,111,237,.78)',borderRadius:5,borderSkipped:false},
-          {label:'LSMGO (MT)',data:labels.map(k=>buckets[k].m),backgroundColor:'rgba(255,122,26,.68)',borderRadius:5,borderSkipped:false}
+          {label:'VLSFO (MT)',data:labels.map(k=>buckets[k].v),backgroundColor:_skinPal('rgba(47,111,237,.78)'),borderRadius:5,borderSkipped:false},
+          {label:'LSMGO (MT)',data:labels.map(k=>buckets[k].m),backgroundColor:_skinPal('rgba(255,122,26,.68)'),borderRadius:5,borderSkipped:false}
         ]
       },
       options:{
         responsive:true,maintainAspectRatio:false,interaction:{mode:'index'},
-        plugins:{legend:{position:'top',labels:{font:{size:11,family:'DM Sans'},boxWidth:10,padding:12,color:_chartTextColor()}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtMT(c.parsed.y)} MT`}}},
-        scales:{x:{grid:{display:false},ticks:{font:{size:10,family:'DM Mono'},color:_chartTextColor()}},y:{grid:{color:Chart.defaults.borderColor},ticks:{font:{size:10,family:'DM Mono'},color:_chartTextColor(),callback:v=>fmtMT(v)+' MT'}}}
+        plugins:{legend:{position:'top',labels:{font:{size:11,family:_skinFont('DM Sans')},boxWidth:10,padding:12,color:_chartTextColor()}},tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtMT(c.parsed.y)} MT`}}},
+        scales:{x:{grid:{display:false},ticks:{font:{size:10,family:_skinFont('DM Mono')},color:_chartTextColor()}},y:{grid:{color:Chart.defaults.borderColor},ticks:{font:{size:10,family:_skinFont('DM Mono')},color:_chartTextColor(),callback:v=>fmtMT(v)+' MT'}}}
       }
     });
   }
@@ -4777,19 +5389,19 @@ function renderReportCharts(records) {
       data: {
         labels: bLabels.length ? bLabels : ['No data'],
         datasets: [
-          { label:'VLSFO (MT)', data: bLabels.map(k=>bargeBuckets[k].v), backgroundColor:'rgba(47,111,237,.82)', borderRadius:5, borderSkipped:false },
-          { label:'LSMGO (MT)', data: bLabels.map(k=>bargeBuckets[k].m), backgroundColor:'rgba(255,122,26,.75)', borderRadius:5, borderSkipped:false }
+          { label:'VLSFO (MT)', data: bLabels.map(k=>bargeBuckets[k].v), backgroundColor:_skinPal('rgba(47,111,237,.82)'), borderRadius:5, borderSkipped:false },
+          { label:'LSMGO (MT)', data: bLabels.map(k=>bargeBuckets[k].m), backgroundColor:_skinPal('rgba(255,122,26,.75)'), borderRadius:5, borderSkipped:false }
         ]
       },
       options: {
         responsive:true, maintainAspectRatio:false, interaction:{mode:'index'},
         plugins:{
-          legend:{position:'top',labels:{font:{size:11,family:'DM Sans'},boxWidth:10,padding:12,color:_chartTextColor()}},
+          legend:{position:'top',labels:{font:{size:11,family:_skinFont('DM Sans')},boxWidth:10,padding:12,color:_chartTextColor()}},
           tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtMT(c.parsed.y)} MT`}}
         },
         scales:{
-          x:{grid:{display:false},ticks:{font:{size:11,family:'DM Sans'},color:_chartTextColor()}},
-          y:{grid:{color:Chart.defaults.borderColor},ticks:{font:{size:10,family:'DM Mono'},color:_chartTextColor(),callback:v=>fmtMT(v)+' MT'}}
+          x:{grid:{display:false},ticks:{font:{size:11,family:_skinFont('DM Sans')},color:_chartTextColor()}},
+          y:{grid:{color:Chart.defaults.borderColor},ticks:{font:{size:10,family:_skinFont('DM Mono')},color:_chartTextColor(),callback:v=>fmtMT(v)+' MT'}}
         }
       }
     });
@@ -4812,20 +5424,20 @@ function renderReportCharts(records) {
       data:{
         labels:sorted.map(x=>x[0]),
         datasets:[
-          {label:'VLSFO (MT)',data:sorted.map(x=>x[1].v),backgroundColor:'rgba(47,111,237,.8)',borderRadius:4,borderSkipped:false,stack:'s'},
-          {label:'LSMGO (MT)',data:sorted.map(x=>x[1].m),backgroundColor:'rgba(255,122,26,.72)',borderRadius:4,borderSkipped:false,stack:'s'}
+          {label:'VLSFO (MT)',data:sorted.map(x=>x[1].v),backgroundColor:_skinPal('rgba(47,111,237,.8)'),borderRadius:4,borderSkipped:false,stack:'s'},
+          {label:'LSMGO (MT)',data:sorted.map(x=>x[1].m),backgroundColor:_skinPal('rgba(255,122,26,.72)'),borderRadius:4,borderSkipped:false,stack:'s'}
         ]
       },
       options:{
         indexAxis:'y',responsive:true,maintainAspectRatio:false,
         interaction:{mode:'index'},
         plugins:{
-          legend:{position:'top',labels:{font:{size:11,family:'DM Sans'},boxWidth:10,padding:10,color:_chartTextColor()}},
+          legend:{position:'top',labels:{font:{size:11,family:_skinFont('DM Sans')},boxWidth:10,padding:10,color:_chartTextColor()}},
           tooltip:{callbacks:{label:c=>` ${c.dataset.label}: ${fmtMT(c.parsed.x)} MT`}}
         },
         scales:{
-          x:{grid:{color:Chart.defaults.borderColor},stacked:true,ticks:{font:{size:10,family:'DM Mono'},color:_chartTextColor(),callback:v=>fmtMT(v)}},
-          y:{grid:{display:false},stacked:true,ticks:{font:{size:11,family:'DM Sans'},color:_chartTextColor()}}
+          x:{grid:{color:Chart.defaults.borderColor},stacked:true,ticks:{font:{size:10,family:_skinFont('DM Mono')},color:_chartTextColor(),callback:v=>fmtMT(v)}},
+          y:{grid:{display:false},stacked:true,ticks:{font:{size:11,family:_skinFont('DM Sans')},color:_chartTextColor()}}
         }
       }
     });
@@ -4853,7 +5465,7 @@ function renderReportCharts(records) {
         datasets:[{
           label:'Vessel Count',
           data,
-          backgroundColor:'rgba(14,122,155,.82)',
+          backgroundColor:_skinPal('rgba(14,122,155,.82)'),
           borderRadius:6,
           borderSkipped:false
         }]
@@ -4862,12 +5474,12 @@ function renderReportCharts(records) {
         responsive:true, maintainAspectRatio:false,
         plugins:{
           legend:{display:false},
-          title:{display:true, text:'Top ports by vessel count', font:{size:13,family:'DM Sans',weight:'600'}, color:_chartTextColor(), padding:{bottom:10}},
+          title:{display:true, text:'Top ports by vessel count', font:{size:13,family:_skinFont('DM Sans'),weight:'600'}, color:_chartTextColor(), padding:{bottom:10}},
           tooltip:{callbacks:{label:c=>` ${c.parsed.y} vessel${c.parsed.y!==1?'s':''}`}}
         },
         scales:{
-          x:{grid:{display:false}, ticks:{font:{size:11,family:'DM Sans'},color:_chartTextColor()}},
-          y:{grid:{color:Chart.defaults.borderColor}, ticks:{font:{size:10,family:'DM Mono'},color:_chartTextColor(), stepSize:1, callback:v=>Number.isInteger(v)?v:''}}
+          x:{grid:{display:false}, ticks:{font:{size:11,family:_skinFont('DM Sans')},color:_chartTextColor()}},
+          y:{grid:{color:Chart.defaults.borderColor}, ticks:{font:{size:10,family:_skinFont('DM Mono')},color:_chartTextColor(), stepSize:1, callback:v=>Number.isInteger(v)?v:''}}
         }
       }
     });
@@ -9299,12 +9911,27 @@ function renderRemainingSupplyTracker(){
    totals — to a canvas at 2x scale for crisp text, then triggers a
    PNG file download. Nothing about the tracker's own data or layout
    changes; this only captures exactly what's already shown. ─────── */
+/* Image/PDF exports always render in the Classic light look: under the
+   Harbour skin the cloned document html2canvas paints from is switched back
+   to classic + light, so generated files are unchanged by the skin. */
+function _skinWrapH2C(fn) {
+  if (!fn || !_isPremiumSkin()) return fn;
+  return function(el, opts) {
+    var o = Object.assign({}, opts || {}), prev = o.onclone;
+    o.onclone = function(doc) {
+      doc.documentElement.setAttribute('data-skin', 'classic');
+      doc.documentElement.setAttribute('data-theme', 'light');
+      if (typeof prev === 'function') return prev.apply(this, arguments);
+    };
+    return fn(el, o);
+  };
+}
 async function _loadHtml2Canvas() {
-  if (typeof html2canvas !== 'undefined') return html2canvas;
+  if (typeof html2canvas !== 'undefined') return _skinWrapH2C(html2canvas);
   return new Promise((resolve, reject) => {
     const s = document.createElement('script');
     s.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
-    s.onload = () => resolve(window.html2canvas);
+    s.onload = () => resolve(_skinWrapH2C(window.html2canvas));
     s.onerror = () => reject(new Error('Could not load the image export library. Check your internet connection.'));
     document.head.appendChild(s);
   });
@@ -10139,15 +10766,15 @@ function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, o
       datasets: [
         {
           label: 'FO / VLSFO (MT)', data: foData,
-          borderColor: 'rgba(37,99,235,1)',
-          backgroundColor: isLine ? 'rgba(37,99,235,.14)' : 'rgba(37,99,235,.8)',
+          borderColor: _skinPal('rgba(37,99,235,1)'),
+          backgroundColor: _skinPal(isLine ? 'rgba(37,99,235,.14)' : 'rgba(37,99,235,.8)'),
           fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
           borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
         },
         {
           label: 'MGO / LSMGO (MT)', data: mgoData,
-          borderColor: 'rgba(249,115,22,1)',
-          backgroundColor: isLine ? 'rgba(249,115,22,.14)' : 'rgba(249,115,22,.75)',
+          borderColor: _skinPal('rgba(249,115,22,1)'),
+          backgroundColor: _skinPal(isLine ? 'rgba(249,115,22,.14)' : 'rgba(249,115,22,.75)'),
           fill: isLine, tension: .35, pointRadius: isLine ? 3 : 0,
           borderRadius: isLine ? 0 : 5, borderSkipped: false, borderWidth: isLine ? 2 : 0
         }
@@ -10156,12 +10783,12 @@ function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, o
     options: {
       responsive: true, maintainAspectRatio: false, interaction: { mode: 'index' },
       plugins: {
-        legend: { position: 'top', labels: { font: { size: 11, family: 'DM Sans' }, boxWidth: 10, padding: 12, color: _chartTextColor() } },
+        legend: { position: 'top', labels: { font: { size: 11, family:_skinFont('DM Sans') }, boxWidth: 10, padding: 12, color: _chartTextColor() } },
         tooltip: { callbacks: { label: c => ` ${c.dataset.label}: ${fmtMT(c.parsed.y)} MT` } }
       },
       scales: {
-        x: { grid: { display: false }, ticks: { font: { size: 10, family: 'DM Mono' }, color: _chartTextColor() } },
-        y: { grid: { color: Chart.defaults.borderColor }, ticks: { font: { size: 10, family: 'DM Mono' }, color: _chartTextColor(), callback: v => fmtMT(v) + ' MT' } }
+        x: { grid: { display: false }, ticks: { font: { size: 10, family:_skinFont('DM Mono') }, color: _chartTextColor() } },
+        y: { grid: { color: Chart.defaults.borderColor }, ticks: { font: { size: 10, family:_skinFont('DM Mono') }, color: _chartTextColor(), callback: v => fmtMT(v) + ' MT' } }
       }
     }
   });
