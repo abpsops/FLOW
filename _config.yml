@@ -1,0 +1,7 @@
+# GitHub Pages (Jekyll) also publishes this repo. Keep test code, CI config
+# and dependencies off the published site (Vercel uses .vercelignore).
+exclude:
+  - tests/
+  - .github/
+  - node_modules/
+  - README.md

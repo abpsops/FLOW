@@ -3,3 +3,4 @@ tests/
 .github/
 node_modules/
 **/node_modules/
+_config.yml
