@@ -519,7 +519,10 @@ input,select,textarea{font-family:DM Sans,sans-serif}
   border-right:1px solid var(--border);
   display:flex;flex-direction:column;
   position:sticky;
-  top:0;
+  /* Stick just below the fixed header, not at the viewport top — at top:0
+     the sidebar slid under the header once the page scrolled, hiding its
+     first items and leaving a header-sized gap below it. */
+  top:var(--header-h);
   height:calc(100vh - var(--header-h));
   overflow-y:auto;overflow-x:hidden;
   align-self:flex-start;
@@ -4808,8 +4811,15 @@ function flowWelcomeGo(pageId) {
     </div>
     <div class="chart-card" style="display:flex;flex-direction:column">
       <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
-      <div class="activity-feed" id="dash-activity-feed" style="flex:1;overflow-y:auto;max-height:280px">
-        <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
+      <!-- The feed fills whatever height the row gives this card (it sits next
+           to the taller Weekly Planned Supply calendar) and scrolls inside it,
+           instead of stopping at a fixed 280px and leaving a blank gap. The
+           absolute inner box keeps the feed's own length from stretching the
+           row; min-height covers the single-column (mobile) layout. -->
+      <div style="position:relative;flex:1;min-height:280px">
+        <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
+        </div>
       </div>
     </div>
   </div>
