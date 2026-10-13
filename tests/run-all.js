@@ -30,6 +30,7 @@ const SUITES = [
   ['fix', 'suites/fix/fix.test.js', 'reports KPIs, checklist dedupe, delivery-log tombstones, nuclear clear'],
   ['xss', 'suites/fix/xss.test.js', 'stored-XSS sweep over every page and modal'],
   ['free-windows', 'suites/fw/fw.test.js', 'Free Windows planner calculations and exports'],
+  ['sync-race', 'suites/fw/race.test.js', 'deletions survive a save racing a pull (forced interleavings)'],
   ['skin', 'suites/skin/skin.test.js', 'Harbour Light / Classic look switch'],
   ['bunker-modal', 'suites/layout/bunker.test.js', 'Bunker Message opens from dashboard links'],
   ['layout-space', 'suites/layout/space.test.js', 'sidebar and activity feed fill the window'],

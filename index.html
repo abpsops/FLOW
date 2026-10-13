@@ -6845,6 +6845,12 @@ let _saveQueued        = null;  // promise of the single follow-up save that coa
 let _traderRpcLegacy   = false; // SQL not re-run yet: trader_update_vessels has no expected_version param
 let _pollFailCount     = 0;
 let _forcePushOnce     = false; // explicit Push: write even if nothing changed
+let _pullRunning       = null;  // promise that settles when the pull now reading + applying the cloud row ends
+function _beginPull() {
+  let end; const p = new Promise(function(r) { end = r; });
+  _pullRunning = p;
+  return function() { if (_pullRunning === p) _pullRunning = null; end(); };
+}
 const LS_SYNC_BASE_KEY = 'flow_syncbase_' + _FLOW_BUILD_ID; // last synced payload (merge base) — survives reloads
 const LS_UNSYNCED_KEY  = 'flow_unsynced_' + _FLOW_BUILD_ID; // '1' while this device has changes the cloud hasn't got
 
@@ -6911,16 +6917,20 @@ async function _ensureFreshSession() {
 // row if its version is still the one we last synced, and an INSERT only
 // succeeds if no row exists yet. Returns 'ok' or 'conflict'; throws on a
 // real error (network, auth, RLS).
-async function _jbPut(payload) {
+// expectedVersion is the version `payload` was built on, captured by the
+// caller together with the payload — never re-read _lastKnownVersion here,
+// after an await: a pull landing meanwhile would move it forward and let a
+// payload built on the OLD version overwrite the newer row.
+async function _jbPut(payload, expectedVersion) {
   if (!supabaseClient) throw new Error(_supabaseLoadError || 'Supabase client not available');
   await _ensureFreshSession();
   const now = new Date().toISOString();
-  if (_lastKnownVersion) {
+  if (expectedVersion) {
     const { data, error } = await supabaseClient
       .from('abps_workspace')
       .update({ payload, version: payload.version, updated_at: now })
       .eq('id', ABPS_WORKSPACE_ID)
-      .eq('version', _lastKnownVersion)
+      .eq('version', expectedVersion)
       .select('version');
     if (error) throw new Error(`Supabase save failed: ${error.message}`);
     return (data && data.length) ? 'ok' : 'conflict';
@@ -7269,11 +7279,17 @@ function _toastMerged(conflicts) {
 /* ── Single serialized save pipeline ──────────────────────────────────
    One write at a time. Calls made while a save is in flight all share ONE
    follow-up save, which captures state when it starts, so nothing typed in
-   the meantime is lost and two writes never race each other. */
+   the meantime is lost and two writes never race each other.
+   A save also never STARTS underneath a pull (_pullRunning): it would
+   capture the UI before the pulled row is applied while the pull moves the
+   version/base forward under it, and that stale capture then wrote a
+   colleague's deletion back (or reverted their edits). It waits for the
+   pull and captures the post-pull state instead. */
 function saveSharedState() {
   if (_saveQueued) return _saveQueued;
-  if (_saveRunning) {
-    _saveQueued = _saveRunning.catch(function() {}).then(function() { _saveQueued = null; return _runSave(); });
+  const ahead = _saveRunning || _pullRunning;
+  if (ahead) {
+    _saveQueued = ahead.catch(function() {}).then(function() { _saveQueued = null; return saveSharedState(); });
     return _saveQueued;
   }
   return _runSave();
@@ -7424,8 +7440,13 @@ async function _doSaveSharedState() {
   }
   _markUnsynced(true);
   for (let attempt = 0; attempt < 4; attempt++) {
-    const expected = _lastKnownVersion;
-    const res = await _jbPut(payload);
+    // Version + merge base are taken in the same synchronous step that built
+    // `payload`, so the compare-and-swap and the three-way merge below always
+    // describe the state the payload was captured from — even if a newer base
+    // is adopted during the awaits (with base = the newer row, an item a
+    // colleague deleted would look "added locally" and be written back).
+    const expected = _lastKnownVersion, base = _lastSyncedPayload;
+    const res = await _jbPut(payload, expected);
     if (res === 'ok') { _onCloudSaveOk(payload); return true; }
 
     // Conflict — somebody saved since our last sync. Merge and retry.
@@ -7436,7 +7457,7 @@ async function _doSaveSharedState() {
       // database refused it (row-level security), it isn't a conflict.
       throw new Error('Save was rejected by the database (row-level security) — this account may not have operator write access');
     }
-    const { merged, conflicts } = _mergePayloads(_lastSyncedPayload, payload, row.payload);
+    const { merged, conflicts } = _mergePayloads(base, payload, row.payload);
     _applyPayload(merged, true);
     _adoptBase(row, false);
     _toastMerged(conflicts);
@@ -7692,6 +7713,7 @@ async function loadSharedState(silent = false, force = false) {
     await _waitForSaveIdle(); // never apply remote state underneath an in-flight save
     const firstLoad = !_initialPullDone && !_cloudBaseUnknown;
     let applied;
+    const endPull = _beginPull(); // ...and no save starts underneath this pull
     try {
       if (firstLoad) {
         // Unsynced edits from a previous session on this device: restore
@@ -7719,6 +7741,8 @@ async function loadSharedState(silent = false, force = false) {
       if (_cloudBaseUnknown) { _showOfflineBanner(); return false; }
       _showSyncWarningBanner(e.message);
       return false;
+    } finally {
+      endPull();
     }
     if (applied) {
       if (!silent) setSyncStatus('ok', `Pulled — ${new Date(_lastKnownVersion).toLocaleTimeString()}`);
@@ -8543,6 +8567,7 @@ async function _pollOnce(manual) {
   if (_isSyncing || _saveRunning || _saveQueued) return;
   if (!manual && _isEditingSyncedForm()) { _deferPollUntilBlur(); return; }
   _isSyncing = true;
+  const endPull = _beginPull(); // a save requested meanwhile waits for this pull (see saveSharedState)
   try {
     const applied = await _pullAndMerge({});
     _pollFailCount = 0;
@@ -8554,6 +8579,7 @@ async function _pollOnce(manual) {
     else if (_pollFailCount >= 2) _showSyncWarningBanner(e.message); // don't flash the banner for one blip
   } finally {
     _isSyncing = false;
+    endPull();
   }
 }
 function _deferPollUntilBlur() {

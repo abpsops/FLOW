@@ -29,6 +29,7 @@ blocked and fails the test.
 | `fix` | report totals, checklist duplicates, delivery-log deletions across devices, Nuclear clear |
 | `xss` | hostile text in every field shows as text on every page and modal |
 | `free-windows` | Free Windows planner maths and exports |
+| `sync-race` | a colleague's deletion never comes back when a save races a pull (forced interleavings; `RACE_ITER=n` repeats) |
 | `skin` | Harbour Light / Classic look switch |
 | `bunker-modal` | Bunker Message opens from dashboard links |
 | `layout-space` | sidebar and activity feed fill the window |
