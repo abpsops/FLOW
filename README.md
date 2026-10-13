@@ -41,3 +41,14 @@ with relative paths) — do not nest them in a subfolder.
   URLs (e.g. `@2.117.3`, not `@2`) so they are cacheable offline;
   supabase-js and EmailJS also carry SRI `integrity` hashes, which must
   be recomputed when bumping their versions.
+
+## Tests
+- `tests/` holds a browser test suite (Playwright, headless Chromium) that
+  loads `index.html` against a **fake** Supabase — the real project is never
+  contacted. See [`tests/README.md`](tests/README.md) for what it covers and
+  how to run it: `cd tests && npm ci && npx playwright install chromium && npm test`.
+- GitHub Actions (`.github/workflows/test.yml`) runs it on every push and
+  pull request; a red X on a commit means a test failed (logs are attached to
+  the run).
+- `tests/` and `.github/` are development-only: `.vercelignore` keeps them off
+  the live site, and they should not be copied into the Android `www/` folder.

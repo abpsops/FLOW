@@ -1,0 +1,5 @@
+# Test code and CI config are not part of the website — never deploy them.
+tests/
+.github/
+node_modules/
+**/node_modules/
