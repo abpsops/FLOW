@@ -15210,9 +15210,11 @@ function _buildReminderRow(item, now, type, idx) {
 var _bunkerMsgSno = null;
 
 function openBunkerMsgModal(sno) {
-  var item = _lastSched.find(function(x) { return x.sno === sno; });
+  // Inline handlers (alert strips, action queue, calendar tickets) pass sno
+  // as a string; compare loosely so the modal opens from all of them.
+  var item = _lastSched.find(function(x) { return String(x.sno) === String(sno); });
   if (!item) return;
-  _bunkerMsgSno = sno;
+  _bunkerMsgSno = item.sno;
 
   var bmNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, bmNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
   document.getElementById('bm-vessel-name').textContent = item.name;
