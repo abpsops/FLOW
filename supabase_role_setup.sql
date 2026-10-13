@@ -30,6 +30,8 @@
 --      the row can change through it, no matter what's passed in —
 --      and on vessels that already exist it keeps the operator-owned
 --      planning fields (barge assignment, barge-refuelling slot).
+--   5. Adds abps_workspace to Supabase Realtime (section 4c) so changes
+--      reach every open device within a second or two.
 --
 -- ┌─────────────────────────────────────────────────────────────────┐
 -- │ !! IMPORTANT — TURN OFF PUBLIC SIGN-UPS !!                       │
@@ -315,6 +317,39 @@ $$;
 
 revoke all on function public.log_nomination_email(text, text, jsonb) from public, anon;
 grant execute on function public.log_nomination_email(text, text, jsonb) to authenticated;
+
+
+-- ── 4c. Realtime: instant sync between devices ───────────────────────
+-- The app subscribes to changes on abps_workspace (Supabase Realtime,
+-- "postgres_changes") so a colleague's save shows up within a second or
+-- two instead of on the next 30-second poll. Supabase only broadcasts
+-- changes for tables in the `supabase_realtime` publication, so this
+-- adds abps_workspace to it — once. Safe to re-run: it checks
+-- pg_publication_tables first and does nothing if the table is already
+-- a member (and creates the publication only if a project lacks it).
+--
+-- Security: Realtime applies the SAME RLS select policy as a normal read
+-- ("workspace read role holders", section 3) — an account only receives
+-- change events for rows it is allowed to SELECT, so traders and
+-- operators get them, accounts without a role get nothing. (DELETE events
+-- carry only the row id, never the payload.) The app never trusts the
+-- event body anyway: it just triggers its normal pull + merge.
+--
+-- If you skip this section nothing breaks: the subscription still
+-- connects but never fires, and the app keeps syncing by polling.
+do $$
+begin
+  if not exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    create publication supabase_realtime;
+  end if;
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'abps_workspace'
+  ) then
+    alter publication supabase_realtime add table public.abps_workspace;
+  end if;
+end;
+$$;
 
 
 -- ═══════════════════════════════════════════════════════════════════

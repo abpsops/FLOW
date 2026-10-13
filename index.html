@@ -398,6 +398,12 @@ input,select,textarea{font-family:DM Sans,sans-serif}
 .sync-dot.error{background:#F87171;animation:none}
 .sync-msg{font-family:'DM Mono',monospace;font-size:10px;color:rgba(255,255,255,.38);flex:1;letter-spacing:.04em}
 .sync-actions{display:flex;gap:5px}
+/* Realtime state next to the sync message: "Live" (green dot) or the poll cadence */
+.sync-live{display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font-size:10px;font-weight:600;letter-spacing:.03em;color:rgba(255,255,255,.45);white-space:nowrap}
+.sync-live-dot{width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.3)}
+.sync-live[data-state="live"]{color:#4ADE80}
+.sync-live[data-state="live"] .sync-live-dot{background:#22C55E;animation:livePulse 2s infinite}
+.sync-live[data-state="connecting"] .sync-live-dot{background:#F59E0B}
 .sync-btn{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.10);color:rgba(255,255,255,.55);border-radius:4px;padding:2px 9px;font-size:10px;font-weight:600;cursor:pointer;transition:all .15s;white-space:nowrap;letter-spacing:.02em}
 .sync-btn:hover{background:rgba(255,255,255,.12);color:#fff;border-color:rgba(255,255,255,.22)}
 
@@ -552,6 +558,34 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .sidebar-badge.amber{background:var(--amber)}
 .sidebar-badge.red{background:var(--red)}
 .sidebar-divider{height:1px;background:var(--border);margin:6px 14px}
+/* Sidebar "Danger zone" — bulk-delete actions behind a collapsed disclosure */
+.danger-zone{margin-top:auto;padding-bottom:8px}
+.danger-zone-toggle,.danger-zone-item{
+  display:flex;align-items:center;gap:9px;width:calc(100% - 12px);margin:1px 6px;padding:7px 14px;
+  background:none;border:0;border-radius:var(--radius-sm);cursor:pointer;text-align:left;
+  font:inherit;font-size:12.5px;font-weight:600;color:var(--muted);
+}
+.danger-zone-toggle:hover{background:var(--surface2);color:var(--red)}
+.danger-zone-toggle[aria-expanded="true"]{color:var(--red)}
+.danger-zone-toggle:focus-visible,.danger-zone-item:focus-visible{outline:2px solid var(--red);outline-offset:1px}
+.danger-zone-chev{margin-left:auto;transition:transform .15s;opacity:.7}
+.danger-zone-toggle[aria-expanded="true"] .danger-zone-chev{transform:rotate(180deg)}
+.danger-zone-panel{margin:2px 10px 0 18px;padding-left:6px;border-left:2px solid var(--red-bd)}
+.danger-zone-item{width:calc(100% - 4px);margin:1px 2px;padding:6px 10px;font-weight:500;color:var(--red)}
+.danger-zone-item:hover{background:var(--red-lt);color:var(--red)}
+.danger-zone-item .sidebar-icon{opacity:.8}
+/* Typed-confirmation modal (#danger-confirm-modal) */
+.danger-confirm-icon{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:var(--red-lt);color:var(--red)}
+.danger-confirm-head{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin:10px 0 4px}
+.danger-confirm-del .danger-confirm-head{color:var(--red)}
+.danger-confirm-keep .danger-confirm-head{color:var(--green)}
+#danger-confirm-lists ul{margin:0;padding-left:18px}
+#danger-confirm-lists li{margin:1px 0}
+.danger-confirm-word{font-family:DM Mono,monospace;color:var(--red);letter-spacing:.08em;background:var(--red-lt);padding:1px 6px;border-radius:4px}
+#danger-confirm-input:focus{border-color:var(--red)!important}
+.danger-confirm-go{background:var(--red);color:#fff;border:1px solid var(--red)}
+.danger-confirm-go:hover:not(:disabled){filter:brightness(1.08)}
+.danger-confirm-go:disabled{opacity:.4;cursor:not-allowed}
 
 /* ════════════════════════════════════════
    MAIN / PAGE AREAS
@@ -1424,6 +1458,11 @@ html[data-skin="harbour"] .sync-msg{color:#8FA6C4;font-size:10px}
 html[data-skin="harbour"] .sync-dot{background:#4FC3B5}
 html[data-skin="harbour"] .sync-dot.syncing{background:#F5B84A}
 html[data-skin="harbour"] .sync-dot.error{background:#FF8A73}
+html[data-skin="harbour"] .sync-live{color:#8FA6C4}
+html[data-skin="harbour"] .sync-live-dot{background:#4A6788}
+html[data-skin="harbour"] .sync-live[data-state="live"]{color:#7FDCCF}
+html[data-skin="harbour"] .sync-live[data-state="live"] .sync-live-dot{background:#4FC3B5}
+html[data-skin="harbour"] .sync-live[data-state="connecting"] .sync-live-dot{background:#F5B84A}
 html[data-skin="harbour"] .sync-btn{background:transparent;border:1px solid #2A4A73;color:#B5C5DA;border-radius:999px;padding:2px 11px}
 html[data-skin="harbour"] .sync-btn:hover{border-color:#F26A4B;color:#fff;background:rgba(242,106,75,.18)}
 html[data-skin="harbour"] .topbar{background:#0B2545;border-bottom:0;box-shadow:none;height:64px;padding:0 22px 0 18px}
@@ -1485,6 +1524,23 @@ html[data-skin="harbour"] .sidebar-badge.amber,
 html[data-skin="harbour"] .sidebar-badge.red{background:#F26A4B;color:#FFFFFF;border-radius:999px;padding:2px 7px;min-width:22px;font-size:11px;font-weight:700}
 html[data-skin="harbour"] .sidebar-divider{background:rgba(255,255,255,.07);margin:10px 24px}
 html[data-skin="harbour"] .sidebar-item[style*="color:var(--red)"]{color:#FF9B85!important}
+/* Danger zone — muted until opened, coral-red items on the navy sidebar */
+html[data-skin="harbour"] :is(.danger-zone-toggle,.danger-zone-item){font-size:13px;min-height:40px;margin:2px 12px;width:calc(100% - 24px);border-radius:12px;padding:0 14px}
+html[data-skin="harbour"] .danger-zone-toggle{color:#6F88AA;font-weight:700}
+html[data-skin="harbour"] .danger-zone-toggle .sidebar-icon{color:inherit;opacity:.9}
+html[data-skin="harbour"] .danger-zone-toggle:hover,
+html[data-skin="harbour"] .danger-zone-toggle[aria-expanded="true"]{background:#12325C;color:#FF9B85}
+html[data-skin="harbour"] .danger-zone-panel{margin:4px 12px 0 30px;padding-left:4px;border-left:2px solid rgba(255,155,133,.35)}
+html[data-skin="harbour"] .danger-zone-item{margin:2px 0 2px 4px;width:calc(100% - 4px);color:#FF9B85;font-weight:600;min-height:36px}
+html[data-skin="harbour"] .danger-zone-item .sidebar-icon{color:#FF9B85;opacity:.9}
+html[data-skin="harbour"] .danger-zone-item:hover{background:rgba(255,138,115,.14);color:#FFC2B5}
+html[data-skin="harbour"] :is(.danger-zone-toggle,.danger-zone-item):focus-visible{outline:2px solid #F26A4B;outline-offset:1px}
+html[data-skin="harbour"] .danger-confirm-icon{background:#FDE8E4;color:#C0392B;border-radius:12px}
+html[data-skin="harbour"] .danger-confirm-word{background:#FDE8E4;color:#C0392B;font-family:var(--font-num)}
+html[data-skin="harbour"] .danger-confirm-del .danger-confirm-head{color:#C0392B}
+html[data-skin="harbour"] .danger-confirm-keep .danger-confirm-head{color:#0B7A6D}
+html[data-skin="harbour"] #danger-confirm-modal .btn.danger-confirm-go{background:#C0392B;border-color:#C0392B;color:#FFFFFF;border-radius:12px}
+html[data-skin="harbour"] #danger-confirm-modal .btn.danger-confirm-go:hover:not(:disabled){background:#A93226}
 html[data-skin="harbour"] .sidebar-item[style*="color:var(--amber)"]{color:#F5C26B!important}
 
 /* ── 5. PAGE FRAME ─────────────────────────────────────────────────── */
@@ -1667,8 +1723,52 @@ html[data-skin="harbour"] .cal-ticket-loading{background:#FFF1D9!important;borde
 html[data-skin="harbour"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#A15C00!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(161,92,0,.35)!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(161,92,0,.2)!important}
-/* Command Center wallboard stays a dark TV screen by design — just framed */
-html[data-skin="harbour"] #cc-wallboard{border:0!important;border-radius:20px!important;box-shadow:0 1px 2px rgba(19,35,58,.06),0 18px 40px rgba(19,35,58,.18)!important}
+/* Command Center wallboard stays a dark TV screen by design — but in the
+   Harbour palette: navy ground, #0B3D6B panels, one coral accent, Harbour
+   status tints, Plus Jakarta Sans labels + IBM Plex Mono figures. The panel
+   markup carries inline terminal colours (Classic look, unchanged), so they
+   are remapped here by value. */
+html[data-skin="harbour"] #cc-wallboard{border:0!important;border-radius:20px!important;background:#0B2545!important;box-shadow:0 1px 2px rgba(19,35,58,.06),0 18px 40px rgba(19,35,58,.18)!important}
+html[data-skin="harbour"] #cc-canvas{background:#0B2545!important;font-family:var(--font-ui)!important;color:#DCE6F2}
+html[data-skin="harbour"] #cc-canvas > div:first-child{background:#0B2545!important;border-bottom:1px solid rgba(255,255,255,.08)!important;padding:12px 20px!important}
+html[data-skin="harbour"] #cc-canvas > div:first-child > div:first-child > span:first-child{background:#F26A4B;color:#FFFFFF!important;border-radius:8px;padding:2px 9px;font-weight:800!important;letter-spacing:.02em!important}
+html[data-skin="harbour"] #cc-canvas > div:first-child > div:first-child > span:nth-child(2){color:#B5C5DA!important;font-weight:700;font-size:12px!important;letter-spacing:.16em!important}
+html[data-skin="harbour"] #cc-upnext{background:#0B3D6B!important;border-bottom:0!important;margin:10px 12px 0;border-radius:14px;border-left:4px solid #F26A4B;padding:10px 16px!important}
+html[data-skin="harbour"] #cc-canvas > div[style*="grid-template-columns"]{gap:10px;padding:10px 12px}
+html[data-skin="harbour"] :is(#cc-rob-panel,#cc-schedule-panel,#cc-alerts-panel,#cc-activity-panel){background:#0B3D6B;border:0!important;border-radius:14px;padding:12px 14px!important}
+html[data-skin="harbour"] #cc-canvas > div:last-child{background:#081D38!important;border-top:2px solid #F26A4B!important;padding:6px 0!important}
+html[data-skin="harbour"] :is(#cc-clock,#cc-date,#cc-ticker){font-family:var(--font-num)!important;font-variant-numeric:tabular-nums}
+html[data-skin="harbour"] #cc-clock{color:#FFFFFF!important}
+html[data-skin="harbour"] #cc-date{color:#8FA6C4!important;font-size:12.5px!important}
+html[data-skin="harbour"] #cc-ticker{color:#B5C5DA!important}
+html[data-skin="harbour"] #cc-live-dot{color:#4FC3B5!important;border:0!important;background:rgba(79,195,181,.16);border-radius:999px;padding:3px 10px!important;font-weight:700}
+/* inline colour remap — accent / status / fuel grades / neutrals */
+html[data-skin="harbour"] #cc-canvas [style*="color:#F0A500"]{color:#F5B84A!important}
+html[data-skin="harbour"] #cc-canvas [style*="color:#F0A500;letter-spacing"]{color:#F26A4B!important;font-weight:800}
+html[data-skin="harbour"] #cc-canvas [style*="color:#3ECF6E"]{color:#4FC3B5!important}
+html[data-skin="harbour"] #cc-canvas [style*="color:#E5484D"]{color:#FF8A73!important}
+html[data-skin="harbour"] #cc-canvas [style*="color:#4FD1E8"]{color:#8CBCF7!important}
+html[data-skin="harbour"] #cc-canvas [style*="color:#F0A542"]{color:#5FD6C6!important}
+html[data-skin="harbour"] #cc-canvas :is([style*="color:#4FD1E8"],[style*="color:#F0A542"],[style*="color:#CCC;white-space:nowrap"],[style*="color:#3ECF6E;margin-top:2px"]){font-family:var(--font-num)!important;font-variant-numeric:tabular-nums}
+html[data-skin="harbour"] #cc-canvas [style*="color:#CCC"]{color:#A9BCD6!important}
+html[data-skin="harbour"] #cc-canvas :is([style*="color:#EEE"],[style*="color:#EAEAEA"]){color:#FFFFFF!important}
+html[data-skin="harbour"] #cc-canvas [style*="color:#AAA"]{color:#8FA6C4!important}
+html[data-skin="harbour"] #cc-canvas :is([style*="solid #222"],[style*="dashed #222"],[style*="solid #2A2A2A"]){border-color:rgba(255,255,255,.09)!important}
+html[data-skin="harbour"] #cc-canvas [style*="solid #F0A500"]{border-color:#F26A4B!important}
+html[data-skin="harbour"] #cc-canvas [style*="border:1px solid #3ECF6E"]{border:0!important;background:rgba(79,195,181,.16);border-radius:999px!important;padding:2px 7px!important}
+/* status words (ON TIME / DELAY) → Harbour tinted pills */
+html[data-skin="harbour"] #cc-canvas [style*="margin-left:auto"]:is([style*="color:#3ECF6E"],[style*="color:#F0A500"]){border-radius:999px;padding:2px 9px;font-size:10px!important;letter-spacing:.04em}
+html[data-skin="harbour"] #cc-canvas [style*="margin-left:auto"][style*="color:#3ECF6E"]{background:rgba(79,195,181,.16)}
+html[data-skin="harbour"] #cc-canvas [style*="margin-left:auto"][style*="color:#F0A500"]{background:rgba(245,184,74,.16)}
+/* planned-loading rows: grade-tinted wash in the Harbour fuel colours */
+html[data-skin="harbour"] #cc-canvas [style*="border-left:3px solid #4FD1E8"]{border-left-color:#8CBCF7!important;background:linear-gradient(90deg,rgba(140,188,247,.20),rgba(140,188,247,.05) 65%,transparent)!important;border-radius:0 8px 8px 0}
+html[data-skin="harbour"] #cc-canvas [style*="border-left:3px solid #F0A542"]{border-left-color:#5FD6C6!important;background:linear-gradient(90deg,rgba(95,214,198,.20),rgba(95,214,198,.05) 65%,transparent)!important;border-radius:0 8px 8px 0}
+html[data-skin="harbour"] #cc-canvas polyline[stroke="#4FD1E8"]{stroke:#8CBCF7}
+html[data-skin="harbour"] #cc-canvas polyline[stroke="#F0A542"]{stroke:#5FD6C6}
+html[data-skin="harbour"] #cc-back-btn{background:transparent!important;border:1px solid #F26A4B!important;color:#F26A4B!important;border-radius:999px!important;font-family:var(--font-ui)!important;font-weight:700!important;padding:6px 12px!important}
+html[data-skin="harbour"] #cc-back-btn:hover{background:rgba(242,106,75,.16)!important}
+html[data-skin="harbour"] #cc-canvas .cc-flash-new{animation-name:ccNewAlertFlashHL}
+@keyframes ccNewAlertFlashHL{0%,100%{background:transparent}50%{background:rgba(255,138,115,.28)}}
 
 /* ── 10. STATUS: badges / tags — tinted pills ─────────────────────── */
 html[data-skin="harbour"] :is(.badge,.stag,.tb,.cat,.pt-tag){border-radius:999px;padding:4px 10px;font-size:10.5px;letter-spacing:.02em;font-weight:800;border:0}
@@ -2392,6 +2492,7 @@ function flowWelcomeGo(pageId) {
 <div class="sync-banner" id="sync-banner">
   <div class="sync-dot" id="sync-dot"></div>
   <div class="sync-msg" id="sync-msg">Connecting…</div>
+  <span class="sync-live" id="sync-live" data-state="off" style="display:none" role="status"><span class="sync-live-dot"></span><span class="sync-live-text">Syncing every 30 s</span></span>
   <div class="sync-actions">
     <button class="sync-btn" onclick="forcePush()" id="sync-push-btn">
       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><polyline points="17 11 12 6 7 11"/><line x1="12" y1="6" x2="12" y2="18"/></svg>Push
@@ -2442,19 +2543,8 @@ function flowWelcomeGo(pageId) {
         <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
       </button>
       <div id="topbar-menu-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lg);z-index:9900;overflow:hidden;padding:6px">
-        <button id="topbar-fullreset-btn" onclick="closeTopbarMenu();confirmFullReset()" class="topbar-menu-item" style="color:var(--red)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
-          Full Reset
-        </button>
-        <button id="topbar-wipecloud-btn" onclick="closeTopbarMenu();wipeSupabaseWorkspace()" title="Delete the Supabase cloud row so all devices start clean — without losing current session data" class="topbar-menu-item">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          Wipe Cloud
-        </button>
-        <button id="topbar-clearall-btn" onclick="closeTopbarMenu();confirmNuclearClear()" class="topbar-menu-item" style="color:var(--amber)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-          Clear All Data
-        </button>
-        <div style="height:1px;background:var(--border);margin:6px 4px"></div>
+        <!-- Full Reset / Wipe Cloud / Clear All Data live in the sidebar's
+             collapsed "Danger zone" (same ids), behind a typed confirmation. -->
         <button id="topbar-logout-btn" onclick="closeTopbarMenu();operatorLogout()" class="topbar-menu-item">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log Out
@@ -2566,14 +2656,39 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     Trash Bin
   </a>
-  <a class="sidebar-item" role="button" tabindex="0" onclick="confirmFullReset()" style="color:var(--red)">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
-    Full Reset
-  </a>
-  <a class="sidebar-item" role="button" tabindex="0" onclick="confirmNuclearClear()" style="color:var(--amber)">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
-    Clear All Data
-  </a>
+  <!-- Danger zone — every bulk-delete action, collapsed by default and
+       operator-only (hidden until the role lookup confirms an operator, see
+       _applyRoleUIRestrictions). Each one opens a typed confirmation. -->
+  <div class="danger-zone" id="danger-zone" style="display:none">
+    <div class="sidebar-divider"></div>
+    <button type="button" class="danger-zone-toggle" id="danger-zone-toggle" aria-expanded="false" aria-controls="danger-zone-panel" onclick="toggleDangerZone()">
+      <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      <span>Danger zone</span>
+      <svg class="danger-zone-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="danger-zone-panel" id="danger-zone-panel" hidden>
+      <button type="button" class="danger-zone-item" id="danger-clearchecklist-btn" onclick="confirmClearChecklist()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Clear Checklist
+      </button>
+      <button type="button" class="danger-zone-item" id="danger-clearrecords-btn" onclick="confirmClearAllRecords()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><line x1="9" y1="13" x2="15" y2="13"/></svg>
+        Clear Saved Records
+      </button>
+      <button type="button" class="danger-zone-item" id="topbar-fullreset-btn" onclick="confirmFullReset()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
+        Full Reset
+      </button>
+      <button type="button" class="danger-zone-item" id="topbar-wipecloud-btn" onclick="confirmWipeSupabaseWorkspace()" title="Delete the Supabase cloud row so all devices start clean">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/><line x1="9" y1="13" x2="15" y2="19"/><line x1="15" y1="13" x2="9" y2="19"/></svg>
+        Wipe Cloud
+      </button>
+      <button type="button" class="danger-zone-item" id="topbar-clearall-btn" onclick="confirmNuclearClear()">
+        <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+        Clear All Data
+      </button>
+    </div>
+  </div>
 </nav>
 
 <!-- ═══════════════════ MAIN PAGES ═══════════════════ -->
@@ -2711,12 +2826,12 @@ function flowWelcomeGo(pageId) {
        means a vessel with a genuinely bad pattern stays invisible unless
        you happen to go looking for it. This surfaces every vessel that's
        actually built up enough history (2+ completed deliveries since
-       Sep 2026) right on the Dashboard, without needing anyone to type
+       TRACK_RECORD_START_MONTH) right on the Dashboard, without needing anyone to type
        anything — reuses the exact same computeVesselTrackRecord() logic,
        just run across every vessel in the Delivery Log instead of one. -->
   <div class="chart-card" style="margin-bottom:14px">
     <div class="chart-title">Track Record Watchlist</div>
-    <div class="chart-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries since Sep 2026 — laycan compliance &amp; disputes</div>
+    <div class="chart-subtitle" id="dash-track-record-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries — laycan compliance &amp; disputes</div>
     <div id="dash-track-record-watchlist">
       <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>
     </div>
@@ -2787,11 +2902,13 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <!-- Monthly Quantity — Jan–Jul seeded from historical records, Aug onward
-       computed live from the same data the Monthly Report uses -->
+  <!-- Monthly Quantity — current fiscal (= calendar) year. FY26 has Jan–Jul
+       seeded from historical records; everything else is computed live from
+       the same data the Monthly Report uses. Title/subtitle filled by
+       renderMonthlyQuantityChart(). -->
   <div class="chart-card" style="margin-top:16px">
-    <div class="chart-title">Bunker Quantity — FY26</div>
-    <div class="chart-subtitle" id="dash-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied — Jan–Jul from records, Aug onward live from Monthly Report</div>
+    <div class="chart-title" id="dash-monthly-qty-title">Bunker Quantity</div>
+    <div class="chart-subtitle" id="dash-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="dash-monthly-qty-summary"></div>
     <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-dashboard"></canvas></div>
   </div>
@@ -3385,8 +3502,8 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <!-- Bunker Quantity FY26 — bar chart version of the Dashboard's line chart,
-       same underlying data (seeded Jan–Jul, live Aug onward). A fiscal year
+  <!-- Bunker Quantity — bar chart version of the Dashboard's line chart,
+       same underlying data (FY26: seeded Jan–Jul, live Aug onward). A fiscal year
        can be archived (frozen snapshot, protected from Full Reset / Clear
        All Data / Wipe Cloud) and viewed later from the dropdown — archiving
        never switches the chart away from live data on its own. -->
@@ -3395,13 +3512,13 @@ function flowWelcomeGo(pageId) {
       <div class="chart-title" style="margin-bottom:0">Bunker Quantity</div>
       <div style="display:flex;align-items:center;gap:8px">
         <select id="rep-monthly-qty-year-select" onchange="_onFYChartSelectorChange()" style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--ink)">
-          <option value="__live__">FY26 (Live)</option>
+          <option value="__live__">Live</option>
         </select>
         <button id="rep-monthly-qty-undo-btn" class="btn btn-ghost btn-sm" style="display:none" onclick="_undoCurrentlyViewedFYArchive()" title="Remove this archive and return to live data">Undo Archive</button>
         <button class="btn btn-ghost btn-sm" onclick="confirmArchiveFiscalYear()" title="Freeze the current chart data under a fiscal-year label — protected from Full Reset, Clear All Data, and Wipe Cloud">Archive Year</button>
       </div>
     </div>
-    <div class="chart-subtitle" id="rep-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied — Jan–Jul from records, Aug onward live from Monthly Report</div>
+    <div class="chart-subtitle" id="rep-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied</div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="rep-monthly-qty-summary"></div>
     <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-analytics"></canvas></div>
   </div>
@@ -3509,11 +3626,7 @@ function flowWelcomeGo(pageId) {
       <div class="page-subtitle">Mark each vessel as supplied, enter actuals and save the record</div>
     </div>
     <div class="page-actions">
-      <button class="btn btn-ghost btn-sm" onclick="clearChecklistRecords()" title="Remove all pending checklist rows. Completed and saved supply records are kept."
-        style="color:var(--amber);border-color:var(--amber);opacity:.85">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        Clear Checklist
-      </button>
+      <!-- Clear Checklist moved to the sidebar Danger zone (typed confirmation) -->
       <button class="btn btn-secondary btn-sm" onclick="downloadChecklist()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download Checklist
@@ -3563,10 +3676,7 @@ function flowWelcomeGo(pageId) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         Remove Duplicates
       </button>
-      <button class="btn btn-danger btn-sm" onclick="confirmClearAllRecords()">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
-        Clear All Records
-      </button>
+      <!-- Clear All Records moved to the sidebar Danger zone (typed confirmation) -->
     </div>
   </div>
   <div id="saved-records-panel" style="background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
@@ -5209,7 +5319,9 @@ function renderDashCharts(records, vessels) {
     }
     _buildFuelDonut('fuel-dist-distributed', 'chart-fuel-dist-distributed', distV, distM);
     _buildFuelDonut('fuel-dist-planned',     'chart-fuel-dist-planned',     planV, planM);
-    // Bunker Quantity FY26 line chart — Jan–Jul seeded, Aug onward live
+    // Bunker Quantity line chart — current FY (FY26: Jan–Jul seeded, Aug onward live)
+    const _dqTitle = document.getElementById('dash-monthly-qty-title');
+    if (_dqTitle) _dqTitle.textContent = 'Bunker Quantity — ' + _fyLabel(_currentFY());
     renderMonthlyQuantityChart('chart-monthly-qty-dashboard', 'line', 'dash-monthly-qty-summary', 'dash-monthly-qty-subtitle');
   }
 }
@@ -5387,10 +5499,11 @@ function renderReportCharts(records) {
     });
   }
 
-  // Bunker Quantity FY26 bar chart — same series as the Dashboard's line
-  // chart (Jan–Jul seeded, Aug onward live from getMonthlyRows)
+  // Bunker Quantity bar chart — same series as the Dashboard's line chart
+  // (current FY live from getMonthlyRows; FY26 Jan–Jul seeded). Re-renders
+  // whatever the year dropdown currently shows (live, past FY or archive).
   _populateFYChartSelector();
-  renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
+  _onFYChartSelectorChange();
 
   // Barge Performance — grouped bar per barge (VLSFO + MGO)
   {
@@ -5802,6 +5915,7 @@ function _unlockOperatorGate() {
 
 async function operatorLogout() {
   if (!confirm('Log out of the shared FLOW workspace on this device?\n\nYou will need the operator email and password to sign back in.')) return;
+  try { _rtStop(); } catch(e) {} // unsubscribe from Realtime before the session goes
   try { await supabaseClient.auth.signOut(); } catch(e) {}
   _clearLocalWorkspaceData();
   location.reload();
@@ -5866,7 +5980,8 @@ document.addEventListener('DOMContentLoaded', async () => {
    access to everything, exactly as before. Trader accounts are
    restricted to Dashboard (view only) + Vessel Nominations
    (view + edit) — every other sidebar page and every destructive
-   admin action (Full Reset, Wipe Cloud, Clear All Data) is hidden
+   admin action (the sidebar Danger zone: Full Reset, Wipe Cloud,
+   Clear All Data, Clear Checklist, Clear Saved Records) is hidden
    from them.
 
    IMPORTANT: hiding UI here is convenience only, not the real
@@ -6016,6 +6131,10 @@ async function _fetchAndApplyUserRole() {
 
 let _origShowPageForRole = null;
 function _applyRoleUIRestrictions() {
+  // Bulk-delete actions are operator-only and start hidden (least privilege)
+  // until the role lookup confirms an operator.
+  const dz = document.getElementById('danger-zone');
+  if (dz) dz.style.display = isTrader() ? 'none' : '';
   if (!isTrader()) return; // operators see everything — nothing to change
 
   // Hide every sidebar nav item except Dashboard + Vessel Nominations
@@ -6024,13 +6143,14 @@ function _applyRoleUIRestrictions() {
     if (TRADER_ALLOWED_PAGES.indexOf(pageId) === -1) a.style.display = 'none';
   });
 
-  // Hide sidebar links that don't have nav- ids: Monthly Report, Full Reset
-  document.querySelectorAll('#sidebar a[onclick^="openMonthlyReport"], #sidebar a[onclick^="confirmFullReset"]').forEach(function(a) {
+  // Hide sidebar links that don't have nav- ids: Monthly Report (the
+  // destructive actions sit in the Danger zone, hidden above)
+  document.querySelectorAll('#sidebar a[onclick^="openMonthlyReport"]').forEach(function(a) {
     a.style.display = 'none';
   });
 
-  // Hide destructive topbar admin actions
-  ['topbar-fullreset-btn', 'topbar-wipecloud-btn', 'topbar-clearall-btn'].forEach(function(id) {
+  // Belt-and-braces: hide each destructive action itself too
+  ['topbar-fullreset-btn', 'topbar-wipecloud-btn', 'topbar-clearall-btn', 'danger-clearchecklist-btn', 'danger-clearrecords-btn'].forEach(function(id) {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
   });
@@ -8446,17 +8566,199 @@ function _deferPollUntilBlur() {
     setTimeout(function() { _pollOnce(); }, 400);
   }, true);
 }
+// Poll cadence: 30 s normally; 60 s while the Realtime channel is live
+// (it's then only the safety net — see REALTIME below).
+let SYNC_POLL_MS      = 30000;
+let SYNC_POLL_LIVE_MS = 60000;
+function _pollIntervalMs() { return _rtStatus === 'live' ? SYNC_POLL_LIVE_MS : SYNC_POLL_MS; }
 function startAutoSync() {
   if (_syncInterval) clearInterval(_syncInterval);
   _syncInterval = setInterval(async () => {
+    _pollTicks++;
     await _pollOnce();
     // Runs every tick regardless of whether a remote pull happened —
     // covers both "a colleague changed something" and "I changed
     // something locally on this device" without needing to hook into
     // every single state-mutating function individually.
     _refreshGlobalAlertsBell();
-  }, 30000);
+  }, _pollIntervalMs());
   _refreshGlobalAlertsBell(); // show the correct count immediately, don't wait for the first 30s tick
+}
+let _pollTicks = 0; // how many timer polls have run (diagnostics / tests)
+
+/* ── REALTIME — instant sync via Supabase postgres_changes ─────────────
+   Polling alone means a colleague's save can take up to 30 s to appear.
+   A Realtime subscription on abps_workspace tells this device within ~1 s
+   that the row changed — and then runs the SAME pull path a poll uses
+   (_pollOnce → _pullAndMerge), so the version check, three-way merge,
+   save serialisation and focus deferral all still apply. The event's own
+   payload is never applied: it can be large or truncated, and only the
+   pull path knows how to merge safely.
+   Polling stays on as the safety net (offline, reconnects, or the SQL that
+   adds the table to the supabase_realtime publication not run yet — the
+   subscription then succeeds but simply never fires), slowed to 60 s while
+   the channel is SUBSCRIBED. Realtime applies the table's RLS select
+   policy, so traders receive events exactly as operators do. */
+let _rtChannel     = null;
+let _rtStatus      = 'off';   // 'off' | 'connecting' | 'live' | 'down'
+let _rtWanted      = false;   // false before init and after logout
+let _rtAttempt     = 0;       // channel generation — each (re)subscribe gets a fresh name
+let _rtRetryTimer  = null;
+let _rtRetryDelay  = 0;
+let _rtPullTimer   = null;
+let _rtEverLive    = false;
+let _rtAuthBound   = false;
+let _rtEvents      = 0;       // diagnostics: events received / pulls they triggered
+let _rtPulls       = 0;
+const _RT_LOG_IDS  = ['nomination_email_log', 'nomination_cancel_email_log'];
+
+function _rtSetStatus(s) {
+  const prev = _rtStatus;
+  _rtStatus = s;
+  _renderLiveIndicator();
+  // Switch the safety-net poll between 30 s and 60 s — but never restart a
+  // poll that was deliberately paused (Wipe Cloud clears _syncInterval).
+  if (_syncInterval && (prev === 'live') !== (s === 'live')) startAutoSync();
+}
+function _renderLiveIndicator() {
+  const el = document.getElementById('sync-live');
+  if (!el) return;
+  const live = _rtStatus === 'live';
+  el.dataset.state = _rtStatus;
+  el.style.display = _rtStatus === 'off' ? 'none' : '';
+  const txt = live ? 'Live' : 'Syncing every ' + Math.round(SYNC_POLL_MS / 1000) + ' s';
+  const label = el.querySelector('.sync-live-text');
+  if (label && label.textContent !== txt) label.textContent = txt;
+  el.title = live
+    ? 'Live — colleagues\' changes appear within a second or two (with a ' + Math.round(SYNC_POLL_LIVE_MS / 1000) + ' s check as a backup)'
+    : (_rtStatus === 'connecting' ? 'Connecting to live updates… meanwhile checking every ' : 'Live updates unavailable — checking for changes every ') + Math.round(SYNC_POLL_MS / 1000) + ' s';
+}
+
+function _rtStart() {
+  if (!_syncReady() || typeof supabaseClient.channel !== 'function') return;
+  _rtWanted = true;
+  _rtBindAuth();
+  _rtSubscribe();
+}
+function _rtStop() {
+  _rtWanted = false;
+  if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
+  if (_rtPullTimer) { clearTimeout(_rtPullTimer); _rtPullTimer = null; }
+  _rtTeardown();
+  _rtSetStatus('off');
+}
+function _rtTeardown() {
+  const ch = _rtChannel;
+  _rtChannel = null; // set first: the old channel's late CLOSED callback is then ignored
+  if (ch) { try { const p = supabaseClient.removeChannel(ch); if (p && p.catch) p.catch(function() {}); } catch(e) {} }
+}
+function _rtSubscribe() {
+  if (!_rtWanted || !supabaseClient) return;
+  if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
+  _rtTeardown();
+  _rtSetStatus('connecting');
+  // A fresh name per attempt: supabase-js hands back an existing channel with
+  // the same topic until its async removal finishes, which would re-use the
+  // errored one.
+  const name = _rtAttempt++ ? 'workspace-' + _rtAttempt : 'workspace';
+  let ch;
+  try {
+    ch = supabaseClient.channel(name)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'abps_workspace' }, _rtOnChange);
+    _rtChannel = ch;
+    ch.subscribe(function(status, err) {
+      if (ch !== _rtChannel) return; // superseded / torn down
+      if (status === 'SUBSCRIBED') {
+        _rtRetryDelay = 0;
+        const reconnect = _rtEverLive;
+        _rtEverLive = true;
+        _rtSetStatus('live');
+        // Changes made while we were disconnected sent no event — catch up.
+        if (reconnect) _rtSchedulePull();
+      } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        if (err) console.warn('FLOW realtime:', status, err && err.message);
+        _rtSetStatus('down');
+        _rtScheduleRetry();
+      }
+    });
+  } catch(e) {
+    console.warn('FLOW realtime: subscribe failed —', e && e.message);
+    _rtChannel = null;
+    _rtSetStatus('down');
+    _rtScheduleRetry();
+  }
+}
+// Exponential backoff (2 s → 60 s, with jitter); polling covers the gap.
+function _rtScheduleRetry() {
+  if (!_rtWanted || _rtRetryTimer) return;
+  _rtRetryDelay = Math.min(60000, _rtRetryDelay ? _rtRetryDelay * 2 : 2000);
+  const wait = Math.round(_rtRetryDelay * (0.8 + Math.random() * 0.4));
+  _rtRetryTimer = setTimeout(function() { _rtRetryTimer = null; _rtSubscribe(); }, wait);
+}
+// Sign-in / token refresh: supabase-js re-auths an open socket itself, but a
+// channel that dropped while the token was stale is resubscribed straight
+// away rather than waiting out the backoff. Sign-out stops it.
+function _rtBindAuth() {
+  if (_rtAuthBound || !supabaseClient.auth || typeof supabaseClient.auth.onAuthStateChange !== 'function') return;
+  _rtAuthBound = true;
+  try {
+    supabaseClient.auth.onAuthStateChange(function(event) {
+      if (event === 'SIGNED_OUT') { _rtStop(); return; }
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && _rtWanted && _rtStatus !== 'live') {
+        _rtRetryDelay = 0;
+        setTimeout(_rtSubscribe, 0); // outside the auth callback (supabase-js holds a lock there)
+      }
+    });
+  } catch(e) {}
+}
+window.addEventListener('online', function() {
+  if (_rtWanted && _rtStatus !== 'live') { _rtRetryDelay = 0; _rtSubscribe(); }
+});
+
+function _rtOnChange(evt) {
+  _rtEvents++;
+  const nu = (evt && evt.new) || {}, old = (evt && evt.old) || {};
+  const id = nu.id != null ? nu.id : old.id;
+  if (_RT_LOG_IDS.indexOf(id) !== -1) { _rtScheduleLogRefresh(); return; }
+  if (id !== ABPS_WORKSPACE_ID) return;
+  // Echo of this device's own save: the row is at the version we already
+  // hold, or our save is still in flight (it reconciles any concurrent
+  // change itself via the compare-and-swap conflict path).
+  const v = Number(nu.version) || 0;
+  if (evt.eventType !== 'DELETE' && v && v === Number(_lastKnownVersion)) return;
+  if (_saveRunning || _saveQueued) return;
+  _rtSchedulePull();
+}
+// Debounced (~300 ms) so a burst of events costs one pull. Waits out a poll
+// already running (it may have read the row just before this change).
+function _rtSchedulePull(tries) {
+  if (_rtPullTimer) clearTimeout(_rtPullTimer);
+  _rtPullTimer = setTimeout(function() {
+    _rtPullTimer = null;
+    if (!_syncInterval) return; // sync deliberately paused (Wipe Cloud / reload pending)
+    if (_isSyncing || _saveRunning || _saveQueued) {
+      if ((tries || 0) < 20) _rtSchedulePull((tries || 0) + 1);
+      return;
+    }
+    _rtPulls++;
+    _pollOnce().then(function() { _refreshGlobalAlertsBell(); });
+  }, tries ? 500 : 300);
+}
+let _rtLogTimer = null;
+function _rtScheduleLogRefresh() {
+  if (_rtLogTimer) clearTimeout(_rtLogTimer);
+  _rtLogTimer = setTimeout(async function() {
+    _rtLogTimer = null;
+    try {
+      await _loadNomEmailLogRemote();
+      await _loadNomCancelEmailLogRemote();
+      document.querySelectorAll('.vcard[id^="vessel-"]').forEach(function(card) {
+        const cid = card.id.replace('vessel-', '');
+        _refreshSendEmailButtonState(cid);
+        _refreshCancelEmailButtonState(cid);
+      });
+    } catch(e) { console.warn('FLOW realtime: email-log refresh failed —', e && e.message); }
+  }, 300);
 }
 // Back online after the first pull failed → recover straight away rather
 // than waiting for the next 30s tick.
@@ -10589,7 +10891,9 @@ function fmtMT(n) {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   BUNKER QUANTITY — FY26 (Dashboard line chart + Analytics bar chart)
+   BUNKER QUANTITY — current FY (Dashboard line chart + Analytics bar chart)
+   FLOW's fiscal year is the calendar year (the chart runs Jan–Dec), so the
+   "current FY" is just new Date().getFullYear() — FY27 from 1 Jan 2027.
    Jan–Jul 2026 are historical totals supplied directly by the user (FLOW
    wasn't tracking deliveries before August 2026, so there's no live record
    to compute those from). From August onward, each month is computed live
@@ -10607,6 +10911,12 @@ const FY26_SEED_MONTHLY_QTY = {
   6: { fo: 11467.282, mgo: 1575.699 }   // July
 };
 const FY26_LIVE_FROM_MONTH = 7; // August (0-indexed) — first month computed live, not seeded
+// Seed data is keyed by the year it belongs to, so FY26's historical figures
+// can never leak into FY27's chart — any year not listed here is all live.
+const FY_SEED_BY_YEAR = { 2026: { months: FY26_SEED_MONTHLY_QTY, liveFrom: FY26_LIVE_FROM_MONTH } };
+const FY_FIRST_YEAR = 2026; // first FY FLOW has data for — the year dropdown reaches back to here
+function _currentFY() { return new Date().getFullYear(); }
+function _fyLabel(year) { return 'FY' + String(year).slice(-2); }
 
 // ── Archived Fiscal Years ─────────────────────────────────────────────
 // Deliberately stored under a key that does NOT start with "abps_" or
@@ -10635,7 +10945,7 @@ function archiveFiscalYear(label) {
   label = (label || '').trim();
   if (!label) return;
   if (_fyArchives[label] && !confirm(`"${label}" is already archived. Overwrite it with today's data?`)) return;
-  const series = getMonthlyQuantitySeries(2026);
+  const series = getMonthlyQuantitySeries(_currentFY());
   _fyArchives[label] = { series, archivedAt: new Date().toISOString() };
   _saveFYArchives();
   showToast(`${label} archived — the chart keeps showing live data until you pick it from the dropdown`, 'success');
@@ -10644,7 +10954,7 @@ function archiveFiscalYear(label) {
 }
 
 function confirmArchiveFiscalYear() {
-  const label = prompt('Archive the current chart data under which fiscal year label?', 'FY26');
+  const label = prompt('Archive the current chart data under which fiscal year label?', _fyLabel(_currentFY()));
   if (label === null) return;
   archiveFiscalYear(label);
 }
@@ -10693,14 +11003,19 @@ function renderArchivedFYList() {
   }).join('');
 }
 
-// Populates the chart's year dropdown with "FY26 (Live)" plus every
+// Populates the chart's year dropdown with the current FY ("FY27 (Live)"),
+// every earlier FY back to FY_FIRST_YEAR (computed from seed + records, so
+// FY26 stays reachable in 2027 even if nobody archived it) and every
 // archived year, without changing what's currently selected.
 function _populateFYChartSelector() {
   const sel = document.getElementById('rep-monthly-qty-year-select');
   if (!sel) return;
   const prev = sel.value;
+  const cur = _currentFY();
+  let past = '';
+  for (let y = cur - 1; y >= FY_FIRST_YEAR; y--) past += `<option value="__fy:${y}">${_fyLabel(y)}</option>`;
   const years = Object.keys(_fyArchives).sort().reverse();
-  sel.innerHTML = '<option value="__live__">FY26 (Live)</option>' +
+  sel.innerHTML = `<option value="__live__">${_fyLabel(cur)} (Live)</option>` + past +
     years.map(y => `<option value="${esc(y)}">${esc(y)} (Archived)</option>`).join('');
   if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
 }
@@ -10714,6 +11029,10 @@ function _onFYChartSelectorChange() {
   if (sel.value === '__live__') {
     if (undoBtn) undoBtn.style.display = 'none';
     renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle');
+  } else if (sel.value.indexOf('__fy:') === 0) {
+    // An earlier FY, recomputed from its seed + records (not a frozen archive)
+    if (undoBtn) undoBtn.style.display = 'none';
+    renderMonthlyQuantityChart('chart-monthly-qty-analytics', 'bar', 'rep-monthly-qty-summary', 'rep-monthly-qty-subtitle', null, null, Number(sel.value.slice(5)));
   } else {
     const arch = _fyArchives[sel.value];
     if (arch) {
@@ -10727,16 +11046,26 @@ function _onFYChartSelectorChange() {
 // currently being viewed on the chart, then falls back to Live.
 function _undoCurrentlyViewedFYArchive() {
   const sel = document.getElementById('rep-monthly-qty-year-select');
-  if (!sel || sel.value === '__live__') return;
+  if (!sel || sel.value === '__live__' || sel.value.indexOf('__fy:') === 0) return;
   unarchiveFiscalYear(sel.value);
 }
 
+// Label of whatever the Analytics year dropdown is showing (PDF export title).
+function _fySelectedLabel() {
+  const sel = document.getElementById('rep-monthly-qty-year-select');
+  const v = sel ? sel.value : '__live__';
+  if (!v || v === '__live__') return _fyLabel(_currentFY());
+  if (v.indexOf('__fy:') === 0) return _fyLabel(Number(v.slice(5)));
+  return v;
+}
+
 function getMonthlyQuantitySeries(year) {
-  year = year || new Date().getFullYear();
+  year = year || _currentFY();
+  const seed = FY_SEED_BY_YEAR[year];
   const out = [];
   for (let m = 0; m < 12; m++) {
-    if (m < FY26_LIVE_FROM_MONTH && FY26_SEED_MONTHLY_QTY[m]) {
-      out.push({ month: m, fo: FY26_SEED_MONTHLY_QTY[m].fo, mgo: FY26_SEED_MONTHLY_QTY[m].mgo, live: false });
+    if (seed && m < seed.liveFrom && seed.months[m]) {
+      out.push({ month: m, fo: seed.months[m].fo, mgo: seed.months[m].mgo, live: false });
     } else {
       const rows = (typeof getMonthlyRows === 'function') ? getMonthlyRows(m, year) : [];
       const fo = rows.reduce((s, r) => s + (r.vQ || 0), 0);
@@ -10749,11 +11078,13 @@ function getMonthlyQuantitySeries(year) {
 
 // Renders either the Dashboard's line chart or the Analytics bar chart from
 // the exact same series/summary — `type` is 'line' or 'bar'.
-function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, overrideSeries, fyLabel) {
+function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, overrideSeries, fyLabel, year) {
   const canvas = document.getElementById(canvasId);
   if (!canvas || typeof Chart === 'undefined') return;
 
-  const series = overrideSeries || getMonthlyQuantitySeries(2026);
+  year = year || _currentFY();
+  const seed = overrideSeries ? null : FY_SEED_BY_YEAR[year];
+  const series = overrideSeries || getMonthlyQuantitySeries(year);
   const labels = series.map(s => MO[s.month]);
   const foData = series.map(s => s.fo);
   const mgoData = series.map(s => s.mgo);
@@ -10783,14 +11114,17 @@ function renderMonthlyQuantityChart(canvasId, type, summaryElId, subtitleElId, o
       <div style="background:var(--surface2);border-radius:10px;padding:10px 12px;text-align:center">
         <div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Live Months</div>
         <div style="font-size:16px;font-weight:700;color:var(--ink)">${liveMonthsCount}</div>
-        <div style="font-size:10px;color:var(--muted)">Aug onward</div>
+        <div style="font-size:10px;color:var(--muted)">${MO[seed ? seed.liveFrom : 0]} onward</div>
       </div>`;
   }
   const subtitleEl = subtitleElId && document.getElementById(subtitleElId);
   if (subtitleEl) {
     subtitleEl.textContent = overrideSeries
       ? `Archived snapshot — ${fyLabel} — frozen at archive time, not affected by later records · Total: ${fmtMT(grandTotal)} MT`
-      : `Jan–Jul from historical records · Aug onward computed live from Monthly Report · Grand total so far: ${fmtMT(grandTotal)} MT`;
+      : (seed
+          ? `${_fyLabel(year)} · ${MO[0]}–${MO[seed.liveFrom - 1]} from historical records · ${MO[seed.liveFrom]} onward computed live from Monthly Report`
+          : `${_fyLabel(year)} · computed live from Monthly Report`) +
+        ` · Grand total${year === _currentFY() ? ' so far' : ''}: ${fmtMT(grandTotal)} MT`;
   }
 
   const isLine = type === 'line';
@@ -11322,7 +11656,7 @@ function addVessel(def = {}) {
     <div class="field">
       <label>Nominated Laycan <span style="font-weight:400;color:var(--muted)">— date range</span></label>
       <div class="input-with-cal">
-        <input type="text" id="v${id}-lc" value="${esc(lc)}" placeholder="e.g. 22-24 Apr 2026…" oninput="upd(${id})" autocomplete="off" readonly style="cursor:pointer;background:var(--surface)" onclick="openLaycanPicker(${id})">
+        <input type="text" id="v${id}-lc" value="${esc(lc)}" placeholder="e.g. 22-24 Apr ${new Date().getFullYear()}…" oninput="upd(${id})" autocomplete="off" readonly style="cursor:pointer;background:var(--surface)" onclick="openLaycanPicker(${id})">
         <button type="button" class="cal-btn" onclick="openLaycanPicker(${id})"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></button>
       </div>
       <span class="hint" id="v${id}-hlc"></span>
@@ -16260,6 +16594,12 @@ function _dlTombstonesFor(log) {
    completed supplies to say anything at all — a vessel supplied only
    once doesn't have a "track record" yet, it has one data point. */
 const TRACK_RECORD_START_MONTH = '2026-09';
+// "Sep 2026" — the fixed start of counted history, derived from the constant
+// above so the wording can never drift from the rule actually applied.
+function _trackRecordSinceLabel() {
+  const p = TRACK_RECORD_START_MONTH.split('-');
+  return MO[Number(p[1]) - 1] + ' ' + p[0];
+}
 
 function computeVesselTrackRecord(vesselName) {
   const name = (vesselName || '').trim().toLowerCase();
@@ -16301,9 +16641,9 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
   const delayPct = Math.round((tr.delayed / tr.total) * 100);
   const rows = [];
   if (tr.delayed > 0) {
-    rows.push('Outside laycan in <strong>' + tr.delayed + ' of its last ' + tr.total + '</strong> nominations (' + delayPct + '%) since Sep 2026.');
+    rows.push('Outside laycan in <strong>' + tr.delayed + ' of its last ' + tr.total + '</strong> nominations (' + delayPct + '%) since ' + _trackRecordSinceLabel() + '.');
   } else {
-    rows.push('Within laycan on all <strong>' + tr.total + '</strong> nominations since Sep 2026.');
+    rows.push('Within laycan on all <strong>' + tr.total + '</strong> nominations since ' + _trackRecordSinceLabel() + '.');
   }
   if (tr.disputes.length) {
     rows.push('<strong>' + tr.disputes.length + '</strong> past dispute' + (tr.disputes.length > 1 ? 's' : '') + ' recorded — see Delivery Log for details.');
@@ -16333,12 +16673,14 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
 }
 
 // The standing Dashboard widget — every vessel that has actually built up
-// a track record (2+ deliveries since Sep 2026), not just whichever
+// a track record (2+ deliveries since TRACK_RECORD_START_MONTH), not just whichever
 // vessel someone happens to be typing right now. Flagged vessels
 // (any delay or dispute history) are listed first.
 function renderTrackRecordWatchlist() {
   const el = document.getElementById('dash-track-record-watchlist');
   if (!el) return;
+  const sub = document.getElementById('dash-track-record-subtitle');
+  if (sub) sub.textContent = 'Vessels with 2+ completed deliveries since ' + _trackRecordSinceLabel() + ' — laycan compliance & disputes';
 
   const names = new Set();
   Object.keys(_deliveryLog || {}).forEach(function(monthKey) {
@@ -17293,8 +17635,20 @@ async function deleteRecord(id) {
   if (row) { row.style.transition='opacity .3s'; row.style.opacity='0'; setTimeout(()=>row.remove(),300); }
 }
 async function confirmClearAllRecords() {
+  if (isTrader()) return;
   if (!_savedSupplies.length) { alert('No saved records to clear.'); return; }
-  if (!confirm(`Clear all ${_savedSupplies.length} saved record(s)? This cannot be undone.`)) return;
+  const n = _savedSupplies.length;
+  const ok = await _typedConfirm({
+    title: 'Clear Saved Records', word: 'DELETE', action: 'Delete ' + n + ' record' + (n === 1 ? '' : 's'),
+    intro: 'Deletes every saved supply record from the shared workspace — they disappear from Saved Records, the Monthly Report and Analytics on every device. This cannot be undone.',
+    deletes: ['All ' + n + ' saved supply record' + (n === 1 ? '' : 's')],
+    keeps: ['Nominations, barges, schedule and checklist', 'Monthly and fiscal-year archives']
+  });
+  if (!ok) return;
+  return clearAllSavedRecords();
+}
+// Runs only via confirmClearAllRecords().
+async function clearAllSavedRecords() {
   _savedSupplies = [];
   await saveSharedRecords();
   renderSavedRecords();
@@ -17356,7 +17710,7 @@ async function downloadAnalyticsReport() {
     { canvasId: 'chart-fuel-mix',               instKey: 'fuel-mix',                   title: 'Barge Performance — Supplied per Grade' },
     { canvasId: 'chart-vessel-vol',             instKey: 'vessel-vol',                 title: 'Top Vessels by Volume (VLSFO + LSMGO)' },
     { canvasId: 'chart-supply-freq',            instKey: 'supply-freq',                title: 'Top Ports by Vessel Count' },
-    { canvasId: 'chart-monthly-qty-analytics',  instKey: 'chart-monthly-qty-analytics',title: 'Bunker Quantity — FY26' }
+    { canvasId: 'chart-monthly-qty-analytics',  instKey: 'chart-monthly-qty-analytics',title: 'Bunker Quantity — ' + _fySelectedLabel() }
   ];
 
   let chartsHtml = '';
@@ -17497,11 +17851,21 @@ function downloadChecklist() {
 
 /* ─── MONTHLY REPORT ─── */
 let _reportMode = 'month';
+// Date-field example placeholders ("01 Jan 2026") follow the current year.
+function _setYearPlaceholders() {
+  const y = new Date().getFullYear();
+  [['report-from', '01 Jan '], ['report-to', '31 Jan '], ['btr-from', '01 Jan '], ['btr-to', '31 Jan ']].forEach(function(p) {
+    const el = document.getElementById(p[0]);
+    if (el) el.placeholder = p[1] + y;
+  });
+}
+document.addEventListener('DOMContentLoaded', _setYearPlaceholders);
 function openMonthlyReport() {
   if (!_lastSched.length && !_savedSupplies.length) { alert('Run schedule or save some records first.'); return; }
   const now = new Date();
   document.getElementById('report-month').value = now.getMonth();
   document.getElementById('report-year').value  = Math.max(2026, now.getFullYear());
+  _setYearPlaceholders();
   setReportMode('month');
   setReportPort('ALL');
   renderMonthlyPreview();
@@ -18801,9 +19165,88 @@ function printScheduleOnly() {
   container.style.display = 'block';
   setTimeout(() => { window.print(); setTimeout(() => { container.style.display = 'none'; }, 500); }, 80);
 }
+/* ─── TYPED CONFIRMATION for bulk-destructive actions ───
+   A plain confirm() is one stray Enter/tap away from wiping the shared
+   workspace for every device. These actions instead open a modal that says
+   exactly what goes (and what stays), and the action button only enables
+   once the word shown is typed. Resolves true ONLY on that explicit
+   confirmation — Cancel, Escape and a backdrop click all resolve false, so
+   the destructive function behind it never runs. */
+let _dangerConfirm = null; // { word, resolve, returnFocus } while the modal is open
+function _typedConfirm(opts) {
+  return new Promise(function(resolve) {
+    const modal = document.getElementById('danger-confirm-modal');
+    if (!modal) { resolve(false); return; }
+    if (_dangerConfirm) _dangerConfirm.resolve(false); // a superseded prompt never confirms
+    _dangerConfirm = { word: String(opts.word).toUpperCase(), resolve: resolve, returnFocus: document.activeElement };
+    const list = function(head, items, cls) {
+      return items && items.length
+        ? `<div class="${cls}"><div class="danger-confirm-head">${esc(head)}</div><ul>${items.map(function(i) { return '<li>' + esc(i) + '</li>'; }).join('')}</ul></div>`
+        : '';
+    };
+    document.getElementById('danger-confirm-title').textContent = opts.title;
+    document.getElementById('danger-confirm-intro').textContent = opts.intro || '';
+    document.getElementById('danger-confirm-lists').innerHTML =
+      list('Will be deleted', opts.deletes, 'danger-confirm-del') + list('Kept', opts.keeps, 'danger-confirm-keep');
+    document.getElementById('danger-confirm-label').innerHTML = 'Type <strong class="danger-confirm-word">' + esc(_dangerConfirm.word) + '</strong> to confirm';
+    const input = document.getElementById('danger-confirm-input');
+    input.value = '';
+    const go = document.getElementById('danger-confirm-go');
+    go.textContent = opts.action || opts.title;
+    go.disabled = true;
+    modal.style.display = 'flex';
+    setTimeout(function() { try { input.focus(); } catch(e) {} }, 30);
+  });
+}
+function _dangerConfirmMatches() {
+  const input = document.getElementById('danger-confirm-input');
+  return !!(_dangerConfirm && input && input.value.trim().toUpperCase() === _dangerConfirm.word);
+}
+function _dangerConfirmSync() {
+  const go = document.getElementById('danger-confirm-go');
+  if (go) go.disabled = !_dangerConfirmMatches();
+}
+function _dangerConfirmClose(ok) {
+  const modal = document.getElementById('danger-confirm-modal');
+  const pending = _dangerConfirm;
+  if (!pending) { if (modal) modal.style.display = 'none'; return; }
+  // Re-checked here, not trusted from the button state: a click on a
+  // still-disabled button (or a scripted one) must never confirm.
+  const confirmed = !!ok && _dangerConfirmMatches();
+  if (ok && !confirmed) return;
+  _dangerConfirm = null;
+  if (modal) modal.style.display = 'none';
+  const inp = document.getElementById('danger-confirm-input');
+  if (inp) inp.value = '';
+  try { if (pending.returnFocus && pending.returnFocus.focus) pending.returnFocus.focus(); } catch(e) {}
+  pending.resolve(confirmed);
+}
+document.addEventListener('keydown', function(e) {
+  if (!_dangerConfirm) return;
+  if (e.key === 'Escape') { e.preventDefault(); _dangerConfirmClose(false); }
+  else if (e.key === 'Enter' && e.target && e.target.id === 'danger-confirm-input') { e.preventDefault(); if (_dangerConfirmMatches()) _dangerConfirmClose(true); }
+});
+
+// Sidebar "Danger zone" disclosure — collapsed by default on every load.
+function toggleDangerZone(force) {
+  const btn = document.getElementById('danger-zone-toggle');
+  const panel = document.getElementById('danger-zone-panel');
+  if (!btn || !panel) return;
+  const open = typeof force === 'boolean' ? force : btn.getAttribute('aria-expanded') !== 'true';
+  btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  panel.hidden = !open;
+}
+
 /* ─── FULL RESET ─── */
-function confirmFullReset() {
-  if (!confirm(' Full Reset will clear:\n\n• All vessel nominations\n• All barge configurations (incl. manual ROB overrides)\n• Generated schedule\n• Checklist data\n• Shared workspace state\n\nSaved supply records and archives will be KEPT.\n\nProceed?')) return;
+async function confirmFullReset() {
+  if (isTrader()) return; // operators only (RLS refuses the write anyway)
+  const ok = await _typedConfirm({
+    title: 'Full Reset', word: 'RESET', action: 'Reset workspace',
+    intro: 'Clears the live plan on this device and in the shared workspace, so every device sees it on its next sync.',
+    deletes: ['All vessel nominations', 'All barge configurations (incl. manual ROB overrides)', 'The generated schedule', 'Checklist data', 'Trash Bin on this device'],
+    keeps: ['Saved supply records', 'Monthly and fiscal-year archives']
+  });
+  if (!ok) return;
   fullReset();
 }
 async function fullReset() {
@@ -18855,15 +19298,19 @@ async function fullReset() {
 }
 
 /* ─── CLEAR CHECKLIST — wipes only active pending checklist rows ─── */
+async function confirmClearChecklist() {
+  if (isTrader()) return;
+  const ok = await _typedConfirm({
+    title: 'Clear Checklist', word: 'CLEAR', action: 'Clear checklist',
+    intro: 'Removes every pending checklist row, here and in the shared workspace. Pending rows for vessels still in the schedule are rebuilt fresh — use this to fix duplicate or stale rows.',
+    deletes: ['All pending (not yet supplied) checklist rows'],
+    keeps: ['Completed rows and saved supply records', 'Barge ROB and vessel nominations', 'The schedule']
+  });
+  if (!ok) return;
+  return clearChecklistRecords();
+}
+// Runs only via confirmClearChecklist() (or tests calling it directly).
 async function clearChecklistRecords() {
-  if (!confirm(
-    'Clear Checklist will remove all pending rows from the checklist.\n\n' +
-    '• Completed rows and saved supply records are KEPT\n' +
-    '• Barge ROB and vessel nominations are KEPT\n' +
-    '• The schedule is KEPT\n\n' +
-    'Pending rows for vessels still in the schedule are rebuilt fresh.\n' +
-    'Use this to fix duplicate rows or stale entries.\n\nProceed?'
-  )) return;
 
   // Remove only PENDING checklist rows, exactly as the confirmation says.
   // This used to also wipe _lastSched, _bargeStates and _bargeConfig (the
@@ -18901,32 +19348,16 @@ function _archiveTombstonesFor(arch) {
   return out;
 }
 /* ─── NUCLEAR CLEAR — wipes every key ABPS has ever written ─── */
-function confirmNuclearClear() {
-  // Two-step confirmation — this is irreversible
-  if (!confirm(
-    '⚠️  CLEAR ALL DATA\n\n' +
-    'This will permanently delete:\n\n' +
-    '• All vessel nominations\n' +
-    '• All barge configurations\n' +
-    '• All saved supply records\n' +
-    '• All checklist records\n' +
-    '• All ROB history & manual overrides\n' +
-    '• All archives\n' +
-    '• All schedule data\n' +
-    '• Shared workspace state\n\n' +
-    'Nothing will be kept. This cannot be undone.\n\n' +
-    'Continue?'
-  )) return;
-
-  const label = 'DELETE';
-  const typed = prompt(
-    'Type  ' + label + '  to confirm complete data wipe.\n\n' +
-    'This will remove all data including test data from localStorage and shared storage.'
-  );
-  if ((typed || '').trim().toUpperCase() !== label) {
-    if (typed !== null) alert('Cancelled — text did not match. No data was deleted.');
-    return;
-  }
+async function confirmNuclearClear() {
+  if (isTrader()) return;
+  // Irreversible — typed confirmation (was confirm() + prompt())
+  const ok = await _typedConfirm({
+    title: 'Clear All Data', word: 'DELETE', action: 'Delete everything',
+    intro: 'Permanently deletes everything FLOW holds, on this device and in the shared cloud workspace (incl. the nomination email logs). Nothing is kept and this cannot be undone.',
+    deletes: ['All vessel nominations and barge configurations', 'All saved supply records and checklist records', 'All ROB history and manual overrides', 'All monthly archives', 'All schedule data', 'The shared workspace and email-log rows in Supabase'],
+    keeps: ['Archived fiscal years (Bunker Quantity chart)']
+  });
+  if (!ok) return;
   nuclearClear();
 }
 
@@ -19123,18 +19554,28 @@ async function nuclearClear() {
   }
 }
 
-/* ─── WIPE SUPABASE WORKSPACE — cloud only, instant, no DELETE typing needed ─── */
+/* ─── WIPE SUPABASE WORKSPACE — cloud rows + this browser's copy ─── */
+async function confirmWipeSupabaseWorkspace() {
+  if (isTrader()) return;
+  if (!_syncReady()) {
+    alert('Not connected to shared workspace — nothing to wipe.');
+    return;
+  }
+  const ok = await _typedConfirm({
+    title: 'Wipe Supabase Workspace', word: 'WIPE', action: 'Wipe cloud workspace',
+    intro: 'Deletes the shared cloud rows so every device sees a clean slate on next load. This browser\'s local copy is cleared too and the app reloads, so nothing re-uploads the old data.',
+    deletes: ['The shared workspace row (nominations, barges, schedule, checklist, records)', 'The nomination / cancellation email-log rows', 'This browser\'s local copy'],
+    keeps: ['Archived fiscal years (Bunker Quantity chart)']
+  });
+  if (!ok) return;
+  return wipeSupabaseWorkspace();
+}
+// Runs only via confirmWipeSupabaseWorkspace() (or tests calling it directly).
 async function wipeSupabaseWorkspace() {
   if (!_syncReady()) {
     alert('Not connected to shared workspace — nothing to wipe.');
     return;
   }
-  if (!confirm(
-    'Wipe Supabase Workspace\n\n' +
-    'This deletes the shared cloud row so every device sees a clean slate on next load.\n\n' +
-    'This browser\'s local copy is cleared too and the app reloads, so nothing re-uploads the old data.\n\n' +
-    'Proceed?'
-  )) return;
 
   // Pause auto-sync for the whole operation (and, on success, until the
   // reload): a poll tick or a pending save would otherwise push this
@@ -19294,6 +19735,7 @@ async function init() {
   if (typeof autoArchivePastMonths === 'function') autoArchivePastMonths();
 
   startAutoSync();
+  _rtStart(); // instant updates on top of the poll (see REALTIME)
   startReminderAutoRefresh();
   await loadROBAudit();
   await loadManualROB();
@@ -19461,6 +19903,26 @@ async function init() {
 </div>
 
 <!-- ROB Editor Modal -->
+<!-- ═══ TYPED CONFIRMATION — bulk-destructive actions (see _typedConfirm) ═══ -->
+<div id="danger-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="danger-confirm-title" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:10050;align-items:center;justify-content:center" onclick="if(event.target===this)_dangerConfirmClose(false)">
+  <div style="background:var(--surface);border-radius:16px;padding:1.5rem;width:min(460px,94vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(13,27,42,.25)">
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px">
+      <div class="danger-confirm-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div style="min-width:0">
+        <div id="danger-confirm-title" style="font-size:17px;font-weight:700;color:var(--ink)"></div>
+        <div id="danger-confirm-intro" style="font-size:12.5px;color:var(--sub);margin-top:3px;line-height:1.45"></div>
+      </div>
+    </div>
+    <div id="danger-confirm-lists" style="font-size:12.5px;line-height:1.5;color:var(--text)"></div>
+    <label for="danger-confirm-input" id="danger-confirm-label" style="display:block;font-size:12px;font-weight:600;color:var(--sub);margin:14px 0 6px"></label>
+    <input type="text" id="danger-confirm-input" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="_dangerConfirmSync()" style="width:100%;font-size:15px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;letter-spacing:.08em;outline:none;background:var(--surface);color:var(--ink)">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button type="button" class="btn btn-secondary" id="danger-confirm-cancel" onclick="_dangerConfirmClose(false)">Cancel</button>
+      <button type="button" class="btn danger-confirm-go" id="danger-confirm-go" disabled onclick="_dangerConfirmClose(true)"></button>
+    </div>
+  </div>
+</div>
+
 <div id="rob-editor-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9600;align-items:center;justify-content:center" onclick="if(event.target===this)closeROBEditor()">
   <div style="background:var(--surface);border-radius:16px;padding:1.75rem;width:min(580px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(13,27,42,.25)">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:12px;border-bottom:2px solid var(--border)">
