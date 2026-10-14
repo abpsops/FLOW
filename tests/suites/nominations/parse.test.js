@@ -115,8 +115,9 @@ MV OSCAR ETA 25 Oct 2026 1100 Fujairah oil terminal jetty VLSFO 100`,
     d => /HSFO/.test(d[0].remarks) && !!d[0].low.qty && /cbm/.test(d[0].low.mgo || '')],
 
   ['S13 laycan only, quantity without grade, unlisted spec', 'MV ROMEO\nLaycan 20-22 Nov\nQty: 1,200 MT\nSpec: ISO 8217:2005',
-    [{ name: 'ROMEO', eta: '', lc: '20-22 Nov 2026', qty: 1200, spec: 'ISO 8217:2010' }],
-    d => /assumed VLSFO/.test(d[0].low.qty || '') && /2005/.test(d[0].low.spec || '')],
+    // No ETA given: planned from the first laycan day, flagged for checking.
+    [{ name: 'ROMEO', eta: '20 Nov 2026 00:00', lc: '20-22 Nov 2026', qty: 1200, spec: 'ISO 8217:2010' }],
+    d => /assumed VLSFO/.test(d[0].low.qty || '') && /2005/.test(d[0].low.spec || '') && /first laycan day/.test(d[0].low.eta || '')],
 
   ['S14 laycan across months; IFO 0.5% counts as VLSFO', 'MV SIERRA\nL/C 30 Oct - 2 Nov 2026\nIFO 0.5% 1000 mt',
     [{ name: 'SIERRA', lc: '30 Oct 2026 - 2 Nov 2026', qty: 1000 }], d => !d[0].low.qty],
@@ -140,6 +141,23 @@ MV OSCAR ETA 25 Oct 2026 1100 Fujairah oil terminal jetty VLSFO 100`,
     [{ name: 'ZULU', eta: '03 Jan 2027 08:00' }]],
 
   ['S20 empty / no nomination', '   ', []],
+
+  // A real trader fixture (names changed): "Name:" label on a vessel starting
+  // with "On", dates as "6/8th Oct", a "6/7/8" list of days that is NOT a date,
+  // a range, agent TBC, "2010 specs", and an account line for the remarks.
+  ['S21 trader fixture with Name:/Dates:', `Acc: Acme Energy
+
+Selling: Basis supply on 6/7/8 all dates as per our ops timing
+
+FUJ Anch / VLSFO 0.5% / LSMGO 0.1% /2010 specs / GPS GTC / 30 DDD
+
+Fixture details:
+Name: On Horizon
+Port: Fujairah
+Dates: 6/8th Oct
+Qty: Vlsfo 1400 to 1600 MT /Lsmgo 100 MT
+Agents: TBC`, [{ name: 'ON HORIZON', lc: '6-8 Oct 2026', eta: '06 Oct 2026 00:00', type: 'BOTH', qty: 1600, qtyMin: 1400, qtyMax: 1600, mgo: 100, agent: '', spec: 'ISO 8217:2010' }],
+    d => /Account: Acme Energy/.test(d[0].remarks) && /Agent TBC/.test(d[0].remarks) && !d[0].low.name && !d[0].low.agent && !/Fixture details|Name:|Dates:/.test(d[0].remarks)],
 ];
 
 (async () => {
@@ -166,6 +184,13 @@ MV OSCAR ETA 25 Oct 2026 1100 Fujairah oil terminal jetty VLSFO 100`,
   check('IMO checksum rejects typos / junk', imo[1].every(x => !x), imo[1]);
 
   // Deterministic: same text + same "now" → same drafts
+  // Screenshot-reading slips seen on a real fixture: superscript "th" read as
+  // a quote, and "Vlsfo" read as "Visfo".
+  const ocrFix = await page.evaluate(() => {
+    const t = _niOcrClean('Name: On Peace\nDates: 6/8" Oct\nQty: Visfo 1400 to 1600 MT /Lsmgo 100 MT');
+    return { t: t, d: _parseNominationText(t, { now: new Date(2026, 9, 14) })[0] };
+  });
+  check('OCR clean-up: 6/8" Oct and Visfo', /6\/8th Oct/.test(ocrFix.t) && /VLSFO 1400/.test(ocrFix.t) && ocrFix.d.lc === '6-8 Oct 2026' && ocrFix.d.qty === 1600 && ocrFix.d.qtyMin === 1400 && ocrFix.d.mgo === 100, ocrFix);
   const det = await page.evaluate(([t]) => JSON.stringify(_parseNominationText(t, { now: new Date(2026, 9, 14) })) === JSON.stringify(_parseNominationText(t, { now: new Date(2026, 9, 14) })), [SAMPLES[0][1]]);
   check('parser is deterministic', det);
 

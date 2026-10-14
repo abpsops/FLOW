@@ -11893,7 +11893,7 @@ function _niParseLaycan(s, now) {
     if (db < da) return null;
     const text = (a.m === b.m && a.y === b.y) ? a.d + '-' + b.d + ' ' + _NI_MO[a.m] + ' ' + a.y
       : a.d + ' ' + _NI_MO[a.m] + ' ' + a.y + ' - ' + b.d + ' ' + _NI_MO[b.m] + ' ' + b.y;
-    return { text: text, low: !!(low || a.low || b.low) };
+    return { text: text, low: !!(low || a.low || b.low), start: { y: a.y, m: a.m, d: a.d } };
   };
   const SEP = '\\s*(?:-|–|—|to|till|until|\\/|&)\\s*';
   // 14-16 Oct [2026]
@@ -11952,6 +11952,7 @@ function _niArea(text, areas) {
 function _niAgent(raw, agents) {
   const clean = String(raw || '').split(/\s+(?:tel|ph|phone|mob|mobile|email|e-mail|contact|attn|pic)\b|\+\d|[\w.]+@|\s{2,}|\s[|\/]\s|;|,/i)[0].replace(/^[\s:\-–]+|[\s.,:\-–]+$/g, '');
   if (!clean) return null;
+  if (/^(tba|tbc|tbn|tbd|n\/?a|nil|none|to\s+be\s+(?:advised|confirmed|nominated|named))\.?$/i.test(clean)) return { value: '', low: false, tbc: true };
   const STOP = /\b(the|shipping|ships?|services?|llc|l\.l\.c|fze|fzc|fzco|co|ltd|limited|agency|agencies|agents?|marine|maritime|and|&|uae|fujairah|dubai|group|international|intl)\b/g;
   const norm = function(s) { return String(s).toLowerCase().replace(STOP, ' ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); };
   const n = norm(clean);
@@ -12037,7 +12038,9 @@ function _niQuantities(text) {
 // Vessel prefixes: MV, M/V, M.V., MT, M/T, M.T. ("MT" after a number is the unit).
 const _NI_PREFIX = /(^|[^A-Za-z0-9\/])(M\s*\/\s*[VvTt]|M\.\s*[VvTt]\.?|MV|mv|Mv|MT|M\/Y|MY)\.?\s*[:\-]?\s+(?=[A-Za-z0-9])/g;
 const _NI_NAME_STOP = /^(imo|eta|etb|etd|ata|laycan|l\/c|lc|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|fo|at|for|in|on|to|from|with|via|agent|agents|fujairah|fuj|kfk|khor|opl|anchorage|berth|abt|about|approx|bunkers?|nomination|nominated|arriving|arrival|expected|grade|mt|mts|will|is|has|and|pls|please|req|requires|needs|location|port|spec|iso|eta:|dwt|flag|call|sign|loa|grt|nrt)$/i;
-function _niCleanName(raw) {
+// Words that end a name even on a labelled line ("Name: On Peace" keeps "On").
+const _NI_NAME_STOP_STRONG = /^(imo|eta|etb|etd|ata|laycan|l\/c|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|agent|agents|location|port|spec|iso|dwt|flag|loa|grt|nrt)$/i;
+function _niCleanName(raw, labelled) {
   // Names are words — tags, quotes and control characters are never part of one.
   let s = String(raw || '').replace(/<[^>]*>?/g, ' ').replace(/[<>"`\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
   s = s.replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT|M\/Y)\.?\s+/i, '');
@@ -12049,7 +12052,7 @@ function _niCleanName(raw) {
     if (/^(\/|\(|\)|,|;|\||:|\s[-–—]\s|\t)$/.test(p)) { if (words.length) break; else continue; }
     const w = p.replace(/[.,]+$/, '');
     if (!w) continue;
-    if (_NI_NAME_STOP.test(w)) break;
+    if ((labelled ? _NI_NAME_STOP_STRONG : _NI_NAME_STOP).test(w)) break;
     if (/^\d{3,}$/.test(w) && words.length) break;     // "OCEAN STAR 500 VLSFO"
     if (!/^[A-Za-z0-9][A-Za-z0-9'&.\-]*$/.test(w)) break;
     words.push(w);
@@ -12059,8 +12062,8 @@ function _niCleanName(raw) {
 }
 // Name from one line: "Vessel: …" label, or a prefix anywhere. → {name, low} or null.
 function _niNameFromLine(line, anywhere) {
-  let r = line.match(/^\s*(?:[-*•]\s*|\d+[.)]\s*)?(?:name\s+of\s+(?:the\s+)?vessel|vessel(?:'?s)?(?:\s*name)?|ship(?:'?s)?(?:\s*name)?|vsl(?:\s*name)?|m\/?v\s*name)\s*[:\-–=]\s*(.+)$/i);
-  if (r) { const n = _niCleanName(r[1]); if (n) return { name: n, low: false, label: true }; }
+  let r = line.match(/^\s*(?:[-*•]\s*|\d+[.)]\s*)?(?:name\s+of\s+(?:the\s+)?vessel|vessel(?:'?s)?(?:\s*name)?|ship(?:'?s)?(?:\s*name)?|vsl(?:\s*name)?|m\/?v\s*name|name)\s*[:\-–=]\s*(.+)$/i);
+  if (r) { const n = _niCleanName(r[1], true); if (n) return { name: n, low: false, label: true }; }
   _NI_PREFIX.lastIndex = 0;
   let m;
   while ((m = _NI_PREFIX.exec(line))) {
@@ -12088,7 +12091,7 @@ function _niCapsName(lines) {
 }
 
 const _NI_ETA_LBL = /\b(?:ETA\/?ETB|E\.?T\.?A\.?|ETB|ETA|arriv(?:al|ing|es)|expected(?:\s+(?:on|at|arrival))?|date\s+of\s+(?:arrival|supply|delivery)|supply\s+date|delivery\s+date|del\.?\s*date)\b\.?(?:\s*(?:fuj(?:airah)?|kfk|khor\s*fakkan|opl|anchorage|on|at|is|abt|about|approx))*\s*[:\-–=]?\s*/i;
-const _NI_LC_LBL = /\b(?:lay\s*can|l\s*\/\s*c|lay\s*days|laydays|lc\s*:|delivery\s+(?:window|dates?|range)|supply\s+(?:window|range)|window)\b\s*[:\-–=]?\s*/i;
+const _NI_LC_LBL = /\b(?:lay\s*can|l\s*\/\s*c|lay\s*days|laydays|lc\s*:|delivery\s+(?:window|dates?|range)|supply\s+(?:window|range)|window|(?:supply\s+|delivery\s+|fixture\s+)?dates(?=\s*[:\-–=]))\b\s*[:\-–=]?\s*/i;
 const _NI_BOILER = /^(dear|hi\b|hello|good\s+(day|morning|afternoon|evening)|greetings|pls\s+(find|note|see)|please\s+(find|note|see|be\s+advised|nominate|arrange|confirm)|kindly|thanks|thank\s+you|many\s+thanks|regards|best|br\b|rgds|brgds|sent\s+from|from\s*:|to\s*:|cc\s*:|subject\s*:|re\s*:|fw\s*:|fwd\s*:|date\s*:|sincerely|tel\b|tel\s*:|mob|phone|email|e-mail|www\.|https?:|on\s+behalf|as\s+agents?\s+only|bunker\s+nomination|nomination\b|new\s+nomination|we\s+(are\s+pleased|confirm)|following|below)/i;
 
 function _niParseBlock(text, opts, ctx) {
@@ -12117,14 +12120,14 @@ function _niParseBlock(text, opts, ctx) {
     let m = l.match(_NI_LC_LBL);
     if (m && !d.lc) {
       const lc = _niParseLaycan(l.slice(m.index + m[0].length), now);
-      if (lc) { d.lc = lc.text; if (lc.low) d.low.lc = 'Month or year guessed'; used[i] = 1; }
+      if (lc) { d.lc = lc.text; d._lcStart = lc.start; if (lc.low) d.low.lc = 'Month or year guessed'; used[i] = 1; }
     }
     m = l.match(_NI_ETA_LBL);
     if (m && !d.eta) {
       const rest = l.slice(m.index + m[0].length);
       if (/^\s*(tba|tbc|tbn|n\/a|unknown)\b/i.test(rest)) { used[i] = 1; return; }
       const lc = new RegExp('^\\d{1,2}(?:st|nd|rd|th)?\\s*(?:-|–|—|to)\\s*\\d{1,2}(?:st|nd|rd|th)?\\b').test(rest) ? _niParseLaycan(rest, now) : null;
-      if (lc && lc.text.indexOf('-') > 0 && !d.lc) { d.lc = lc.text; d.low.lc = 'ETA given as a range — used as laycan'; used[i] = 1; return; }
+      if (lc && lc.text.indexOf('-') > 0 && !d.lc) { d.lc = lc.text; d._lcStart = lc.start; d.low.lc = 'ETA given as a range — used as laycan'; used[i] = 1; return; }
       const dt = _niParseDate(rest, now);
       if (dt) {
         const tm = dt.time || _niParseTime(rest.slice(dt.len));
@@ -12145,6 +12148,8 @@ function _niParseBlock(text, opts, ctx) {
         const pos = m.index + m[0].length, rest = l.slice(pos);
         const pre = l.slice(0, pos);
         if (/\d\s*$/.test(pre) || /(?:vlsfo|lsmgo|mgo|qty)\s*[:\-]?\s*$/i.test(pre)) continue;
+        // "on 6/7/8" (a list of days) and "6/7/8/9" are not dates.
+        if (/^\d{1,2}\/\d{1,2}\/\d(?!\d)|^\d{1,2}(?:\/\d{1,2}){3,}/.test(rest)) continue;
         const dt = _niParseDate(rest, now);
         if (!dt) continue;
         const tm = dt.time || _niParseTime(rest.slice(dt.len));
@@ -12153,6 +12158,9 @@ function _niParseBlock(text, opts, ctx) {
       }
     }
   }
+  // Only dates/laycan given (common in trader fixtures): plan from the first day.
+  if (!d.eta && d._lcStart) { d.eta = _niFmtDT(d._lcStart, null); d.low.eta = 'No ETA given — set to the first laycan day, please check'; }
+  delete d._lcStart;
   // ── quantities
   const q = _niQuantities(text);
   if (q.v) { d.qty = q.v.qty; d.qtyMin = q.v.min; d.qtyMax = q.v.max; }
@@ -12175,10 +12183,10 @@ function _niParseBlock(text, opts, ctx) {
   let ag = null;
   lines.forEach(function(l, i) { if (!ag) { ag = _niAgentIn(l, opts); if (ag && /^\s*(?:local\s+)?(?:agents?|agency)/i.test(l)) used[i] = 1; } });
   if (!ag && ctx && ctx.agent) ag = ctx.agent;
-  if (ag) { d.agent = ag.value; if (ag.low) d.low.agent = 'Not in the Agent Directory'; }
+  if (ag) { d.agent = ag.value; if (ag.tbc) notes.push('Agent TBC'); else if (ag.low) d.low.agent = 'Not in the Agent Directory'; }
   // ── spec
-  r = text.match(/\bISO\s*[-:]?\s*8217\s*[:\-\/]?\s*\(?(\d{4})\)?|\b8217\s*[:\-\/]\s*(\d{4})\b|\bISO\s*(20\d\d)\b/i);
-  const yr = r ? (r[1] || r[2] || r[3]) : (ctx && ctx.specYear);
+  r = text.match(/\bISO\s*[-:]?\s*8217\s*[:\-\/]?\s*\(?(\d{4})\)?|\b8217\s*[:\-\/]\s*(\d{4})\b|\bISO\s*(20\d\d)\b|\b(20(?:10|17))\s*specs?\b/i);
+  const yr = r ? (r[1] || r[2] || r[3] || r[4]) : (ctx && ctx.specYear);
   if (yr) {
     const want = 'ISO 8217:' + yr;
     if (opts.specs.indexOf(want) >= 0) d.spec = want;
@@ -12194,6 +12202,9 @@ function _niParseBlock(text, opts, ctx) {
     if (/^(regards|best\s+regards|br\b|rgds|brgds|thanks|thank\s+you|many\s+thanks|sincerely|cheers)/i.test(t)) { signedOff = true; return; }
     const m = t.match(/^(?:remarks?|rmks?|notes?|comments?|special\s+(?:instructions?|requests?))\s*[:\-–=]\s*(.+)$/i);
     if (m) { rem.push(m[1].trim()); return; }
+    const acc = t.match(/^(?:acc(?:ount)?|a\/c|buyer|customer|client|charterers?)\s*[:\-–=]\s*(.+)$/i);
+    if (acc) { rem.unshift('Account: ' + acc[1].trim()); return; }
+    if (/^[^:]{2,40}:\s*$/.test(t)) return; // a heading such as "Fixture details:" 
     if (used[i] || FIELD.test(t) || _NI_BOILER.test(t) || (nm && nm.line === i)) return;
     if (t.replace(/[^A-Za-z]/g, '').length < 4) return;
     rem.push(t);
@@ -12450,7 +12461,14 @@ async function _niPrepImage(blob) {
 function _niOcrClean(t) {
   return String(t || '').replace(/\b[0-9OoIl]{3,}(?=(?:LT|lt|hrs?|HRS?|MT|mt|mts|MTS)?\b)/g, function(w) {
     return (w.match(/\d/g) || []).length >= 2 ? w.replace(/[Oo]/g, '0').replace(/[Il]/g, '1') : w;
-  });
+  })
+    // A superscript "th"/"st" after a day is read as a quote or degree sign:
+    // "6/8" Oct" → "6/8th Oct" (otherwise "6/8" is taken as 6 August).
+    .replace(new RegExp('(\\d)\\s?["“”\'’`°*^]+(?=\\s*' + _NI_MON + ')', 'gi'), '$1th')
+    // Grade names with l/I/1 and O/0 confusions: "Visfo", "VLSF0", "LSMG0", "IsmGo".
+    .replace(/\b[Vv][LlIi1|][Ss5][Ff][Oo0]\b/g, 'VLSFO')
+    .replace(/\b[LlIi1|][Ss5][Mm][Gg][Oo0]\b/g, 'LSMGO')
+    .replace(/\b([Mm][Gg])0\b/g, '$1O');
 }
 async function _niOcr(blob) {
   _niStatus('Loading OCR engine…');
