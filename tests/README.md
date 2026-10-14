@@ -35,6 +35,10 @@ blocked and fails the test.
 | `layout-space` | sidebar and activity feed fill the window |
 | `realtime` | instant sync between devices, polling fallback, reconnect, logout |
 | `loose-ends` | FY labels follow the year, Danger zone typed confirmation |
+| `nominations-parse` | Import nomination parser on 20 realistic samples (broker e-mail, WhatsApp, Excel/pipe tables, several vessels, ranges, IMO check digit, odd dates, Fujairah/Khor Fakkan synonyms, hostile names) |
+| `nominations-import` | Import nomination panel: keyboard, paste/drop text or image → Read → review → edit → Add; nothing saved before Add; duplicates; validation; trader import; second device |
+| `nominations-range` | Quantity ranges (500–600 MT): card entry/validation, every display and export, scheduler/availability/free windows plan the max, checklist in-range check, sync/trader/trash, legacy vessels unchanged |
+| `nominations-ocr` | Screenshot import with the real Tesseract.js (WebAssembly worker) under the real `vercel.json` CSP, on PNGs rendered in the test |
 
 ## Run locally
 
@@ -92,3 +96,5 @@ GitHub Actions runs `npm test` on every push and pull request
 3. If index.html starts loading a new CDN library, add the npm package at the
    same exact version to `package.json` and a line to `CDN_MAP` in
    `harness/harness.js` — otherwise the request is blocked and tests fail.
+   (Tesseract.js is an example: the library, its worker, the WebAssembly core
+   and the English model are all pinned devDependencies mapped in `CDN_MAP`.)

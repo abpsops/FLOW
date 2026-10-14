@@ -995,6 +995,77 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .btn-add:hover{background:var(--azure-lt);border-color:var(--azure);border-style:solid;color:var(--azure)}
 
 /* ════════════════════════════════════════
+   IMPORT NOMINATION (paste text / screenshot)
+════════════════════════════════════════ */
+.nimp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--sh-xs);margin-bottom:12px}
+.nimp > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:13px;font-weight:700;color:var(--ink);border-radius:var(--radius)}
+.nimp > summary::-webkit-details-marker{display:none}
+.nimp > summary:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+.nimp-ico{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--azure-lt);color:var(--azure);flex-shrink:0}
+.nimp-sub{font-weight:500;color:var(--muted);font-size:11.5px}
+.nimp-chev{margin-left:auto;color:var(--muted);transition:transform .15s;flex-shrink:0}
+.nimp[open] .nimp-chev{transform:rotate(180deg)}
+.nimp-body{padding:0 14px 14px}
+.nimp-zone{border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:10px;background:var(--surface2);transition:border-color .15s,background .15s}
+.nimp-zone:focus,.nimp-zone:focus-within{border-color:var(--azure);outline:none}
+.nimp-zone.drag{border-color:var(--azure);border-style:solid;background:var(--azure-lt)}
+.nimp-zone textarea{display:block;width:100%;min-height:104px;resize:vertical;font-size:12.5px;line-height:1.45;font-family:'DM Mono',monospace;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface);color:var(--text);padding:8px 10px;outline:none}
+.nimp-zone textarea:focus{border-color:var(--azure)}
+.nimp-img{display:flex;align-items:center;gap:10px;margin-top:8px;font-size:11.5px;color:var(--sub);flex-wrap:wrap}
+.nimp-img[hidden]{display:none}
+.nimp-img img{max-height:64px;max-width:140px;border-radius:6px;border:1px solid var(--border);background:var(--surface)}
+.nimp-actions{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:9px}
+.nimp-status{font-size:11.5px;color:var(--sub);font-weight:600}
+.nimp-status.er{color:var(--red)}
+.nimp-note{font-size:10.5px;color:var(--muted);margin-top:8px;display:flex;gap:6px;align-items:center}
+.nimp-res{margin-top:14px}
+.nimp-res-hdr{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;font-size:12px;color:var(--sub)}
+.nimp-res-hdr strong{color:var(--ink);font-size:13px}
+.nimp-legend{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)}
+.nimp-legend i{width:10px;height:10px;border-radius:3px;background:var(--amber-lt);border:1px solid var(--amber);display:inline-block}
+.nimp-tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm)}
+.nimp-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:900px;table-layout:fixed}
+.nimp-tbl th{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);text-align:left;padding:7px 5px;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;font-weight:700}
+.nimp-tbl td{padding:5px 4px;border-bottom:1px solid var(--border2);vertical-align:top}
+.nimp-tbl tr.nimp-msg td{padding:0 4px 8px;border-bottom:1px solid var(--border)}
+.nimp-tbl tr.nimp-row td{border-bottom:0}
+.nimp-rem{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.nimp-rem::before{content:'Remarks';font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);flex-shrink:0}
+.nimp-tbl :is(input:not([type="checkbox"]),select){width:100%;min-width:64px;font-size:12px;padding:5px 7px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface);color:var(--text);outline:none;font-family:inherit}
+.nimp-tbl :is(input,select):focus{border-color:var(--azure);box-shadow:0 0 0 3px rgba(0,194,224,.12)}
+.nimp-tbl input[type="checkbox"]{width:15px;height:15px;margin:6px 4px;accent-color:var(--azure);cursor:pointer}
+.nimp-tbl :is(input,select).nimp-low{border-color:var(--amber);background:var(--amber-lt)}
+.nimp-tbl :is(input,select).nimp-miss{border-color:var(--red);background:var(--red-lt)}
+.nimp-flag{font-size:10.5px;font-weight:600;display:flex;gap:6px;flex-wrap:wrap}
+.nimp-flag span{padding:2px 7px;border-radius:4px;border:1px solid}
+.nimp-flag .dup{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
+.nimp-flag .bad{background:var(--red-lt);color:var(--red);border-color:var(--red-bd)}
+.nimp-flag .why{background:var(--surface2);color:var(--sub);border-color:var(--border);font-weight:500}
+.nimp-src{margin-top:10px;font-size:11.5px;color:var(--sub)}
+.nimp-src summary{cursor:pointer;font-weight:600}
+.nimp-src pre{white-space:pre-wrap;word-break:break-word;max-height:220px;overflow:auto;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-xs);padding:8px 10px;margin-top:6px;font-size:11.5px;font-family:'DM Mono',monospace;color:var(--text)}
+@media(max-width:700px){
+  .nimp-sub{display:none}
+  .nimp-tblwrap{border:0;overflow:visible}
+  .nimp-tbl{min-width:0}
+  .nimp-tbl thead{display:none}
+  .nimp-tbl,.nimp-tbl tbody{display:block}
+  .nimp-tbl tr.nimp-row{display:grid;grid-template-columns:1fr 1fr;gap:6px 8px;padding:10px;border:1px solid var(--border);border-bottom:0;border-radius:var(--radius-sm) var(--radius-sm) 0 0;background:var(--surface)}
+  .nimp-tbl tr.nimp-msg{display:block;border:1px solid var(--border);border-top:0;border-radius:0 0 var(--radius-sm) var(--radius-sm);margin-bottom:10px;background:var(--surface)}
+  .nimp-tbl tr.nimp-msg td{display:block;border:0;padding:0 10px 10px}
+  .nimp-tbl tr.nimp-msg td:empty{display:none}
+  .nimp-rem{display:block}
+  .nimp-rem::before{display:block;margin-bottom:3px}
+  .nimp-tbl colgroup{display:none}
+  .nimp-tbl tr.nimp-row td{display:block;border:0;padding:0}
+  .nimp-tbl td[data-label]::before{content:attr(data-label);display:block;font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);margin-bottom:3px}
+  .nimp-tbl td.nimp-wide{grid-column:1 / -1}
+  .nimp-tbl tr.nimp-row td.nimp-pick{display:flex;align-items:center;gap:6px;grid-column:1 / -1;order:-1}
+  .nimp-tbl tr.nimp-row td.nimp-pick::before{margin:0}
+  .nimp-tbl tr.nimp-row td.nimp-addc{grid-column:1 / -1;order:99;text-align:right}
+}
+
+/* ════════════════════════════════════════
    VESSEL / BARGE CARDS
 ════════════════════════════════════════ */
 .vcard,.bcard{
@@ -1557,6 +1628,17 @@ html[data-skin="harbour"] .slabel{font-size:12px;letter-spacing:.06em;color:#5B6
 html[data-skin="harbour"] .sec-label{font-size:15px;letter-spacing:-.005em;text-transform:none;color:#0B2545;font-weight:800}
 html[data-skin="harbour"] .sec-label::before{width:8px;height:8px;border-radius:3px;background:#F26A4B}
 html[data-skin="harbour"] .hint{color:#5B6E86}
+html[data-skin="harbour"] .hint.er{color:var(--red)}
+html[data-skin="harbour"] .nimp{border:1px solid #E3E9F1;border-radius:18px;box-shadow:0 1px 2px rgba(11,37,69,.04)}
+html[data-skin="harbour"] .nimp > summary{padding:14px 18px;font-size:15px;color:#0B2545}
+html[data-skin="harbour"] .nimp-ico{background:#FDE8E4;color:#F26A4B;border-radius:10px}
+html[data-skin="harbour"] .nimp-body{padding:0 18px 18px}
+html[data-skin="harbour"] .nimp-zone{border-radius:14px;background:#F6F8FB;border-color:#D5DEEA}
+html[data-skin="harbour"] .nimp-zone:is(:focus,:focus-within),html[data-skin="harbour"] .nimp-zone.drag{border-color:#F26A4B}
+html[data-skin="harbour"] .nimp-tblwrap{border-radius:14px}
+html[data-skin="harbour"] .main .nimp-tbl :is(input:not([type="checkbox"]),select){border-radius:10px;min-height:34px;padding:4px 8px}
+html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-low{border-color:var(--amber);background-color:var(--amber-lt)}
+html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-miss{border-color:var(--red);background-color:var(--red-lt)}
 
 /* ── 6. DASHBOARD HERO + KPI chips ────────────────────────────────── */
 html[data-skin="harbour"] #page-dashboard.active{display:flex;flex-direction:column}
@@ -2962,6 +3044,37 @@ function flowWelcomeGo(pageId) {
       <span class="kpi-value" style="font-size:20px" id="nom-kpi-lsmgo">0</span>
     </div>
   </div>
+
+  <!-- Import nomination: paste an email / WhatsApp text or a screenshot → review → add.
+       Operators and traders both use it (traders create nominations). -->
+  <details class="nimp" id="nimp">
+    <summary>
+      <span class="nimp-ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span>
+      <span>Import nomination</span>
+      <span class="nimp-sub">Paste an email, WhatsApp text or a screenshot</span>
+      <svg class="nimp-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </summary>
+    <div class="nimp-body">
+      <div class="nimp-zone" id="nimp-zone" tabindex="0" role="group" aria-label="Nomination paste and drop area. Paste or type text, or paste, drop or choose an image. Press Enter to choose an image.">
+        <label for="nimp-text" class="nimp-sub" style="display:block;margin-bottom:5px">Nomination text — or paste / drop a screenshot here</label>
+        <textarea id="nimp-text" spellcheck="false" placeholder="e.g.&#10;MV OCEAN PRIDE  IMO 9321483&#10;ETA 14/10/2026 0600LT  Fujairah anch&#10;VLSFO 500-600 MT / LSMGO 50 MT&#10;Agent: GAC"></textarea>
+        <div class="nimp-img" id="nimp-img" hidden>
+          <img id="nimp-thumb" alt="Screenshot to read">
+          <span id="nimp-img-name"></span>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="niClearImage()">Remove image</button>
+        </div>
+        <div class="nimp-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="nimp-read" onclick="niRead()">Read</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('nimp-file').click()">Choose image…</button>
+          <input type="file" id="nimp-file" accept="image/*" hidden onchange="niPickFile(this)">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="niReset()">Clear</button>
+          <span class="nimp-status" id="nimp-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="nimp-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Read on this device — the text and images are never sent anywhere.</div>
+      </div>
+      <div class="nimp-res" id="nimp-results"></div>
+    </div>
+  </details>
 
   <!-- Agent Directory autocomplete source — populated/refreshed by _refreshAgentDatalist().
        Vessel nomination "Agent" fields reference this via list="agent-directory-list", giving
@@ -4831,8 +4944,8 @@ function refreshDashboard() {
     }
     const typeEl = document.getElementById('v' + cid + '-type');
     const ty = typeEl ? typeEl.value : 'BOTH';
-    const vv = parseFloat(document.getElementById('v' + cid + '-vlsfo')?.value) || 0;
-    const mm = parseFloat(document.getElementById('v' + cid + '-mgo')?.value) || 0;
+    const vv = _cardQty(cid, 'vlsfo').qty;
+    const mm = _cardQty(cid, 'mgo').qty;
     if (ty !== 'MGO') totalV += vv;
     if (ty !== 'VLSFO') totalM += mm;
   });
@@ -5051,8 +5164,8 @@ function renderDashFuelingStatus() {
   function fmtQty(item) {
     const v = item.nomVQ || item.vQ || 0, m = item.nomMQ || item.mQ || 0;
     const parts = [];
-    if (v > 0) parts.push('<span style="color:var(--fuel-v)">' + esc(v.toLocaleString()) + ' V</span>');
-    if (m > 0) parts.push('<span style="color:var(--fuel-m)">' + esc(m.toLocaleString()) + ' M</span>');
+    if (v > 0) parts.push('<span style="color:var(--fuel-v)">' + esc(_nomQtyTxt(item, 'V', v)) + ' V</span>');
+    if (m > 0) parts.push('<span style="color:var(--fuel-m)">' + esc(_nomQtyTxt(item, 'M', m)) + ' M</span>');
     return parts.join(' · ');
   }
 
@@ -5278,8 +5391,8 @@ function renderDashCharts(records, vessels) {
       document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(card => {
         const cid = card.id.replace('vessel-','');
         const ty = document.getElementById('v'+cid+'-type')?.value || 'BOTH';
-        if (ty !== 'MGO')   planV += parseFloat(document.getElementById('v'+cid+'-vlsfo')?.value)||0;
-        if (ty !== 'VLSFO') planM += parseFloat(document.getElementById('v'+cid+'-mgo')?.value)||0;
+        if (ty !== 'MGO')   planV += _cardQty(cid, 'vlsfo').qty;
+        if (ty !== 'VLSFO') planM += _cardQty(cid, 'mgo').qty;
       });
     }
 
@@ -5339,8 +5452,8 @@ function refreshNominationKPIs() {
     const brg    = document.getElementById('v' + cid + '-barge');
     const ty = typeEl ? typeEl.value : 'BOTH';
     if (paqEl && paqEl.value !== 'yes') paq++;
-    if (ty !== 'MGO')   v += parseFloat(vEl?.value) || 0;
-    if (ty !== 'VLSFO') m += parseFloat(mEl?.value) || 0;
+    if (ty !== 'MGO')   v += _parseQtyInput(vEl?.value).qty;
+    if (ty !== 'VLSFO') m += _parseQtyInput(mEl?.value).qty;
     if (!brg || !brg.value) unassigned++;
   });
   safeSet('nom-kpi-total',   cards.length);
@@ -6380,6 +6493,11 @@ function _newNominationUid() {
    Pulls every available field dynamically — nothing here is hardcoded
    to a specific vessel. Fields the user left blank are simply omitted
    from the body rather than printed as "undefined". */
+// "500–600" when the vessel record carries a range (g = 'qty' | 'mgo'), else the number.
+function _vesselQtyTxt(v, g) {
+  const mn = v[g + 'Min'], mx = v[g + 'Max'];
+  return (mn != null && mx != null && +mn < +mx) ? (+mn) + '–' + (+mx) : String(v[g] || 0);
+}
 function _buildNominationEmail(v) {
   const subject = 'New Bunker Nomination – ' + (v.name || 'Unnamed Vessel');
 
@@ -6397,12 +6515,12 @@ function _buildNominationEmail(v) {
   lines.push('');
   lines.push('Quantity:');
   if (v.type === 'BOTH') {
-    lines.push('MGO: ' + (v.mgo || 0) + ' MT');
-    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+    lines.push('MGO: ' + _vesselQtyTxt(v, 'mgo') + ' MT');
+    lines.push('VLSFO: ' + _vesselQtyTxt(v, 'qty') + ' MT');
   } else if (v.type === 'MGO') {
-    lines.push('LSMGO: ' + (v.mgo || v.qty || 0) + ' MT');
+    lines.push('LSMGO: ' + (v.mgo ? _vesselQtyTxt(v, 'mgo') : (v.qty || 0)) + ' MT');
   } else {
-    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+    lines.push('VLSFO: ' + _vesselQtyTxt(v, 'qty') + ' MT');
   }
   lines.push('');
   if (v.agent)     lines.push('Agents: ' + v.agent);
@@ -6535,21 +6653,21 @@ async function sendNominationEmailForCard(id) {
   }
 
   try {
-    await sendNominationEmailIfNeeded({
+    await sendNominationEmailIfNeeded(Object.assign({
       nomUid:   card.dataset.nomUid,
       name:     name,
       imo:      document.getElementById(`v${id}-imo`)?.value || '',
       area:     document.getElementById(`v${id}-area`)?.value || '',
       type:     ty,
-      qty:      ty === 'MGO'   ? 0 : parseFloat(document.getElementById(`v${id}-vlsfo`)?.value || 0),
-      mgo:      ty === 'VLSFO' ? 0 : parseFloat(document.getElementById(`v${id}-mgo`)?.value   || 0),
+      qty:      ty === 'MGO'   ? 0 : _cardQty(id, 'vlsfo').qty,
+      mgo:      ty === 'VLSFO' ? 0 : _cardQty(id, 'mgo').qty,
       agent:    document.getElementById(`v${id}-agent`)?.value || '',
       manifold: document.getElementById(`v${id}-manifold`)?.value || '',
       spec:     document.getElementById(`v${id}-spec`)?.value || '',
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    });
+    }, _cardQtyRangeFields(id)));
   } finally {
     // _lockSendEmailButton reflects whatever sendNominationEmailIfNeeded
     // actually recorded in _nomEmailLog — if the send failed, the log was
@@ -6652,12 +6770,12 @@ function _buildNominationCancelledEmail(v) {
   lines.push('');
   lines.push('Quantity (as nominated):');
   if (v.type === 'BOTH') {
-    lines.push('MGO: ' + (v.mgo || 0) + ' MT');
-    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+    lines.push('MGO: ' + _vesselQtyTxt(v, 'mgo') + ' MT');
+    lines.push('VLSFO: ' + _vesselQtyTxt(v, 'qty') + ' MT');
   } else if (v.type === 'MGO') {
-    lines.push('LSMGO: ' + (v.mgo || v.qty || 0) + ' MT');
+    lines.push('LSMGO: ' + (v.mgo ? _vesselQtyTxt(v, 'mgo') : (v.qty || 0)) + ' MT');
   } else {
-    lines.push('VLSFO: ' + (v.qty || 0) + ' MT');
+    lines.push('VLSFO: ' + _vesselQtyTxt(v, 'qty') + ' MT');
   }
   lines.push('');
   if (v.agent)     lines.push('Agents: ' + v.agent);
@@ -6751,21 +6869,21 @@ async function sendNominationCancelledEmailForCard(id) {
   }
 
   try {
-    await sendNominationCancelledEmailIfNeeded({
+    await sendNominationCancelledEmailIfNeeded(Object.assign({
       nomUid:   card.dataset.nomUid,
       name:     name,
       imo:      document.getElementById(`v${id}-imo`)?.value || '',
       area:     document.getElementById(`v${id}-area`)?.value || '',
       type:     ty,
-      qty:      ty === 'MGO'   ? 0 : parseFloat(document.getElementById(`v${id}-vlsfo`)?.value || 0),
-      mgo:      ty === 'VLSFO' ? 0 : parseFloat(document.getElementById(`v${id}-mgo`)?.value   || 0),
+      qty:      ty === 'MGO'   ? 0 : _cardQty(id, 'vlsfo').qty,
+      mgo:      ty === 'VLSFO' ? 0 : _cardQty(id, 'mgo').qty,
       agent:    document.getElementById(`v${id}-agent`)?.value || '',
       manifold: document.getElementById(`v${id}-manifold`)?.value || '',
       spec:     document.getElementById(`v${id}-spec`)?.value || '',
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    });
+    }, _cardQtyRangeFields(id)));
   } finally {
     const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
     if (sent) {
@@ -8846,14 +8964,14 @@ function captureCurrentState() {
   const vessels = [];
   document.querySelectorAll('.vcard[id^="vessel-"]').forEach(c => {
     const id = c.id.replace('vessel-','');
-    vessels.push({
+    vessels.push(Object.assign({
       nomUid:   c.dataset.nomUid || '',
       name:     document.getElementById(`v${id}-name`)?.value||'',
       imo:      document.getElementById(`v${id}-imo`)?.value||'',
       area:     document.getElementById(`v${id}-area`)?.value||'FUJ-A',
       type:     document.getElementById(`v${id}-type`)?.value||'VLSFO',
-      qty:      parseFloat(document.getElementById(`v${id}-vlsfo`)?.value)||0,
-      mgo:      parseFloat(document.getElementById(`v${id}-mgo`)?.value)||0,
+      qty:      _cardQty(id, 'vlsfo').qty,
+      mgo:      _cardQty(id, 'mgo').qty,
       spec:     document.getElementById(`v${id}-spec`)?.value||'',
       agent:    document.getElementById(`v${id}-agent`)?.value||'',
       manifold: document.getElementById(`v${id}-manifold`)?.value||'',
@@ -8867,7 +8985,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    });
+    }, _cardQtyRangeFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -10916,6 +11034,59 @@ function fmtMT(n) {
   return n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
+/* ─── NOMINATED QUANTITY RANGES ───
+   Nominations often come as a range ("VLSFO 500–600 MT", "abt 500/600").
+   The card's quantity box takes one number or a range. The PLANNING figure
+   (vessel qty/mgo, schedule item nomVQ/nomMQ — everything the scheduler,
+   Availability Check, Free Windows and ROB maths read) is the TOP of the
+   range, so a barge is never loaded short. The range itself (vessel
+   qtyMin/qtyMax + mgoMin/mgoMax, schedule item nomVMin/nomVMax +
+   nomMMin/nomMMax) is only for showing people and for the checklist's
+   within-range check. A single number stores no range fields, so older
+   vessels and payloads are untouched. */
+function _parseQtyInput(raw) {
+  // thousands commas ("1,500") and a trailing "MT" are fine to type
+  const s = String(raw == null ? '' : raw).trim().replace(/(\d),(?=\d{3}(?!\d))/g, '$1').replace(/\s*m\.?t\.?$/i, '').trim();
+  if (!s) return { ok: true, qty: 0, min: null, max: null };
+  const N = '(\\d+(?:\\.\\d+)?)', PRE = '(?:abt\\.?|about|approx\\.?|ca\\.?|~)?\\s*';
+  let m = s.match(new RegExp('^' + PRE + N + '$', 'i'));
+  if (m) return { ok: true, qty: parseFloat(m[1]), min: null, max: null };
+  m = s.match(new RegExp('^' + PRE + N + '\\s*(?:-|–|—|/|to)\\s*' + N + '$', 'i'));
+  if (m) {
+    let a = parseFloat(m[1]), b = parseFloat(m[2]);
+    if (a > b) { const t = a; a = b; b = t; }
+    return a === b ? { ok: true, qty: b, min: null, max: null } : { ok: true, qty: b, min: a, max: b };
+  }
+  return { ok: false, qty: parseFloat(s) || 0, min: null, max: null };
+}
+// What goes back into a card's qty box for a saved vessel.
+function _qtyInputText(qty, min, max) {
+  return (min != null && max != null && +min < +max) ? (+min) + '–' + (+max) : String(qty || 0);
+}
+function _fmtQtyRange(min, max) { return Number(min).toLocaleString() + '–' + Number(max).toLocaleString(); }
+// Card qty box (g = 'vlsfo' | 'mgo') → parsed {ok, qty, min, max}.
+function _cardQty(id, g) {
+  const el = document.getElementById('v' + id + '-' + g);
+  return _parseQtyInput(el ? el.value : '');
+}
+// Range fields to store on a vessel record ({} when both are single numbers).
+function _cardQtyRangeFields(id) {
+  const out = {}, v = _cardQty(id, 'vlsfo'), m = _cardQty(id, 'mgo');
+  if (v.min != null) { out.qtyMin = v.min; out.qtyMax = v.max; }
+  if (m.min != null) { out.mgoMin = m.min; out.mgoMax = m.max; }
+  return out;
+}
+// Range of a schedule item / checklist record (g = 'V' | 'M'), or null.
+function _nomRange(o, g) {
+  const mn = o ? o['nom' + g + 'Min'] : null, mx = o ? o['nom' + g + 'Max'] : null;
+  return (mn != null && mx != null && +mn < +mx) ? { min: +mn, max: +mx } : null;
+}
+// "500–600" for a ranged nomination, else the planning figure n.
+function _nomQtyTxt(o, g, n) {
+  const r = _nomRange(o, g);
+  return r ? _fmtQtyRange(r.min, r.max) : Number(n || 0).toLocaleString();
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    BUNKER QUANTITY — current FY (Dashboard line chart + Analytics bar chart)
    FLOW's fiscal year is the calendar year (the chart runs Jan–Dec), so the
@@ -11287,13 +11458,29 @@ function fmtLC(lc) {
 
 function calcETC(eta, vq, mq, vtph=300, mtph=100) { return addHrs(eta, _calcParams.hoseHrs + Math.max(vq/vtph, mq/mtph)); }
 
+/* Inline check of the card's qty boxes: a range shows what planning uses,
+   anything unreadable is flagged (it would otherwise plan as 0 / a guess). */
+function _qtyHints(id) {
+  [['vlsfo', 'hvq'], ['mgo', 'hmq']].forEach(function(p) {
+    const el = document.getElementById('v' + id + '-' + p[0]), h = document.getElementById('v' + id + '-' + p[1]);
+    if (!el || !h) return;
+    const q = _parseQtyInput(el.value);
+    el.classList.toggle('err', !q.ok);
+    el.setAttribute('aria-invalid', q.ok ? 'false' : 'true');
+    if (!q.ok) { h.textContent = 'Type a number or a range, e.g. 500-600'; h.className = 'hint er'; }
+    else if (q.min != null) { h.textContent = 'Range ' + _fmtQtyRange(q.min, q.max) + ' MT · planned at ' + q.max.toLocaleString(); h.className = 'hint inf'; }
+    else { h.textContent = ''; h.className = 'hint'; }
+  });
+}
+
 /* ─── LIVE PREVIEW ─── */
 function upd(id) {
+  _qtyHints(id);
   const lcR = document.getElementById(`v${id}-lc`)?.value || '';
   const etR = document.getElementById(`v${id}-eta`)?.value || '';
   const ty  = document.getElementById(`v${id}-type`)?.value;
-  const vq  = ty === 'MGO'   ? 0 : parseFloat(document.getElementById(`v${id}-vlsfo`)?.value || 0);
-  const mq  = ty === 'VLSFO' ? 0 : parseFloat(document.getElementById(`v${id}-mgo`)?.value   || 0);
+  const vq  = ty === 'MGO'   ? 0 : _cardQty(id, 'vlsfo').qty;
+  const mq  = ty === 'VLSFO' ? 0 : _cardQty(id, 'mgo').qty;
   const lcEl = document.getElementById(`v${id}-lc`), etEl = document.getElementById(`v${id}-eta`);
   const hLC = document.getElementById(`v${id}-hlc`), hET = document.getElementById(`v${id}-het`);
   const prev = document.getElementById(`v${id}-prev`), lcbx = document.getElementById(`v${id}-lcbox`);
@@ -11356,8 +11543,8 @@ function rmV(id) {
   const imo      = document.getElementById(`v${id}-imo`)?.value || '';
   const area     = document.getElementById(`v${id}-area`)?.value || 'FUJ-A';
   const type     = document.getElementById(`v${id}-type`)?.value || 'VLSFO';
-  const qty      = parseFloat(document.getElementById(`v${id}-vlsfo`)?.value) || 0;
-  const mgo      = parseFloat(document.getElementById(`v${id}-mgo`)?.value) || 0;
+  const qty      = _cardQty(id, 'vlsfo').qty;
+  const mgo      = _cardQty(id, 'mgo').qty;
   const spec     = document.getElementById(`v${id}-spec`)?.value || '';
   const agent    = document.getElementById(`v${id}-agent`)?.value || '';
   const manifold = document.getElementById(`v${id}-manifold`)?.value || '';
@@ -11382,10 +11569,10 @@ function rmV(id) {
   const alreadyCancelled = !!(nomUidForCancel && _nomCancelEmailLog[nomUidForCancel] && _nomCancelEmailLog[nomUidForCancel].emailSent);
   if (name && !alreadyCancelled) {
     if (confirm(`Also send a "Nomination Cancelled" email to Ops for ${name}?\n\n(Choose Cancel if you're just correcting/redoing this entry — nothing will be emailed.)`)) {
-      sendNominationCancelledEmailIfNeeded({
+      sendNominationCancelledEmailIfNeeded(Object.assign({
         nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
         agent, manifold, spec, lc, eta, remarks
-      });
+      }, _cardQtyRangeFields(id)));
     }
   }
 
@@ -11395,7 +11582,7 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details.
-    def: {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}
+    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -11475,8 +11662,8 @@ function renderTrashBin() {
     const d = entry.def;
     const trashedTime = new Date(entry.trashedAt).toLocaleString();
     const fuelLine = d.type === 'BOTH'
-      ? `VLSFO ${esc(d.qty)} MT + MGO ${esc(d.mgo)} MT`
-      : d.type === 'MGO' ? `MGO ${esc(d.mgo)} MT` : `VLSFO ${esc(d.qty)} MT`;
+      ? `VLSFO ${esc(_vesselQtyTxt(d, 'qty'))} MT + MGO ${esc(_vesselQtyTxt(d, 'mgo'))} MT`
+      : d.type === 'MGO' ? `MGO ${esc(_vesselQtyTxt(d, 'mgo'))} MT` : `VLSFO ${esc(_vesselQtyTxt(d, 'qty'))} MT`;
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface);border:none;box-shadow:var(--sh-xs);border-radius:8px;margin-bottom:8px;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
         <div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(d.name || '(unnamed vessel)')}</div>
@@ -11582,6 +11769,896 @@ function renumberVessels() {
   });
 }
 
+/* ─── IMPORT NOMINATION: rule-based text parser ───
+   _parseNominationText(text, opts) → array of draft nominations, one per
+   vessel found. Pure and deterministic (same text + same opts.now → same
+   drafts); nothing leaves the device. opts: now (Date — "today" for dates
+   written without a year/month), areas ([{value,label}] — the Anchorage
+   dropdown), agents ([names] — the Agent Directory), specs ([values]).
+   Each draft: name, imo, eta ('14 Oct 2026 06:00' — the ETA picker's
+   format; 00:00 = no firm time), lc ('14-16 Oct 2026'), type, qty/qtyMin/
+   qtyMax, mgo/mgoMin/mgoMax (a range plans at its max, like the card),
+   area, agent, spec, remarks, low {field: reason} for anything guessed,
+   and src (the text it came from). */
+const _NI_MON = '(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|june?|july?|aug(?:ust)?|sept?(?:ember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)';
+const _NI_MONTHS = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const _NI_MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _niPad = function(n) { return String(n).padStart(2, '0'); };
+const _niMon = function(s) { return _NI_MONTHS[String(s).slice(0, 3).toLowerCase()]; };
+
+// IMO numbers carry a check digit: d1×7 + d2×6 + … + d6×2, last digit of the sum = d7.
+function _imoValid(s) {
+  s = String(s || '');
+  if (!/^\d{7}$/.test(s)) return false;
+  let sum = 0;
+  for (let i = 0; i < 6; i++) sum += (+s[i]) * (7 - i);
+  return sum % 10 === +s[6];
+}
+
+// No year written: this year, unless that's well in the past (a January ETA read in December).
+function _niYear(day, mon, yrStr, now) {
+  if (yrStr) { const y = +yrStr; return yrStr.length <= 2 ? 2000 + y : y; }
+  const y = now.getFullYear(), d = new Date(y, mon, day);
+  return (now - d) > 60 * 86400000 ? y + 1 : y;
+}
+// Day only ("ETA 14th", "14/1800"): this month, or next month if that day has passed.
+function _niMonthFor(day, now) {
+  let y = now.getFullYear(), m = now.getMonth();
+  if (day < now.getDate() - 3) { m++; if (m > 11) { m = 0; y++; } }
+  return { m: m, y: y };
+}
+function _niValidDate(y, m, d) {
+  const x = new Date(y, m, d);
+  return x.getFullYear() === y && x.getMonth() === m && x.getDate() === d;
+}
+
+/* A date at the START of s. → {y, m, d, len, low} or null. low = month or
+   year had to be guessed beyond the usual "this year". */
+function _niParseDate(s, now) {
+  let r;
+  const done = function(y, m, d, len, low) {
+    return (m >= 0 && m <= 11 && d >= 1 && d <= 31 && _niValidDate(y, m, d)) ? { y: y, m: m, d: d, len: len, low: !!low } : null;
+  };
+  if ((r = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/))) return done(+r[1], +r[2] - 1, +r[3], r[0].length);
+  if ((r = s.match(new RegExp('^(\\d{1,2})(?:st|nd|rd|th)?[\\s\\-./]*(?:of\\s+)?' + _NI_MON + '\\.?(?:[\\s\\-./,\']*((?:19|20)\\d{2}|\\d{2})(?![\\d:.h]|\\s*(?:hrs?|hours|lt|am|pm)\\b))?', 'i')))) {
+    const d = +r[1], m = _niMon(r[2]);
+    return done(_niYear(d, m, r[3], now), m, d, r[0].length);
+  }
+  if ((r = s.match(new RegExp('^' + _NI_MON + '\\.?[\\s\\-]*(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s*((?:19|20)\\d{2})(?!\\d))?', 'i')))) {
+    const d = +r[2], m = _niMon(r[1]);
+    return done(_niYear(d, m, r[3], now), m, d, r[0].length);
+  }
+  if ((r = s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-]((?:19|20)\d{2}|\d{2})(?![\d:])/))) {
+    let d = +r[1], m = +r[2] - 1, low = false;
+    if (m > 11 && d <= 12) { const t = d; d = m + 1; m = t - 1; low = true; } // looks month-first
+    return done(_niYear(d, m, r[3], now), m, d, r[0].length, low);
+  }
+  // "14/1800" — day + time, month implied
+  if ((r = s.match(/^(\d{1,2})\s*\/\s*([01]\d|2[0-3])([0-5]\d)(?!\d)/))) {
+    const d = +r[1], mm = _niMonthFor(d, now);
+    const out = done(mm.y, mm.m, d, r[0].length, true);
+    if (out) out.time = { h: +r[2], mi: +r[3], len: 0 };
+    return out;
+  }
+  if ((r = s.match(/^(\d{1,2})[\/.](\d{1,2})(?![\d\/.]*\d)/))) {
+    let d = +r[1], m = +r[2] - 1;
+    return done(_niYear(d, m, '', now), m, d, r[0].length);
+  }
+  if ((r = s.match(/^(\d{1,2})(?:st|nd|rd|th)\b/i))) {
+    const d = +r[1], mm = _niMonthFor(d, now);
+    return done(mm.y, mm.m, d, r[0].length, true);
+  }
+  if ((r = s.match(/^(today|tonight|tomorrow|tmrw|tmr)\b/i))) {
+    const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (/^to(day|night)/i.test(r[1]) ? 0 : 1));
+    const out = done(t.getFullYear(), t.getMonth(), t.getDate(), r[0].length, true);
+    if (out && /tonight/i.test(r[1])) out.time = { h: 22, mi: 0, len: 0, low: true };
+    return out;
+  }
+  return null;
+}
+/* A time at the START of s (after separators). → {h, mi, len, low} or null. */
+function _niParseTime(s) {
+  const lead = s.match(/^[\s,\/@\-–]*(?:at\s+|time\s*:?\s*|hrs\s*)?/i)[0];
+  const t = s.slice(lead.length);
+  let r;
+  if ((r = t.match(/^(\d{1,2})[:.h](\d{2})(?!\d)\s*(am|pm|a\.m\.|p\.m\.)?(?:\s*(?:hrs?|hours|lt|local|utc|gmt|z)\b)?/i))) {
+    let h = +r[1]; const mi = +r[2];
+    if (r[3]) { const pm = /^p/i.test(r[3]); if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; }
+    if (h <= 23 && mi <= 59) return { h: h, mi: mi, len: lead.length + r[0].length };
+  }
+  if ((r = t.match(/^([01]\d|2[0-3])([0-5]\d)(?!\d)\s*(?:hrs?|hours|h|lt|local|utc|gmt|z|(?=\s|$|[,;)]))/i))) {
+    return { h: +r[1], mi: +r[2], len: lead.length + r[0].length };
+  }
+  if ((r = t.match(/^(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)/i))) {
+    let h = +r[1]; const pm = /^p/i.test(r[2]);
+    if (h >= 1 && h <= 12) { if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; return { h: h, mi: 0, len: lead.length + r[0].length }; }
+  }
+  // "AM" / "PM" / "morning" … — a part of the day, not a time: flagged for checking.
+  if ((r = t.match(/^(a\.?m\.?|p\.?m\.?|morning|forenoon|noon|afternoon|evening|night|midnight)(?![a-z])/i))) {
+    const w = r[1].toLowerCase().replace(/\./g, '');
+    const h = { am: 6, morning: 6, forenoon: 9, noon: 12, pm: 18, afternoon: 14, evening: 18, night: 22, midnight: 0 }[w];
+    return { h: h, mi: 0, len: lead.length + r[0].length, low: true };
+  }
+  return null;
+}
+function _niFmtDT(dt, tm) {
+  return _niPad(dt.d) + ' ' + _NI_MO[dt.m] + ' ' + dt.y + ' ' + (tm ? _niPad(tm.h) + ':' + _niPad(tm.mi) : '00:00');
+}
+// Laycan at the start of s → {text: '14-16 Oct 2026', low} or null.
+function _niParseLaycan(s, now) {
+  let r;
+  const out = function(a, b, low) {
+    if (!a || !b) return null;
+    const da = new Date(a.y, a.m, a.d), db = new Date(b.y, b.m, b.d);
+    if (db < da) return null;
+    const text = (a.m === b.m && a.y === b.y) ? a.d + '-' + b.d + ' ' + _NI_MO[a.m] + ' ' + a.y
+      : a.d + ' ' + _NI_MO[a.m] + ' ' + a.y + ' - ' + b.d + ' ' + _NI_MO[b.m] + ' ' + b.y;
+    return { text: text, low: !!(low || a.low || b.low) };
+  };
+  const SEP = '\\s*(?:-|–|—|to|till|until|\\/|&)\\s*';
+  // 14-16 Oct [2026]
+  if ((r = s.match(new RegExp('^(\\d{1,2})(?:st|nd|rd|th)?' + SEP + '(\\d{1,2})(?:st|nd|rd|th)?[\\s\\-./]*' + _NI_MON + '\\.?(?:[\\s,\'\\-./]*((?:19|20)\\d{2}|\\d{2})(?!\\d))?', 'i')))) {
+    const m = _niMon(r[3]), y = _niYear(+r[1], m, r[4], now);
+    return out(_niValidDate(y, m, +r[1]) ? { y: y, m: m, d: +r[1] } : null, _niValidDate(y, m, +r[2]) ? { y: y, m: m, d: +r[2] } : null);
+  }
+  // 14-16.10[.2026] / 14-16/10
+  if ((r = s.match(/^(\d{1,2})\s*(?:-|–|—|to)\s*(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{4}|\d{2}))?(?!\d)/i))) {
+    const m = +r[3] - 1, y = _niYear(+r[1], m, r[4], now);
+    return out(_niValidDate(y, m, +r[1]) ? { y: y, m: m, d: +r[1] } : null, _niValidDate(y, m, +r[2]) ? { y: y, m: m, d: +r[2] } : null);
+  }
+  // two full dates: "14 Oct - 16 Oct 2026", "30/10 - 02/11", "Oct 30 to Nov 2"
+  const a = _niParseDate(s, now);
+  if (a) {
+    const rest = s.slice(a.len), sep = rest.match(new RegExp('^' + SEP));
+    if (sep) {
+      const b = _niParseDate(rest.slice(sep[0].length), now);
+      if (b) {
+        // "14 Oct - 16 Oct 2026": a year on the second date only applies to both
+        if (b.y !== a.y && !/\d{4}/.test(s.slice(0, a.len))) { const ay = _niYear(a.d, a.m, String(b.y), now); if (_niValidDate(ay, a.m, a.d)) a.y = ay; if (new Date(a.y, a.m, a.d) > new Date(b.y, b.m, b.d)) a.y--; }
+        return out(a, b);
+      }
+    }
+    return out(a, a, true); // a single day: a one-day laycan
+  }
+  return null;
+}
+
+// Anchorage / berth: the Anchorage dropdown's own options, reached through synonyms.
+function _niArea(text, areas) {
+  const t = ' ' + String(text || '').toLowerCase().replace(/[_]/g, ' ') + ' ';
+  const has = function(v) { return areas.some(function(o) { return o.value === v; }); };
+  let site = null, kind = null, low = false, note = '';
+  const ex = t.match(/\b(fuj|kfk)\s*-?\s*([ab])\b/);
+  if (ex) { site = ex[1].toUpperCase(); kind = ex[2].toUpperCase(); }
+  if (!site) {
+    if (/\bkhor\s*-?\s*fak+an\b|\bkhorfak+an\b|\bkfk\b|\bkhor\b/.test(t)) site = 'KFK';
+    else if (/\bfuj[ae]i?rah\b|\bfuj\b|\bfjr\b/.test(t)) site = 'FUJ';
+  }
+  if (/\bopl\b|outside\s+port\s+limits?/.test(t)) {
+    if (!site) site = 'FUJ';
+    kind = kind || 'A'; low = true; note = 'Location given as OPL';
+  }
+  if (!site) return null;
+  if (!kind) {
+    if (/\bberth\b|\bjetty\b|\bterminal\b|\balongside\b|\bwharf\b|\bquay\b|\bin\s+port\b/.test(t)) kind = 'B';
+    else kind = 'A'; // anchorage is where most supplies happen; also the card default
+  }
+  let v = site + '-' + kind;
+  if (!has(v)) { const alt = areas.find(function(o) { return o.value.indexOf(site) === 0; }); if (!alt) return null; v = alt.value; low = true; }
+  return { value: v, low: low, note: note };
+}
+
+// Agent Directory match: exact, contains, or most shared words; else the raw text (flagged).
+function _niAgent(raw, agents) {
+  const clean = String(raw || '').split(/\s+(?:tel|ph|phone|mob|mobile|email|e-mail|contact|attn|pic)\b|\+\d|[\w.]+@|\s{2,}|\s[|\/]\s|;|,/i)[0].replace(/^[\s:\-–]+|[\s.,:\-–]+$/g, '');
+  if (!clean) return null;
+  const STOP = /\b(the|shipping|ships?|services?|llc|l\.l\.c|fze|fzc|fzco|co|ltd|limited|agency|agencies|agents?|marine|maritime|and|&|uae|fujairah|dubai|group|international|intl)\b/g;
+  const norm = function(s) { return String(s).toLowerCase().replace(STOP, ' ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); };
+  const n = norm(clean);
+  let best = null, score = 0;
+  (agents || []).forEach(function(name) {
+    const a = norm(name);
+    if (!a) return;
+    let sc = 0;
+    if (a === n) sc = 1;
+    else if (n.length >= 3 && a.length >= 3 && (a.indexOf(n) >= 0 || n.indexOf(a) >= 0)) sc = 0.9;
+    else {
+      const A = a.split(' '), N = n.split(' ');
+      const common = N.filter(function(w) { return w.length > 1 && A.indexOf(w) >= 0; }).length;
+      sc = common / Math.max(A.length, N.length);
+    }
+    if (sc > score) { score = sc; best = name; }
+  });
+  if (best && score >= 0.5) return { value: best, low: false };
+  return { value: clean.slice(0, 80), low: true };
+}
+
+/* Quantities per grade. VLSFO field: VLSFO/LSFO/0.5%/RMG; IFO/FO without a
+   0.5% marker is assumed VLSFO but flagged; HSFO/3.5% is never put in the
+   VLSFO field (noted instead). LSMGO field: LSMGO/MGO/DMA/MDO/gasoil. */
+function _niQuantities(text) {
+  let t = String(text || '')
+    .replace(/(\d),(\d{3})(?!\d)/g, '$1$2')
+    .replace(/\bISO\s*[-:]?\s*8217\s*[:\-\/]?\s*\(?(?:\d{4})?\)?/gi, ' ')
+    .replace(/\b(\d{2,3})\s*cst\b/gi, ' ')
+    .replace(/\b(RM[GEK]|IFO|HFO)\s*-?\s*(180|380|500|700)\b/gi, '$1')
+    .replace(/\b0[.,]5\s*%\s*(?:s\b|sulph?ur\b|max\b)?/gi, ' VLSFO ')
+    .replace(/\b0[.,]1\s*%\s*(?:s\b|sulph?ur\b|max\b)?/gi, ' LSMGO ')
+    .replace(/\b3[.,]5\s*%\s*(?:s\b|sulph?ur\b|max\b)?/gi, ' HSFO ');
+  const vlsLike = /\b(vlsfo|lsfo|vls\s*fo|ulsfo)\b/i.test(t);
+  const GR = /\b(V\.?L\.?S\.?F\.?O\.?|ULSFO|LSFO|VLS\s*FO|HSFO|HSHFO|RM[GEK]|IFO|HFO|fuel\s*oil|FO|ULSMGO|LSMGO|LS\s*MGO|MGO|MDO|DM[AB]|LSGO|gas\s*oil|gasoil)\b/gi;
+  const res = { v: null, m: null, notes: [], low: {} };
+  const Q = '(\\d+(?:\\.\\d+)?)(?:\\s*(?:-|–|—|\\/|to)\\s*(\\d+(?:\\.\\d+)?))?\\s*(mts?\\b|m\\/t\\b|metric\\s+tons?\\b|tons?\\b|tonnes?\\b|t\\b|cbm\\b|m3\\b)?';
+  const take = function(r, follow) {
+    let a = parseFloat(r[1]), b = r[2] != null ? parseFloat(r[2]) : null;
+    if (!(a > 0) || a > 20000 || (b != null && b > 20000)) return null;
+    // "14/10" right after a grade is a date, not a range
+    if (!r[3] && b != null && a <= 31 && b <= 12 && b < a) return null;
+    if (new RegExp('^\\s*(?:st|nd|rd|th)?\\s*' + _NI_MON, 'i').test(follow) || /^\s*[:h]\d/.test(follow)) return null;
+    if (b != null && b < a) { const x = a; a = b; b = x; }
+    const q = { qty: b != null ? b : a, min: b != null && b !== a ? a : null, max: b != null && b !== a ? b : null, cbm: /cbm|m3/i.test(r[3] || ''), unit: !!r[3] };
+    return q;
+  };
+  t.split(/\r?\n/).forEach(function(line) {
+    const ks = [];
+    let k;
+    GR.lastIndex = 0;
+    while ((k = GR.exec(line))) ks.push({ s: k.index, e: k.index + k[0].length, w: k[0] });
+    ks.forEach(function(kw, i) {
+      const isM = /mgo|mdo|dm[ab]|lsgo|gas\s*oil|gasoil/i.test(kw.w);
+      const isHS = /hsfo|hshfo/i.test(kw.w);
+      const after = line.slice(kw.e, i + 1 < ks.length ? ks[i + 1].s : line.length);
+      let r = after.match(new RegExp('^[\\s:=\\-–—>@()]*(?:(?:qty|quantity|abt\\.?|about|approx\\.?|ca\\.?|min\\.?|max\\.?|~|\\+\\/-|±|req(?:uired)?|of)\\s*[:.]?\\s*)*' + Q, 'i'));
+      let q = r ? take(r, after.slice(r[0].length)) : null;
+      if (!q) {
+        const before = line.slice(i > 0 ? ks[i - 1].e : 0, kw.s);
+        r = before.match(new RegExp('(?:^|[^\\d.])' + Q + '\\s*(?:of\\s+)?(?:grade\\s+)?$', 'i'));
+        if (r) q = take(r, '');
+      }
+      if (!q) return;
+      const slot = isM ? 'm' : 'v';
+      if (isHS) { res.notes.push('HSFO ' + (q.min != null ? q.min + '–' + q.max : q.qty) + ' MT requested — not VLSFO, check grade'); res.low.qty = 'HSFO requested'; return; }
+      if (res[slot] && (res[slot].unit || !q.unit)) return; // first mention (with a unit) wins
+      res[slot] = q;
+      if (!isM && /^(rm[gek]|ifo|hfo|fo|fuel\s*oil)$/i.test(kw.w.replace(/\./g, '')) && !vlsLike) { res.low.qty = 'Grade given as ' + kw.w.toUpperCase() + ' — assumed VLSFO'; res.notes.push(res.low.qty); }
+      if (q.cbm) { res.low[slot === 'v' ? 'qty' : 'mgo'] = 'Quantity in cbm — check MT'; res.notes.push((isM ? 'LSMGO' : 'VLSFO') + ' quantity given in cbm'); }
+    });
+  });
+  // A quantity with no grade at all → VLSFO, flagged.
+  if (!res.v && !res.m && !res.low.qty) {
+    const r = t.match(new RegExp('\\b(?:qty|quantity|qtty|bunkers?)\\s*[:\\-–=]?\\s*(?:abt\\.?|about|approx\\.?)?\\s*' + Q, 'i')) ||
+              t.match(new RegExp('(?:^|[^\\d.\\/])' + '(\\d+(?:\\.\\d+)?)(?:\\s*(?:-|–|—|\\/|to)\\s*(\\d+(?:\\.\\d+)?))?\\s*(mts?\\b|m\\/t\\b|tons?\\b|tonnes?\\b)', 'i'));
+    const q = r ? take(r, '') : null;
+    if (q) { res.v = q; res.low.qty = 'Grade not stated — assumed VLSFO'; }
+  }
+  return res;
+}
+
+// Vessel prefixes: MV, M/V, M.V., MT, M/T, M.T. ("MT" after a number is the unit).
+const _NI_PREFIX = /(^|[^A-Za-z0-9\/])(M\s*\/\s*[VvTt]|M\.\s*[VvTt]\.?|MV|mv|Mv|MT|M\/Y|MY)\.?\s*[:\-]?\s+(?=[A-Za-z0-9])/g;
+const _NI_NAME_STOP = /^(imo|eta|etb|etd|ata|laycan|l\/c|lc|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|fo|at|for|in|on|to|from|with|via|agent|agents|fujairah|fuj|kfk|khor|opl|anchorage|berth|abt|about|approx|bunkers?|nomination|nominated|arriving|arrival|expected|grade|mt|mts|will|is|has|and|pls|please|req|requires|needs|location|port|spec|iso|eta:|dwt|flag|call|sign|loa|grt|nrt)$/i;
+function _niCleanName(raw) {
+  // Names are words — tags, quotes and control characters are never part of one.
+  let s = String(raw || '').replace(/<[^>]*>?/g, ' ').replace(/[<>"`\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  s = s.replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT|M\/Y)\.?\s+/i, '');
+  const words = [];
+  const parts = s.split(/(\s+|\/|\(|\)|,|;|\||:|\s[-–—]\s|\t)/);
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (!p || /^\s+$/.test(p)) continue;
+    if (/^(\/|\(|\)|,|;|\||:|\s[-–—]\s|\t)$/.test(p)) { if (words.length) break; else continue; }
+    const w = p.replace(/[.,]+$/, '');
+    if (!w) continue;
+    if (_NI_NAME_STOP.test(w)) break;
+    if (/^\d{3,}$/.test(w) && words.length) break;     // "OCEAN STAR 500 VLSFO"
+    if (!/^[A-Za-z0-9][A-Za-z0-9'&.\-]*$/.test(w)) break;
+    words.push(w);
+    if (words.length >= 6) break;
+  }
+  return words.join(' ').toUpperCase().slice(0, 60);
+}
+// Name from one line: "Vessel: …" label, or a prefix anywhere. → {name, low} or null.
+function _niNameFromLine(line, anywhere) {
+  let r = line.match(/^\s*(?:[-*•]\s*|\d+[.)]\s*)?(?:name\s+of\s+(?:the\s+)?vessel|vessel(?:'?s)?(?:\s*name)?|ship(?:'?s)?(?:\s*name)?|vsl(?:\s*name)?|m\/?v\s*name)\s*[:\-–=]\s*(.+)$/i);
+  if (r) { const n = _niCleanName(r[1]); if (n) return { name: n, low: false, label: true }; }
+  _NI_PREFIX.lastIndex = 0;
+  let m;
+  while ((m = _NI_PREFIX.exec(line))) {
+    const start = m.index + m[1].length;
+    if (!anywhere && line.slice(0, start).replace(/^\s*(?:[-*•]\s*|\d+[.)]\s*)?/, '').trim()) break;
+    const pre = line.slice(0, start);
+    if (/^m\s*t$|^mt$/i.test(m[2].replace(/[\s.\/]/g, '')) && /\d\s*$|\d\s*(?:-|–|\/|to)\s*\d+\s*$/i.test(pre)) continue; // "500 MT" is a unit
+    if (/^mt$/.test(m[2])) continue; // lower-case "mt" is always the unit
+    const n = _niCleanName(line.slice(m.index + m[0].length));
+    if (n && !_NI_NAME_STOP.test(n.split(' ')[0])) return { name: n, low: false };
+  }
+  return null;
+}
+// ALL-CAPS line that's just a name (no prefix) — the last resort, flagged.
+const _NI_NOT_NAME = /\b(NOMINATION|NOMINATIONS|BUNKER|BUNKERS|DEAR|REGARDS|THANKS|FUJAIRAH|KHOR|FAKKAN|ANCHORAGE|BERTH|VLSFO|LSFO|LSMGO|MGO|ETA|LAYCAN|AGENT|AGENTS|ATTN|URGENT|IMPORTANT|NOTE|REMARKS|SUBJECT|CONFIRMED|CANCELLED|AMENDED|REVISED|UPDATE|DETAILS|QUANTITY|SPEC|ISO|LOCATION|TO|CC|FROM|BEST|OPS|OPERATIONS|TEAM|ALL|PLS|PLEASE|KINDLY|GOOD|DAY|MORNING|HI|HELLO)\b/;
+function _niCapsName(lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i].trim();
+    if (/^[A-Z][A-Z0-9 .'\-&]{2,40}$/.test(l) && l.split(/\s+/).length <= 5 && !_NI_NOT_NAME.test(l) && /[A-Z]{3,}/.test(l)) {
+      const n = _niCleanName(l);
+      if (n) return { name: n, low: true, line: i };
+    }
+  }
+  return null;
+}
+
+const _NI_ETA_LBL = /\b(?:ETA\/?ETB|E\.?T\.?A\.?|ETB|ETA|arriv(?:al|ing|es)|expected(?:\s+(?:on|at|arrival))?|date\s+of\s+(?:arrival|supply|delivery)|supply\s+date|delivery\s+date|del\.?\s*date)\b\.?(?:\s*(?:fuj(?:airah)?|kfk|khor\s*fakkan|opl|anchorage|on|at|is|abt|about|approx))*\s*[:\-–=]?\s*/i;
+const _NI_LC_LBL = /\b(?:lay\s*can|l\s*\/\s*c|lay\s*days|laydays|lc\s*:|delivery\s+(?:window|dates?|range)|supply\s+(?:window|range)|window)\b\s*[:\-–=]?\s*/i;
+const _NI_BOILER = /^(dear|hi\b|hello|good\s+(day|morning|afternoon|evening)|greetings|pls\s+(find|note|see)|please\s+(find|note|see|be\s+advised|nominate|arrange|confirm)|kindly|thanks|thank\s+you|many\s+thanks|regards|best|br\b|rgds|brgds|sent\s+from|from\s*:|to\s*:|cc\s*:|subject\s*:|re\s*:|fw\s*:|fwd\s*:|date\s*:|sincerely|tel\b|tel\s*:|mob|phone|email|e-mail|www\.|https?:|on\s+behalf|as\s+agents?\s+only|bunker\s+nomination|nomination\b|new\s+nomination|we\s+(are\s+pleased|confirm)|following|below)/i;
+
+function _niParseBlock(text, opts, ctx) {
+  const now = opts.now, lines = String(text).split(/\r?\n/);
+  const d = { name: '', imo: '', eta: '', lc: '', type: 'VLSFO', qty: 0, qtyMin: null, qtyMax: null, mgo: 0, mgoMin: null, mgoMax: null,
+              area: '', agent: '', spec: '', remarks: '', low: {}, src: String(text).trim() };
+  const used = {};          // line index → consumed by a field
+  const notes = [];
+  // ── name
+  let nm = null;
+  for (let i = 0; i < lines.length && !nm; i++) { nm = _niNameFromLine(lines[i], false); if (nm) { nm.line = i; } }
+  for (let i = 0; i < lines.length && !nm; i++) { nm = _niNameFromLine(lines[i], true); if (nm) { nm.line = i; } }
+  if (!nm) nm = _niCapsName(lines);
+  if (nm) { d.name = nm.name; if (nm.low) d.low.name = 'Guessed from an all-caps line'; used[nm.line] = 1; }
+  // ── IMO
+  let r = text.match(/\bIMO\s*(?:no\.?|number|#)?\s*[:\-–=]?\s*(\d{7})\b/i);
+  if (r) { d.imo = r[1]; if (!_imoValid(r[1])) d.low.imo = 'IMO check digit does not match'; }
+  else {
+    const all = String(text).match(/(?:^|[^\d\/.\-+])(\d{7})(?![\d\/.\-])/g) || [];
+    const ok = all.map(function(x) { return x.replace(/\D/g, ''); }).filter(_imoValid);
+    if (ok.length) d.imo = ok[0];
+  }
+  lines.forEach(function(l, i) { if (/\bIMO\b/i.test(l) && i !== nm?.line) used[i] = used[i] || 2; });
+  // ── ETA / laycan (labelled)
+  lines.forEach(function(l, i) {
+    let m = l.match(_NI_LC_LBL);
+    if (m && !d.lc) {
+      const lc = _niParseLaycan(l.slice(m.index + m[0].length), now);
+      if (lc) { d.lc = lc.text; if (lc.low) d.low.lc = 'Month or year guessed'; used[i] = 1; }
+    }
+    m = l.match(_NI_ETA_LBL);
+    if (m && !d.eta) {
+      const rest = l.slice(m.index + m[0].length);
+      if (/^\s*(tba|tbc|tbn|n\/a|unknown)\b/i.test(rest)) { used[i] = 1; return; }
+      const lc = new RegExp('^\\d{1,2}(?:st|nd|rd|th)?\\s*(?:-|–|—|to)\\s*\\d{1,2}(?:st|nd|rd|th)?\\b').test(rest) ? _niParseLaycan(rest, now) : null;
+      if (lc && lc.text.indexOf('-') > 0 && !d.lc) { d.lc = lc.text; d.low.lc = 'ETA given as a range — used as laycan'; used[i] = 1; return; }
+      const dt = _niParseDate(rest, now);
+      if (dt) {
+        const tm = dt.time || _niParseTime(rest.slice(dt.len));
+        d.eta = _niFmtDT(dt, tm);
+        if (dt.low || (tm && tm.low)) d.low.eta = 'Month or time guessed';
+        else if (!tm) d.low.eta = 'No time given — set as no firm ETA (00:00)';
+        used[i] = 1;
+      }
+    }
+  });
+  // ── unlabelled date (WhatsApp one-liners): first date in the text → ETA
+  if (!d.eta && !d.lc) {
+    for (let i = 0; i < lines.length && !d.eta; i++) {
+      const l = lines[i];
+      const re = new RegExp('(?:^|[\\s(,])(?=\\d{1,2}(?:st|nd|rd|th)?[\\s\\-./]*' + _NI_MON + '|\\d{1,2}[\\/.]\\d{1,2}(?:[\\/.]\\d{2,4})?(?![\\d\\/.])|' + _NI_MON + '\\.?\\s*\\d{1,2}\\b|\\d{4}-\\d{2}-\\d{2})', 'gi');
+      let m;
+      while ((m = re.exec(l)) && !d.eta) {
+        const pos = m.index + m[0].length, rest = l.slice(pos);
+        const pre = l.slice(0, pos);
+        if (/\d\s*$/.test(pre) || /(?:vlsfo|lsmgo|mgo|qty)\s*[:\-]?\s*$/i.test(pre)) continue;
+        const dt = _niParseDate(rest, now);
+        if (!dt) continue;
+        const tm = dt.time || _niParseTime(rest.slice(dt.len));
+        d.eta = _niFmtDT(dt, tm);
+        d.low.eta = 'Date found without an "ETA" label';
+      }
+    }
+  }
+  // ── quantities
+  const q = _niQuantities(text);
+  if (q.v) { d.qty = q.v.qty; d.qtyMin = q.v.min; d.qtyMax = q.v.max; }
+  if (q.m) { d.mgo = q.m.qty; d.mgoMin = q.m.min; d.mgoMax = q.m.max; }
+  Object.keys(q.low).forEach(function(k) { d.low[k] = q.low[k]; });
+  q.notes.forEach(function(n) { notes.push(n); });
+  d.type = d.qty > 0 && d.mgo > 0 ? 'BOTH' : (d.mgo > 0 ? 'MGO' : 'VLSFO');
+  if (!q.v && !q.m && !d.low.qty) d.low.qty = 'No quantity found';
+  // ── location
+  let ar = null;
+  lines.forEach(function(l, i) {
+    const m = l.match(/^\s*(?:location|port|place|area|anchorage|supply\s+(?:location|port)|delivery\s+(?:location|port|place)|loc)\s*[:\-–=]\s*(.+)$/i);
+    if (m && !ar) { ar = _niArea(m[1], opts.areas); if (ar) used[i] = 1; }
+  });
+  if (!ar) ar = _niArea(text, opts.areas);
+  if (!ar && ctx && ctx.area) ar = ctx.area;
+  if (ar) { d.area = ar.value; if (ar.low) d.low.area = ar.note || 'Check location'; if (ar.note) notes.push(ar.note); }
+  else { d.area = (opts.areas[0] && opts.areas[0].value) || ''; d.low.area = 'No location found — default used'; }
+  // ── agent
+  let ag = null;
+  lines.forEach(function(l, i) { if (!ag) { ag = _niAgentIn(l, opts); if (ag && /^\s*(?:local\s+)?(?:agents?|agency)/i.test(l)) used[i] = 1; } });
+  if (!ag && ctx && ctx.agent) ag = ctx.agent;
+  if (ag) { d.agent = ag.value; if (ag.low) d.low.agent = 'Not in the Agent Directory'; }
+  // ── spec
+  r = text.match(/\bISO\s*[-:]?\s*8217\s*[:\-\/]?\s*\(?(\d{4})\)?|\b8217\s*[:\-\/]\s*(\d{4})\b|\bISO\s*(20\d\d)\b/i);
+  const yr = r ? (r[1] || r[2] || r[3]) : (ctx && ctx.specYear);
+  if (yr) {
+    const want = 'ISO 8217:' + yr;
+    if (opts.specs.indexOf(want) >= 0) d.spec = want;
+    else { d.spec = +yr < 2017 ? opts.specs[0] : opts.specs[opts.specs.length - 1]; d.low.spec = want + ' requested — not a listed spec'; notes.push(want + ' requested'); }
+  } else d.spec = opts.specs[0] || '';
+  // ── remarks: a labelled line, plus leftover lines that say something
+  const FIELD = new RegExp('\\b(?:imo|eta|etb|laycan|l\\/c|qty|quantity|vlsfo|lsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|gas\\s*oil|agents?|location|anchorage|berth|fujairah|khor\\s*fakkan|kfk|opl|iso\\s*8217|spec)\\b', 'i');
+  const rem = [];
+  let signedOff = false;
+  lines.forEach(function(l, i) {
+    const t = l.trim();
+    if (!t || signedOff) return;
+    if (/^(regards|best\s+regards|br\b|rgds|brgds|thanks|thank\s+you|many\s+thanks|sincerely|cheers)/i.test(t)) { signedOff = true; return; }
+    const m = t.match(/^(?:remarks?|rmks?|notes?|comments?|special\s+(?:instructions?|requests?))\s*[:\-–=]\s*(.+)$/i);
+    if (m) { rem.push(m[1].trim()); return; }
+    if (used[i] || FIELD.test(t) || _NI_BOILER.test(t) || (nm && nm.line === i)) return;
+    if (t.replace(/[^A-Za-z]/g, '').length < 4) return;
+    rem.push(t);
+  });
+  d.remarks = rem.concat(notes).map(function(s) { return s.replace(/[\u0000-\u001f]/g, ' ').slice(0, 160); }).slice(0, 5).join(' · ');
+  if (!d.name) d.low.name = 'No vessel name found';
+  if (!d.eta && !d.lc) d.low.eta = 'No ETA or laycan found';
+  return d;
+}
+
+/* Tables pasted from Excel / Word (tab- or |-separated, with a header row):
+   each data row is rewritten as labelled lines and parsed like any block. */
+const _NI_COLS = [
+  ['name', /vessel|ship|^name$|vsl|^m\/?v$/i], ['imo', /imo/i], ['lc', /lay\s*can|l\/c|window|lay\s*days/i],
+  ['eta', /eta|etb|arriv|^date|supply\s*date/i], ['mgo', /mgo|dma|gas\s*oil|gasoil|mdo|lsgo/i],
+  ['vlsfo', /vlsfo|lsfo|0\.5|^fo\b|ifo|fuel|rmg/i], ['qty', /qty|quantity|amount/i], ['grade', /grade|product|type/i],
+  ['area', /location|port|anch|area|place|berth/i], ['agent', /agent|agency/i], ['spec', /spec|iso/i], ['remarks', /remark|note|comment/i]
+];
+function _niTable(text) {
+  const lines = String(text).split(/\r?\n/);
+  const splitRow = function(l) {
+    if (l.indexOf('\t') >= 0) return l.split('\t').map(function(c) { return c.trim(); });
+    if ((l.match(/\|/g) || []).length >= 2) return l.replace(/^\s*\||\|\s*$/g, '').split('|').map(function(c) { return c.trim(); });
+    return null;
+  };
+  for (let h = 0; h < lines.length; h++) {
+    const cells = splitRow(lines[h]);
+    if (!cells || cells.length < 3) continue;
+    const map = {};
+    cells.forEach(function(c, ci) {
+      for (let k = 0; k < _NI_COLS.length; k++) {
+        if (_NI_COLS[k][1].test(c) && map[_NI_COLS[k][0]] == null) { map[_NI_COLS[k][0]] = ci; break; }
+      }
+    });
+    if (map.name == null || Object.keys(map).length < 3) continue;
+    const rows = [], outside = lines.slice(0, h);
+    for (let i = h + 1; i < lines.length; i++) {
+      const rc = splitRow(lines[i]);
+      if (!rc) { if (lines[i].trim()) outside.push(lines[i]); continue; }
+      if (rc.every(function(c) { return /^[\s\-:|=]*$/.test(c); })) continue; // markdown --- row
+      const g = function(k) { return map[k] != null ? (rc[map[k]] || '') : ''; };
+      if (!g('name')) continue;
+      const out = ['Vessel: ' + g('name').replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT)\.?\s+/i, '')];
+      if (g('imo')) out.push('IMO: ' + g('imo'));
+      if (g('eta')) out.push('ETA: ' + g('eta'));
+      if (g('lc')) out.push('Laycan: ' + g('lc'));
+      if (g('vlsfo')) out.push('VLSFO: ' + g('vlsfo'));
+      if (g('mgo')) out.push('LSMGO: ' + g('mgo'));
+      if (g('qty')) out.push((g('grade') || 'Qty') + ': ' + g('qty'));
+      if (g('area')) out.push('Location: ' + g('area'));
+      if (g('agent')) out.push('Agent: ' + g('agent'));
+      if (g('spec')) out.push('Spec: ISO ' + g('spec').replace(/^\s*iso\s*/i, ''));
+      if (g('remarks')) out.push('Remarks: ' + g('remarks'));
+      rows.push({ text: out.join('\n'), src: lines[i] });
+    }
+    if (rows.length) return { rows: rows, outside: outside.join('\n') };
+  }
+  return null;
+}
+
+// "Agent: X" anywhere in a line; "agent X" (no colon) only when X is in the directory.
+function _niAgentIn(line, opts) {
+  const m = String(line).match(/(?:^|[\s,;|(])(?:local\s+)?(?:agents?|agency|ship\s*agents?)(?:\s+details)?(\s*[:\-–=]\s*|\s+(?:is\s+)?)(.+)$/i);
+  if (!m) return null;
+  const a = _niAgent(m[2], opts.agents);
+  return a && (/[:\-–=]/.test(m[1]) || !a.low) ? a : null;
+}
+// Context shared by every vessel in a paste (lines before the first vessel).
+function _niContext(text, opts) {
+  if (!String(text || '').trim()) return {};
+  const ctx = {};
+  const ar = _niArea(text, opts.areas);
+  if (ar) ctx.area = ar;
+  String(text).split('\n').forEach(function(l) { if (!ctx.agent) { const a = _niAgentIn(l, opts); if (a) ctx.agent = a; } });
+  const s = String(text).match(/8217\s*[:\-\/]?\s*\(?(\d{4})/);
+  if (s) ctx.specYear = s[1];
+  return ctx;
+}
+
+function _parseNominationText(text, opts) {
+  opts = Object.assign({}, opts || {});
+  opts.now = opts.now instanceof Date ? opts.now : new Date();
+  if (!opts.areas) opts.areas = (typeof AREA_OPTIONS !== 'undefined') ? AREA_OPTIONS : [{ value: 'FUJ-A' }, { value: 'FUJ-B' }, { value: 'KFK-A' }, { value: 'KFK-B' }];
+  if (!opts.agents) opts.agents = (typeof _activeAgents === 'function') ? _activeAgents().map(function(a) { return a.name; }).filter(Boolean) : [];
+  if (!opts.specs) opts.specs = ['ISO 8217:2010', 'ISO 8217:2017'];
+  const src = String(text == null ? '' : text).replace(/\r\n?/g, '\n').replace(/[\u00a0\u2007\u202f]/g, ' ').replace(/[‘’]/g, "'").replace(/[“”]/g, '"');
+  if (!src.trim()) return [];
+  // 1) a table with a header row
+  const tb = _niTable(src);
+  if (tb) {
+    const ctx = _niContext(tb.outside, opts);
+    return tb.rows.map(function(r) { const dd = _niParseBlock(r.text, opts, ctx); dd.src = r.src.trim(); return dd; });
+  }
+  // 2) split at lines that start a new vessel ("Vessel: …", "MV …", "2) MT …")
+  const lines = src.split('\n');
+  const starts = [];
+  let lastName = null;
+  lines.forEach(function(l, i) {
+    const n = _niNameFromLine(l, false);
+    if (n && n.name !== lastName) { starts.push(i); lastName = n.name; }
+  });
+  let blocks = [];
+  if (starts.length >= 2) {
+    // lines just above a vessel line that belong to it (blank-line separated) stay with it
+    const head = lines.slice(0, starts[0]).join('\n');
+    starts.forEach(function(s, k) { blocks.push(lines.slice(s, k + 1 < starts.length ? starts[k + 1] : lines.length).join('\n')); });
+    const ctx = _niContext(head, opts);
+    return blocks.map(function(b) { return _niParseBlock(b, opts, ctx); });
+  }
+  // 3) blank-line separated paragraphs, each naming its own vessel
+  const paras = src.split(/\n\s*\n/).filter(function(p) { return p.trim(); });
+  const named = paras.map(function(p) { return p.split('\n').map(function(l) { return _niNameFromLine(l, true); }).filter(Boolean)[0] || null; });
+  const distinct = named.filter(Boolean).map(function(n) { return n.name; }).filter(function(n, i, a) { return a.indexOf(n) === i; });
+  if (distinct.length >= 2) {
+    let head = [], cur = null;
+    paras.forEach(function(p, i) {
+      if (named[i] && (!cur || named[i].name !== cur.name)) { cur = { name: named[i].name, text: p }; blocks.push(cur); }
+      else if (cur) cur.text += '\n\n' + p;
+      else head.push(p);
+    });
+    const ctx = _niContext(head.join('\n'), opts);
+    return blocks.map(function(b) { return _niParseBlock(b.text, opts, ctx); });
+  }
+  // 4) one nomination
+  return [_niParseBlock(src, opts, null)];
+}
+
+/* ─── IMPORT NOMINATION: panel (paste / drop / pick → Read → review → Add) ───
+   Nothing is saved until "Add": each added row goes through addVessel(def)
+   — so nomUid, sync, the trader RPC path and the email log all behave as for
+   a hand-made card — then one normal saveSharedState(). */
+let _niDrafts = [];    // rows in the review table
+let _niImage = null;   // screenshot waiting to be read (Blob/File)
+let _niImageUrl = '';
+let _niSourceText = '';
+let _niBusy = false;
+
+// Tesseract.js, pinned. Loaded only when an image is read; the worker, the
+// WebAssembly core and the English model are fetched from the same pinned
+// jsdelivr URLs (vercel.json CSP: script/connect jsdelivr, worker blob:,
+// 'wasm-unsafe-eval'). The image itself never leaves the device.
+const _NI_OCR = {
+  lib: 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/tesseract.min.js',
+  sri: 'sha384-r1ru3tcf6FhnCFR4B7pIFG+BhFF9LlFtz/P1y4pblWn3AGs9y3lBx5SKLNf4+rED',
+  worker: 'https://cdn.jsdelivr.net/npm/tesseract.js@6.0.1/dist/worker.min.js',
+  core: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@6.0.0',
+  lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/eng@1.0.0/4.0.0_best_int'
+};
+
+function _niStatus(msg, isErr) {
+  const el = document.getElementById('nimp-status');
+  if (!el) return;
+  el.textContent = msg || '';
+  el.classList.toggle('er', !!isErr);
+}
+
+function _niSetImage(file) {
+  if (!file || !/^image\//.test(file.type || '')) { _niStatus('That file is not an image.', true); return; }
+  if (file.size > 15 * 1024 * 1024) { _niStatus('Image is too large (max 15 MB).', true); return; }
+  _niImage = file;
+  if (_niImageUrl) { try { URL.revokeObjectURL(_niImageUrl); } catch (e) {} }
+  _niImageUrl = URL.createObjectURL(file);
+  const box = document.getElementById('nimp-img');
+  document.getElementById('nimp-thumb').src = _niImageUrl;
+  document.getElementById('nimp-img-name').textContent = (file.name && file.name !== 'image.png' ? file.name + ' · ' : '') + Math.max(1, Math.round(file.size / 1024)) + ' KB';
+  if (box) box.hidden = false;
+  _niStatus('Screenshot ready — click Read.');
+}
+function niClearImage() {
+  _niImage = null;
+  if (_niImageUrl) { try { URL.revokeObjectURL(_niImageUrl); } catch (e) {} _niImageUrl = ''; }
+  const box = document.getElementById('nimp-img');
+  if (box) box.hidden = true;
+  const f = document.getElementById('nimp-file');
+  if (f) f.value = '';
+  _niStatus('');
+}
+function niPickFile(input) { if (input.files && input.files[0]) _niSetImage(input.files[0]); }
+function niReset() {
+  niClearImage();
+  const t = document.getElementById('nimp-text');
+  if (t) t.value = '';
+  _niDrafts = []; _niSourceText = '';
+  _niRenderReview();
+}
+
+// Paste / drop: an image goes to the OCR slot, text into the textarea.
+function _niInitPanel() {
+  const zone = document.getElementById('nimp-zone'), ta = document.getElementById('nimp-text');
+  if (!zone || zone._niReady) return;
+  zone._niReady = true;
+  zone.addEventListener('paste', function(e) {
+    const cd = e.clipboardData;
+    if (!cd) return;
+    const img = Array.from(cd.files || []).find(function(f) { return /^image\//.test(f.type); }) ||
+      Array.from(cd.items || []).filter(function(it) { return it.kind === 'file' && /^image\//.test(it.type); }).map(function(it) { return it.getAsFile(); }).filter(Boolean)[0];
+    if (img) { e.preventDefault(); _niSetImage(img); return; }
+    if (e.target !== ta) {   // zone itself focused: put the text in the box
+      const txt = cd.getData('text/plain');
+      if (txt) { e.preventDefault(); ta.value = (ta.value ? ta.value + '\n' : '') + txt; ta.focus(); }
+    }
+  });
+  zone.addEventListener('keydown', function(e) {
+    if (e.target === zone && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); document.getElementById('nimp-file').click(); }
+  });
+  ['dragenter', 'dragover'].forEach(function(ev) { zone.addEventListener(ev, function(e) { e.preventDefault(); zone.classList.add('drag'); }); });
+  ['dragleave', 'dragend'].forEach(function(ev) { zone.addEventListener(ev, function(e) { if (!zone.contains(e.relatedTarget)) zone.classList.remove('drag'); }); });
+  zone.addEventListener('drop', function(e) {
+    e.preventDefault(); zone.classList.remove('drag');
+    const dt = e.dataTransfer;
+    const img = dt && Array.from(dt.files || []).find(function(f) { return /^image\//.test(f.type); });
+    if (img) { _niSetImage(img); return; }
+    const txt = dt && dt.getData('text/plain');
+    if (txt) ta.value = (ta.value ? ta.value + '\n' : '') + txt;
+    else if (dt && dt.files && dt.files.length) _niStatus('Drop an image or text.', true);
+  });
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _niInitPanel); else _niInitPanel();
+
+function _niLoadTesseract() {
+  if (window.Tesseract) return Promise.resolve(window.Tesseract);
+  if (_niLoadTesseract._p) return _niLoadTesseract._p;
+  _niLoadTesseract._p = new Promise(function(resolve, reject) {
+    const s = document.createElement('script');
+    s.src = _NI_OCR.lib; s.integrity = _NI_OCR.sri; s.crossOrigin = 'anonymous';
+    s.onload = function() { window.Tesseract ? resolve(window.Tesseract) : reject(new Error('OCR engine did not load')); };
+    s.onerror = function() { _niLoadTesseract._p = null; reject(new Error('Could not load the OCR engine — check your connection.')); };
+    document.head.appendChild(s);
+  });
+  return _niLoadTesseract._p;
+}
+// Cheap clean-up before OCR: grey-scale, dark screenshots inverted (dark-mode
+// WhatsApp), small images upscaled — Tesseract reads ~2× text far better.
+async function _niPrepImage(blob) {
+  try {
+    const bmp = await createImageBitmap(blob);
+    const big = Math.max(bmp.width, bmp.height);
+    let scale = big < 1400 ? Math.min(2.5, 1800 / big) : 1;
+    if (bmp.width * bmp.height * scale * scale > 16e6) scale = Math.sqrt(16e6 / (bmp.width * bmp.height));
+    const w = Math.max(1, Math.round(bmp.width * scale)), h = Math.max(1, Math.round(bmp.height * scale));
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(bmp, 0, 0, w, h);
+    const px = g.getImageData(0, 0, w, h), a = px.data;
+    let sum = 0;
+    for (let i = 0; i < a.length; i += 4) { const y = 0.299 * a[i] + 0.587 * a[i + 1] + 0.114 * a[i + 2]; a[i] = a[i + 1] = a[i + 2] = y; sum += y; }
+    if (sum / (a.length / 4) < 110) for (let i = 0; i < a.length; i += 4) { a[i] = a[i + 1] = a[i + 2] = 255 - a[i]; }
+    g.putImageData(px, 0, 0);
+    return await new Promise(function(res) { c.toBlob(function(b) { res(b || blob); }, 'image/png'); });
+  } catch (e) { return blob; }
+}
+// OCR slips inside numbers: O→0, l/I→1 (only in tokens that are otherwise digits).
+function _niOcrClean(t) {
+  return String(t || '').replace(/\b[0-9OoIl]{3,}(?=(?:LT|lt|hrs?|HRS?|MT|mt|mts|MTS)?\b)/g, function(w) {
+    return (w.match(/\d/g) || []).length >= 2 ? w.replace(/[Oo]/g, '0').replace(/[Il]/g, '1') : w;
+  });
+}
+async function _niOcr(blob) {
+  _niStatus('Loading OCR engine…');
+  const T = await _niLoadTesseract();
+  const img = await _niPrepImage(blob);
+  // A worker that can't start (blocked download, no WebAssembly) never
+  // settles on its own — give up after a while instead of spinning forever.
+  let fail, lastTick = Date.now();
+  const failed = new Promise(function(_, rej) { fail = rej; });
+  const dog = setInterval(function() { if (Date.now() - lastTick > 90000) fail(new Error('the OCR engine stopped responding (offline or blocked?)')); }, 5000);
+  let worker = null;
+  try {
+    worker = await Promise.race([failed, T.createWorker('eng', 1, {
+      workerPath: _NI_OCR.worker, corePath: _NI_OCR.core, langPath: _NI_OCR.lang,
+      errorHandler: function(e) { fail(e instanceof Error ? e : new Error(String(e))); },
+      logger: function(m) {
+        if (!m) return;
+        lastTick = Date.now();
+        if (m.status === 'recognizing text') _niStatus('Reading screenshot… ' + Math.round((m.progress || 0) * 100) + '%');
+        else if (/load|initializ/i.test(m.status || '')) _niStatus('Loading OCR engine (first time only)…');
+      }
+    })]);
+    lastTick = Date.now();
+    const out = await Promise.race([failed, worker.recognize(img)]);
+    return _niOcrClean((out && out.data && out.data.text) || '');
+  } finally {
+    clearInterval(dog);
+    if (worker) { try { await worker.terminate(); } catch (e) {} }
+  }
+}
+
+async function niRead() {
+  if (_niBusy) return;
+  const ta = document.getElementById('nimp-text'), btn = document.getElementById('nimp-read');
+  _niBusy = true; if (btn) btn.disabled = true;
+  try {
+    if (_niImage) {
+      let txt = '';
+      try { txt = await _niOcr(_niImage); }
+      catch (e) { _niStatus('Could not read the screenshot: ' + (e && e.message || e), true); return; }
+      if (!txt.trim()) { _niStatus('No text found in the screenshot.', true); return; }
+      // OCR text lands in the box so it can be checked / corrected and read again
+      ta.value = txt.trim();
+      niClearImage();
+    }
+    const text = ta.value;
+    if (!text.trim()) { _niStatus('Paste a nomination (text or screenshot) first.', true); return; }
+    _niSourceText = text;
+    _niDrafts = _parseNominationText(text).map(function(d) {
+      d.qtyText = d.qty ? _qtyInputText(d.qty, d.qtyMin, d.qtyMax) : '';
+      d.mgoText = d.mgo ? _qtyInputText(d.mgo, d.mgoMin, d.mgoMax) : '';
+      d.pick = true;
+      return d;
+    });
+    _niStatus(_niDrafts.length ? 'Found ' + _niDrafts.length + ' nomination' + (_niDrafts.length === 1 ? '' : 's') + ' — check and add below.' : 'No nomination found in that text.', !_niDrafts.length);
+    _niRenderReview();
+  } finally { _niBusy = false; if (btn) btn.disabled = false; }
+}
+
+// Same vessel already in the register? Same IMO, or same name with ETA/laycan within ±2 days.
+function _niNormName(n) { return String(n || '').toUpperCase().replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT)\.?\s+/, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
+function _niWhen(eta, lc) {
+  const e = eta ? parseDT(eta) : null;
+  if (e) return e;
+  const l = lc ? parseLaycan(lc) : null;
+  return l ? new Date((l.from.getTime() + l.to.getTime()) / 2) : null;
+}
+function _niFindDuplicate(d) {
+  let vs = [];
+  try { vs = captureCurrentState().vessels || []; } catch (e) {}
+  const nm = _niNormName(d.name), imo = String(d.imo || '').replace(/\D/g, ''), when = _niWhen(d.eta, d.lc);
+  return vs.find(function(v) {
+    const vImo = String(v.imo || '').replace(/\D/g, '');
+    if (imo && vImo && imo === vImo) return true;
+    if (!nm || _niNormName(v.name) !== nm) return false;
+    const vw = _niWhen(v.eta, v.lc);
+    return !when || !vw || Math.abs(vw - when) <= 2 * 86400000;
+  }) || null;
+}
+// What's wrong with a row that would stop it being added (empty = fine).
+function _niProblems(d) {
+  const p = [];
+  if (!String(d.name || '').trim()) p.push('vessel name');
+  if (d.eta && !parseDT(d.eta)) p.push('ETA format (e.g. 14 Oct 2026 06:00)');
+  if (d.lc && !parseLaycan(d.lc)) p.push('laycan format (e.g. 14-16 Oct 2026)');
+  if (!d.eta && !d.lc) p.push('an ETA or laycan');
+  if (!_parseQtyInput(d.qtyText).ok) p.push('VLSFO quantity');
+  if (!_parseQtyInput(d.mgoText).ok) p.push('LSMGO quantity');
+  return p;
+}
+
+const _NI_FIELDS = [
+  // key, label, low-flag key, input kind
+  ['name', 'Vessel', 'name'], ['imo', 'IMO', 'imo'], ['eta', 'ETA', 'eta'], ['lc', 'Laycan', 'lc'],
+  ['qtyText', 'VLSFO (MT)', 'qty'], ['mgoText', 'LSMGO (MT)', 'mgo'], ['area', 'Location', 'area'],
+  ['agent', 'Agent', 'agent'], ['spec', 'ISO 8217', 'spec']
+];
+const _NI_REMARKS = ['remarks', 'Remarks', 'remarks'];   // full width, on the row's second line
+function _niCell(d, i, f) {
+  const k = f[0], low = d.low && d.low[f[2]];
+  const miss = (k === 'name' && !String(d.name || '').trim()) || ((k === 'eta' || k === 'lc') && !d.eta && !d.lc);
+  const cls = miss ? 'nimp-miss' : (low ? 'nimp-low' : '');
+  const lbl = f[1] + ' for row ' + (i + 1) + (low ? ' (check: ' + low + ')' : '');
+  const common = ' data-i="' + i + '" data-k="' + k + '" class="' + cls + '" aria-label="' + esc(lbl) + '"' + (low ? ' title="' + esc(low) + '"' : '') + ' oninput="_niEdit(this)" onchange="_niEdit(this)"';
+  let inner;
+  if (k === 'area') {
+    inner = '<select' + common + '>' + AREA_OPTIONS.map(function(o) { return '<option value="' + esc(o.value) + '"' + (o.value === d.area ? ' selected' : '') + '>' + esc(o.short || o.value) + '</option>'; }).join('') + '</select>';
+  } else if (k === 'spec') {
+    inner = '<select' + common + '>' + ['ISO 8217:2010', 'ISO 8217:2017'].map(function(o) { return '<option value="' + o + '"' + (o === d.spec ? ' selected' : '') + '>' + o.replace('ISO 8217:', '') + '</option>'; }).join('') + '</select>';
+  } else {
+    const ph = { eta: 'e.g. 14 Oct 2026 06:00', lc: 'e.g. 14-16 Oct 2026', qtyText: 'e.g. 500-600', mgoText: 'e.g. 50', imo: '7 digits' }[k] || '';
+    inner = '<input type="text" autocomplete="off"' + (k === 'agent' ? ' list="agent-directory-list"' : '') + ' value="' + esc(d[k] == null ? '' : d[k]) + '" placeholder="' + esc(ph) + '"' + common + '>';
+  }
+  if (k === 'remarks') return inner;
+  return '<td data-label="' + esc(f[1]) + '"' + (k === 'name' ? ' class="nimp-wide"' : '') + '>' + inner + '</td>';
+}
+function _niMsgHtml(d) {
+  const out = [];
+  const dup = _niFindDuplicate(d);
+  if (dup) out.push('<span class="dup">Possible duplicate: ' + esc(dup.name || '') + (dup.eta ? ' · ETA ' + esc(dup.eta) : (dup.lc ? ' · ' + esc(dup.lc) : '')) + (dup.imo ? ' · IMO ' + esc(dup.imo) : '') + ' is already in the register</span>');
+  const p = _niProblems(d);
+  if (p.length) out.push('<span class="bad">Needs ' + esc(p.join(', ')) + '</span>');
+  const lows = Object.keys(d.low || {}).filter(function(k) { return d.low[k]; }).map(function(k) { return d.low[k]; });
+  if (lows.length) out.push('<span class="why">Check: ' + esc(lows.join(' · ')) + '</span>');
+  return out.join('');
+}
+function _niRenderReview() {
+  const box = document.getElementById('nimp-results');
+  if (!box) return;
+  if (!_niDrafts.length) { box.innerHTML = ''; return; }
+  const n = _niDrafts.filter(function(d) { return d.pick; }).length;
+  let h = '<div class="nimp-res-hdr"><strong>' + _niDrafts.length + ' draft nomination' + (_niDrafts.length === 1 ? '' : 's') + '</strong>' +
+    '<span>— nothing is saved until you add.</span><span class="nimp-legend"><i></i>guessed — please check</span>' +
+    '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
+    '<button type="button" class="btn btn-ghost btn-sm" onclick="niReset()">Discard</button>' +
+    '<button type="button" class="btn btn-primary btn-sm" id="nimp-add-all" onclick="niAddDrafts()"' + (n ? '' : ' disabled') + '>Add ' + n + ' nomination' + (n === 1 ? '' : 's') + '</button></span></div>';
+  h += '<div class="nimp-tblwrap"><table class="nimp-tbl"><colgroup><col style="width:30px"><col style="width:15%"><col style="width:8%"><col style="width:13%"><col style="width:12%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col><col style="width:9%"><col style="width:62px"></colgroup><thead><tr><th><span style="position:absolute;left:-9999px">Include</span></th>' +
+    _NI_FIELDS.map(function(f) { return '<th>' + esc(f[1]) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>';
+  _niDrafts.forEach(function(d, i) {
+    h += '<tr class="nimp-row" id="nimp-row-' + i + '"><td class="nimp-pick" data-label="Include"><input type="checkbox" aria-label="Include row ' + (i + 1) + '"' + (d.pick ? ' checked' : '') + ' onchange="_niTogglePick(' + i + ',this.checked)"></td>' +
+      _NI_FIELDS.map(function(f) { return _niCell(d, i, f); }).join('') +
+      '<td class="nimp-addc"><button type="button" class="btn btn-secondary btn-sm" onclick="niAddDrafts([' + i + '])" aria-label="Add row ' + (i + 1) + '">Add</button></td></tr>' +
+      '<tr class="nimp-msg"><td></td><td colspan="' + (_NI_FIELDS.length + 1) + '"><div class="nimp-rem">' + _niCell(d, i, _NI_REMARKS) + '</div><div class="nimp-flag" id="nimp-msg-' + i + '">' + _niMsgHtml(d) + '</div></td></tr>';
+  });
+  h += '</tbody></table></div>';
+  // The original text is shown as text (esc), never as markup.
+  h += '<details class="nimp-src"><summary>Original text</summary><pre>' + esc(_niSourceText) + '</pre></details>';
+  box.innerHTML = h;
+}
+function _niEdit(el) {
+  const i = +el.dataset.i, k = el.dataset.k, d = _niDrafts[i];
+  if (!d) return;
+  d[k] = el.value;
+  const lowKey = (_NI_FIELDS.concat([_NI_REMARKS]).find(function(f) { return f[0] === k; }) || [])[2];
+  if (lowKey && d.low && d.low[lowKey]) { delete d.low[lowKey]; el.classList.remove('nimp-low'); el.removeAttribute('title'); }
+  if (k === 'name') el.classList.toggle('nimp-miss', !String(el.value).trim());
+  if (k === 'eta' || k === 'lc') {
+    const row = document.getElementById('nimp-row-' + i);
+    if (row) row.querySelectorAll('[data-k="eta"],[data-k="lc"]').forEach(function(x) { x.classList.toggle('nimp-miss', !d.eta && !d.lc); });
+  }
+  const msg = document.getElementById('nimp-msg-' + i);
+  if (msg) msg.innerHTML = _niMsgHtml(d);
+}
+function _niTogglePick(i, on) {
+  if (_niDrafts[i]) _niDrafts[i].pick = !!on;
+  const n = _niDrafts.filter(function(d) { return d.pick; }).length, b = document.getElementById('nimp-add-all');
+  if (b) { b.textContent = 'Add ' + n + ' nomination' + (n === 1 ? '' : 's'); b.disabled = !n; }
+}
+// Draft → addVessel(def): same shape captureCurrentState() saves.
+function _niDraftToDef(d) {
+  const v = _parseQtyInput(d.qtyText), m = _parseQtyInput(d.mgoText);
+  const def = {
+    name: String(d.name || '').trim().toUpperCase(), imo: String(d.imo || '').trim(), eta: String(d.eta || '').trim(), lc: String(d.lc || '').trim(),
+    area: d.area || 'FUJ-A', spec: d.spec || 'ISO 8217:2010', agent: String(d.agent || '').trim(), remarks: String(d.remarks || '').trim(),
+    type: v.qty > 0 && m.qty > 0 ? 'BOTH' : (m.qty > 0 ? 'MGO' : 'VLSFO'), qty: v.qty, mgo: m.qty
+  };
+  if (v.min != null) { def.qtyMin = v.min; def.qtyMax = v.max; }
+  if (m.min != null) { def.mgoMin = m.min; def.mgoMax = m.max; }
+  return def;
+}
+function niAddDrafts(only) {
+  const idx = (only || _niDrafts.map(function(_, i) { return i; }).filter(function(i) { return _niDrafts[i].pick; }));
+  const ok = [], bad = [], dups = [];
+  idx.forEach(function(i) {
+    const d = _niDrafts[i];
+    if (!d) return;
+    if (_niProblems(d).length) bad.push(i); else { ok.push(i); if (_niFindDuplicate(d)) dups.push(String(d.name || '').toUpperCase()); }
+  });
+  if (bad.length) {
+    const r0 = document.getElementById('nimp-row-' + bad[0]);
+    const f0 = r0 && (r0.querySelector('.nimp-miss') || r0.querySelector('input[type="text"]'));
+    if (f0) f0.focus();
+    _niStatus(bad.length + ' row' + (bad.length === 1 ? ' needs' : 's need') + ' fixing first (see the red notes).', true);
+    if (!ok.length) return;
+  }
+  if (!ok.length) return;
+  if (dups.length && !confirm('These look like nominations already in the register:\n\n• ' + dups.join('\n• ') + '\n\nAdd them anyway?')) return;
+  ok.forEach(function(i) { addVessel(_niDraftToDef(_niDrafts[i])); });
+  const added = ok.length;
+  _niDrafts = _niDrafts.filter(function(_, i) { return ok.indexOf(i) < 0; });
+  _niRenderReview();
+  saveSharedState();
+  const msg = 'Added ' + added + ' nomination' + (added === 1 ? '' : 's') + (bad.length ? ' — ' + bad.length + ' still need fixing' : '') + '.';
+  _niStatus(msg, !!bad.length);
+  if (typeof showToast === 'function') showToast(msg, 'success');
+  if (!_niDrafts.length) { const t = document.getElementById('nimp-text'); if (t) t.value = ''; _niSourceText = ''; }
+}
+
 // Fix #3: simple convenience wrapper for the "Add Vessel" button. addVessel()
 // itself stays generic so restore/seed/undo paths can keep calling it plainly.
 function addNewVesselNomination() {
@@ -11642,12 +12719,14 @@ function addVessel(def = {}) {
   </div>
   <div class="g5 mb10">
     <div class="field" id="v${id}-vw">
-      <label>VLSFO Qty (MT)</label>
-      <input type="number" id="v${id}-vlsfo" value="${esc(qty)}" min="0" step="10" oninput="upd(${id})">
+      <label for="v${id}-vlsfo">VLSFO Qty (MT)</label>
+      <input type="text" id="v${id}-vlsfo" value="${esc(_qtyInputText(qty, def.qtyMin, def.qtyMax))}" placeholder="500 or 500-600" autocomplete="off" aria-describedby="v${id}-hvq" oninput="upd(${id})">
+      <span class="hint" id="v${id}-hvq" aria-live="polite"></span>
     </div>
     <div class="field" id="v${id}-mw" style="display:none">
-      <label>MGO Qty (MT)</label>
-      <input type="number" id="v${id}-mgo" value="${esc(mgoQ)}" min="0" step="10" oninput="upd(${id})">
+      <label for="v${id}-mgo">MGO Qty (MT)</label>
+      <input type="text" id="v${id}-mgo" value="${esc(_qtyInputText(mgoQ, def.mgoMin, def.mgoMax))}" placeholder="100 or 100-150" autocomplete="off" aria-describedby="v${id}-hmq" oninput="upd(${id})">
+      <span class="hint" id="v${id}-hmq" aria-live="polite"></span>
     </div>
     <div class="field">
       <label>ISO Spec</label>
@@ -11729,6 +12808,7 @@ function addVessel(def = {}) {
 
   document.getElementById('vc').appendChild(c);
   tQ(id);
+  _qtyHints(id);
   if (lc || eta) upd(id);
   populateBargeDropdowns();
   // Show the track record immediately for a restored/existing nomination
@@ -11775,8 +12855,11 @@ function getVessels() {
     const lcR  = document.getElementById(`v${id}-lc`)?.value   || '';
     const etR  = document.getElementById(`v${id}-eta`)?.value  || '';
     const type = document.getElementById(`v${id}-type`)?.value;
-    const vq   = type==='MGO'   ? 0 : parseFloat(document.getElementById(`v${id}-vlsfo`)?.value || 0);
-    const mq   = type==='VLSFO' ? 0 : parseFloat(document.getElementById(`v${id}-mgo`)?.value   || 0);
+    // vq/mq = planning figure (top of a range) — the scheduler only ever uses these.
+    const vqP  = type==='MGO'   ? null : _cardQty(id, 'vlsfo');
+    const mqP  = type==='VLSFO' ? null : _cardQty(id, 'mgo');
+    const vq   = vqP ? vqP.qty : 0;
+    const mq   = mqP ? mqP.qty : 0;
     const spec   = document.getElementById(`v${id}-spec`)?.value     || '';
     const agent  = document.getElementById(`v${id}-agent`)?.value    || '';
     const mani   = document.getElementById(`v${id}-manifold`)?.value || '';
@@ -11807,7 +12890,8 @@ function getVessels() {
     const imo     = document.getElementById(`v${id}-imo`)?.value     || '';
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
     out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
-              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks});
+              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks,
+              vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
   return out;
 }
@@ -11997,7 +13081,12 @@ function calculate() {
       cursor = etc;
     }
 
-    sched.push({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot});
+    // Ranged nominations: everything above planned with v.vq/v.mq = the TOP of
+    // the range; the range rides along on the item only for display.
+    const rangeF = {};
+    if (v.vqMin != null) { rangeF.nomVMin = Math.round(v.vqMin); rangeF.nomVMax = Math.round(v.vq || 0); }
+    if (v.mqMin != null) { rangeF.nomMMin = Math.round(v.mqMin); rangeF.nomMMax = Math.round(v.mq || 0); }
+    sched.push(Object.assign({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot}, rangeF));
     bs.rv=rva; bs.rm=rma;
     totV+=sv; totM+=sm;
   }
@@ -12201,7 +13290,7 @@ function buildVoyRows(items) {
   return items.map((item,idx) => {
     const nomV_ = (item.nomVQ !== undefined && item.nomVQ !== null) ? item.nomVQ : item.vQ;
     const nomM_ = (item.nomMQ !== undefined && item.nomMQ !== null) ? item.nomMQ : item.mQ;
-    const fo = nomV_>0?nomV_.toLocaleString():'—', mo = nomM_>0?nomM_.toLocaleString():'—';
+    const fo = nomV_>0?esc(_nomQtyTxt(item,'V',nomV_)):'—', mo = nomM_>0?esc(_nomQtyTxt(item,'M',nomM_)):'—';
     const seq  = classifySeq(item, idx, items);
     const plan = seq.label;
     const lcIn = !!(item.lc&&item.eta&&item.eta>=item.lc.from&&item.eta<=item.lc.to);
@@ -12300,7 +13389,7 @@ function buildTL(items, containerId, loadingsForBarge) {
     const vC = vP<15?'var(--red)':vP<30?'var(--amber)':'var(--fuel-v)';
     const mC = mP<15?'var(--red)':mP<30?'var(--amber)':'var(--fuel-m)';
     const tlNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, tlNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-    const qty = [tlNomV>0?`VLSFO ${tlNomV.toLocaleString()} MT`:'', tlNomM>0?`MGO ${tlNomM.toLocaleString()} MT`:''].filter(Boolean).join(' | ')||'—';
+    const qty = [tlNomV>0?`VLSFO ${esc(_nomQtyTxt(item,'V',tlNomV))} MT`:'', tlNomM>0?`MGO ${esc(_nomQtyTxt(item,'M',tlNomM))} MT`:''].filter(Boolean).join(' | ')||'—';
     const dc  = (item.vLow||item.mLow)?'var(--red)':item.noFirmETA?'var(--purple)':item.isDelayed?'var(--amber)':item.isEarly?'var(--teal)':'var(--azure)';
     const cc  = (item.vLow&&item.mLow)?'wvm':item.vLow?'wv':item.mLow?'wm':item.isDelayed?'del':'';
     const supB= item.isPartial?`<span class="tb tb-pt">Part Supply</span>`:`<span class="tb tb-ok">Full Supply</span>`;
@@ -12438,8 +13527,8 @@ function _ccRefreshData() {
         <span style="font-size:19px;font-weight:700;color:#FFFFFF">${esc(next.name)}</span>
         <span style="font-size:12.5px;color:#CCC">${esc(next.bargeLabel || '')}</span>
         <span style="font-size:12.5px;color:#CCC">START ${fmt24(next.bargeStart)}</span>
-        <span style="font-size:12.5px;color:#4FD1E8">VLSFO ${vQty ? vQty.toLocaleString() + ' MT' : '—'}</span>
-        <span style="font-size:12.5px;color:#F0A542">LSMGO ${mQty ? mQty.toLocaleString() + ' MT' : '—'}</span>
+        <span style="font-size:12.5px;color:#4FD1E8">VLSFO ${vQty ? esc(_nomQtyTxt(next, 'V', vQty)) + ' MT' : '—'}</span>
+        <span style="font-size:12.5px;color:#F0A542">LSMGO ${mQty ? esc(_nomQtyTxt(next, 'M', mQty)) + ' MT' : '—'}</span>
         <span style="font-size:11px;font-weight:700;color:${statusColor};margin-left:auto;flex-shrink:0">${statusText}</span>
       </div>`;
     } else {
@@ -12562,8 +13651,8 @@ function _ccRefreshData() {
           <div style="color:#EEE;font-size:11.5px;font-weight:700;white-space:normal;word-break:break-word;line-height:1.35">${esc(item.name)}</div>
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px;font-size:10.5px">
             <span style="color:#CCC;white-space:nowrap">${fmtWB(item.bargeStart)}</span>
-            <span style="color:#4FD1E8;white-space:nowrap">V ${vQty ? vQty.toLocaleString() : '—'}</span>
-            <span style="color:#F0A542;white-space:nowrap">M ${mQty ? mQty.toLocaleString() : '—'}</span>
+            <span style="color:#4FD1E8;white-space:nowrap">V ${vQty ? esc(_nomQtyTxt(item, 'V', vQty)) : '—'}</span>
+            <span style="color:#F0A542;white-space:nowrap">M ${mQty ? esc(_nomQtyTxt(item, 'M', mQty)) : '—'}</span>
             <span style="color:${statusColor};font-weight:700;white-space:nowrap;margin-left:auto">${statusText}</span>
           </div>
         </div>`;
@@ -15544,7 +16633,7 @@ function _buildReminderRow(item, now, type, idx) {
   const isArrived = type === 'arrived';
   const isUrgent  = type === 'urgent';
   const rNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, rNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-  const qty = [rNomV>0?'VLSFO '+rNomV.toLocaleString()+' MT':'', rNomM>0?'MGO '+rNomM.toLocaleString()+' MT':''].filter(Boolean).join(' + ') || '—';
+  const qty = [rNomV>0?'VLSFO '+esc(_nomQtyTxt(item,'V',rNomV))+' MT':'', rNomM>0?'MGO '+esc(_nomQtyTxt(item,'M',rNomM))+' MT':''].filter(Boolean).join(' + ') || '—';
   const color  = isArrived ? 'var(--red)' : isUrgent ? 'var(--amber)' : 'var(--azure)';
   const rKey = _reminderKey(item);
   const isDismissed = _dismissedReminders.has(rKey);
@@ -15588,8 +16677,8 @@ function openBunkerMsgModal(sno) {
 
   var bmNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, bmNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
   document.getElementById('bm-vessel-name').textContent = item.name;
-  document.getElementById('bm-vlsfo-qty').textContent   = bmNomV > 0 ? bmNomV.toLocaleString() + ' MT' : '—';
-  document.getElementById('bm-mgo-qty').textContent     = bmNomM > 0 ? bmNomM.toLocaleString() + ' MT' : '—';
+  document.getElementById('bm-vlsfo-qty').textContent   = bmNomV > 0 ? _nomQtyTxt(item, 'V', bmNomV) + ' MT' : '—';
+  document.getElementById('bm-mgo-qty').textContent     = bmNomM > 0 ? _nomQtyTxt(item, 'M', bmNomM) + ' MT' : '—';
 
   // Auto-detect fuel type
   var fuelType = (bmNomV > 0 && bmNomM > 0) ? 'both' : (bmNomM > 0 ? 'mgo' : 'vlsfo');
@@ -15636,8 +16725,10 @@ function openBunkerMsgModal(sno) {
   var etaMEl    = document.getElementById('eta-mgo-qty');
   if (etaFromEl) etaFromEl.value = supStart ? fmtDay(supStart) : '';
   if (etaToEl)   etaToEl.value   = supEnd   ? fmtDay(supEnd)   : (supStart ? fmtDay(supStart) : '');
-  if (etaVEl)    etaVEl.value    = bmNomV > 0 ? bmNomV : '';
-  if (etaMEl)    etaMEl.value    = bmNomM > 0 ? bmNomM : '';
+  // A ranged nomination is nominated as its range ("500-600"), not its planning top.
+  var bmRV = _nomRange(item, 'V'), bmRM = _nomRange(item, 'M');
+  if (etaVEl)    etaVEl.value    = bmNomV > 0 ? (bmRV ? _qtyInputText(bmNomV, bmRV.min, bmRV.max) : bmNomV) : '';
+  if (etaMEl)    etaMEl.value    = bmNomM > 0 ? (bmRM ? _qtyInputText(bmNomM, bmRM.min, bmRM.max) : bmNomM) : '';
 
   bmSwitchTab('schedule');
   _bunkerMsgToggleSeq();
@@ -15661,8 +16752,8 @@ function _bunkerMsgToggleSeq() {
 function _generateBunkerMsg(item, fuelType, seqType, timeWindow, bargeName) {
   var barge = (bargeName || (item ? item.bargeLabel : '') || 'FNSA 10').trim();
   var gbmNomV=(item&&item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item?item.vQ:0), gbmNomM=(item&&item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item?item.mQ:0);
-  var vQty  = item && gbmNomV > 0 ? gbmNomV.toLocaleString() : null;
-  var mQty  = item && gbmNomM > 0 ? gbmNomM.toLocaleString() : null;
+  var vQty  = item && gbmNomV > 0 ? _nomQtyTxt(item, 'V', gbmNomV) : null;   // "500–600" for a range
+  var mQty  = item && gbmNomM > 0 ? _nomQtyTxt(item, 'M', gbmNomM) : null;
 
   var manifoldLine, dischargeLine, qtyLine;
 
@@ -15789,8 +16880,8 @@ function etaMailUpdatePreview() {
   var mQtyEl     = document.getElementById('eta-mgo-qty');
   var dateFrom = dateFromEl ? dateFromEl.value.trim() : '';
   var dateTo   = dateToEl   ? dateToEl.value.trim()   : '';
-  var vQty     = vQtyEl ? (parseFloat(vQtyEl.value) || 0) : 0;
-  var mQty     = mQtyEl ? (parseFloat(mQtyEl.value) || 0) : 0;
+  var vQP      = _parseQtyInput(vQtyEl ? vQtyEl.value : ''), mQP = _parseQtyInput(mQtyEl ? mQtyEl.value : '');
+  var vQty     = vQP.qty, mQty = mQP.qty;
 
   var dateRange = dateFrom && dateTo && dateFrom !== dateTo ? (dateFrom + ' to ' + dateTo)
     : (dateFrom || dateTo || '[SUPPLY DATE]');
@@ -15806,7 +16897,7 @@ function etaMailUpdatePreview() {
     'Please be advised that ' + vesselLabel + ' is nominated for bunker supply as per details below. Kindly keep us posted with her firm and consistent ETA notices basis 96/72/48/36/24/12 HRS to our common mail ID at operations@gpsbunkers.com',
     '',
     'NOMINATED DATE OF SUPPLY \u2013 ' + dateRange + '.',
-    'NOMINATED QUANTITY - ' + (vQty > 0 ? vQty.toLocaleString() : '\u2014') + ' MT LSFO / ' + (mQty > 0 ? mQty.toLocaleString() : '\u2014') + ' MT LSMGO',
+    'NOMINATED QUANTITY - ' + (vQty > 0 ? _qtyShow(vQP) : '\u2014') + ' MT LSFO / ' + (mQty > 0 ? _qtyShow(mQP) : '\u2014') + ' MT LSMGO',
     '',
     'PLEASE KEEP OUR COMMON E MAIL ID - operations@gpsbunkers.com IN CC FOR ALL COMMUNICATION - WHICH IS MONITORED 24 HRS.'
   ];
@@ -15987,6 +17078,7 @@ function injectChecklistFromSchedule(sched) {
         state:      'draft',
         lockedAt:   null
       };
+      _clStampRange(_checklistRecords[uid], item);
     } else if (!_checklistRecords[uid].supplied) {
       // Existing unlocked record: update display sno and nomination ref only, never actuals
       _checklistRecords[uid].sno        = item.sno;          // keep display order current
@@ -15999,11 +17091,39 @@ function injectChecklistFromSchedule(sched) {
       _checklistRecords[uid].supplyDate = item.bargeStart || item.eta;
       _checklistRecords[uid].isDelayed  = !!item.isDelayed;
       _checklistRecords[uid].isEarly    = !!item.isEarly;
+      _clStampRange(_checklistRecords[uid], item);
     }
     // If supplied/locked: DO NOT touch any field
   });
 }
 
+// Copy a ranged nomination's min/max onto its checklist record (dropped again
+// if the nomination is changed back to a single figure).
+function _clStampRange(rec, item) {
+  ['V', 'M'].forEach(function(g) {
+    const r = _nomRange(item, g);
+    if (r) { rec['nom' + g + 'Min'] = r.min; rec['nom' + g + 'Max'] = r.max; }
+    else { delete rec['nom' + g + 'Min']; delete rec['nom' + g + 'Max']; }
+  });
+}
+// Actual vs nominated badge. For a ranged nomination anything inside
+// min–max is OK; below min is short by (min − actual); above max is over.
+function _clDevBadge(act, nom, rng) {
+  if (act === '' || act === null || act === undefined) return '';
+  const a = parseFloat(act);
+  if (isNaN(a)) return '';
+  const pill = function(bg, fg, txt) { return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:' + bg + ';color:' + fg + ';margin-left:4px">' + txt + '</span>'; };
+  const mt = function(d) { return parseFloat(Math.abs(d).toFixed(2)).toLocaleString() + ' MT'; };
+  if (rng) {
+    if (a < rng.min) return pill('var(--red-lt)', 'var(--red)', 'Short ' + mt(rng.min - a));
+    if (a > rng.max) return pill('var(--azure-lt)', 'var(--azure)', '+' + mt(a - rng.max) + ' over');
+    return pill('var(--green-lt)', 'var(--green)', 'In range');
+  }
+  if (nom === 0) return '';
+  const dev = a - nom;
+  if (dev === 0) return pill('var(--green-lt)', 'var(--green)', 'Match');
+  return pill(dev > 0 ? 'var(--azure-lt)' : 'var(--red-lt)', dev > 0 ? 'var(--azure)' : 'var(--red)', (dev > 0 ? '+' : '') + parseFloat(dev.toFixed(2)).toLocaleString() + ' MT');
+}
 // The checklist record that belongs to this schedule item's nomination:
 // matched by nomUid; otherwise a legacy record (saved before nomUid was
 // stamped) of the same vessel — a supplied/locked legacy record only when
@@ -16125,16 +17245,10 @@ function renderChecklist(sched) {
       // null = this fuel type was never part of the nomination → show '—', no input.
       // A real number (including 0, e.g. ROB not yet available) → always show the
       // value and the actuals input, so the operator can still record what's loaded.
-      const nomVDisplay = (rec.nomV === null || rec.nomV === undefined) ? '—' : esc(rec.nomV.toLocaleString()) + ' MT';
-      const nomMDisplay = (rec.nomM === null || rec.nomM === undefined) ? '—' : esc(rec.nomM.toLocaleString()) + ' MT';
+      const nomVDisplay = (rec.nomV === null || rec.nomV === undefined) ? '—' : esc(_nomQtyTxt(rec, 'V', rec.nomV)) + ' MT';
+      const nomMDisplay = (rec.nomM === null || rec.nomM === undefined) ? '—' : esc(_nomQtyTxt(rec, 'M', rec.nomM)) + ' MT';
 
-      const devBadge = (act, nom) => {
-        if (act === '' || act === null || act === undefined || nom === 0) return '';
-        const dev = parseFloat(act) - nom;
-        if (isNaN(dev)) return '';
-        if (dev === 0) return '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:var(--green-lt);color:var(--green);margin-left:4px">Match</span>';
-        return `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:${dev>0?'var(--azure-lt)':'var(--red-lt)'};color:${dev>0?'var(--azure)':'var(--red)'};margin-left:4px">${dev>0?'+':''}${parseFloat(dev.toFixed(2)).toLocaleString()} MT</span>`;
-      };
+      const devBadge = (act, nom, g) => _clDevBadge(act, nom, _nomRange(rec, g));
 
       return `<tr style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
         <td style="padding:9px 12px;color:var(--muted);font-weight:700;font-family:DM Mono,monospace">${idx + 1}</td>
@@ -16154,7 +17268,7 @@ function renderChecklist(sched) {
               style="width:82px;font-size:12px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:6px;font-family:DM Mono,monospace;background:var(--surface);outline:none;${lockStyle}"
               onfocus="this.style.borderColor='var(--azure)'" onblur="this.style.borderColor='var(--border)'">
             <span style="font-size:11px;color:var(--sub)">MT</span>
-            <span id="cl-dv-${uA}">${devBadge(rec.actV, rec.nomV)}</span>
+            <span id="cl-dv-${uA}">${devBadge(rec.actV, rec.nomV, 'V')}</span>
           </div>` : '<span style="color:var(--muted)">—</span>'}
         </td>
 
@@ -16171,7 +17285,7 @@ function renderChecklist(sched) {
               style="width:82px;font-size:12px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:6px;font-family:DM Mono,monospace;background:var(--surface);outline:none;${lockStyle}"
               onfocus="this.style.borderColor='var(--teal)'" onblur="this.style.borderColor='var(--border)'">
             <span style="font-size:11px;color:var(--sub)">MT</span>
-            <span id="cl-dm-${uA}">${devBadge(rec.actM, rec.nomM)}</span>
+            <span id="cl-dm-${uA}">${devBadge(rec.actM, rec.nomM, 'M')}</span>
           </div>` : '<span style="color:var(--muted)">—</span>'}
         </td>
 
@@ -16242,13 +17356,8 @@ function clUpdateActual(uid, field, val) {
   if (field === 'm') { rec.actM = val; }
   // Update deviation badge in place
   const nom = field === 'v' ? rec.nomV : rec.nomM;
-  const dev = val !== '' ? parseFloat(val) - nom : null;
   const badgeEl = document.getElementById(`cl-d${field}-${uid}`);
-  if (badgeEl) {
-    if (dev === null || isNaN(dev) || nom === 0) { badgeEl.innerHTML = ''; return; }
-    if (dev === 0) { badgeEl.innerHTML = '<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:var(--green-lt);color:var(--green)">Match</span>'; return; }
-    badgeEl.innerHTML = `<span style="font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;background:${dev>0?'var(--azure-lt)':'var(--red-lt)'};color:${dev>0?'var(--azure)':'var(--red)'}">${dev>0?'+':''}${parseFloat(dev.toFixed(2)).toLocaleString()} MT</span>`;
-  }
+  if (badgeEl) badgeEl.innerHTML = _clDevBadge(val, nom, _nomRange(rec, field === 'v' ? 'V' : 'M'));
 }
 
 function clToggleSupplied(uid, checked) {
@@ -17861,8 +18970,8 @@ function downloadChecklist() {
       const actV = rec.actV !== '' ? parseFloat(rec.actV)||0 : '';
       const actM = rec.actM !== '' ? parseFloat(rec.actM)||0 : '';
       [i+1, rec.vessel, rec.supplyDate ? fmt24(rec.supplyDate) : '—', rec.bargeLabel||'',
-       (rec.nomV===null||rec.nomV===undefined)?'':rec.nomV, actV, rec.bdnV||'',
-       (rec.nomM===null||rec.nomM===undefined)?'':rec.nomM, actM, rec.bdnM||'',
+       (rec.nomV===null||rec.nomV===undefined)?'':(_nomRange(rec,'V')?_nomQtyTxt(rec,'V',rec.nomV):rec.nomV), actV, rec.bdnV||'',
+       (rec.nomM===null||rec.nomM===undefined)?'':(_nomRange(rec,'M')?_nomQtyTxt(rec,'M',rec.nomM):rec.nomM), actM, rec.bdnM||'',
        rec.supplied?'YES':'PENDING', rec.lockedAt?'LOCKED':'', rec.notes||'']
         .forEach((v,c) => ws[XLSX.utils.encode_cell({r:i+1,c})] = {v,t:typeof v==='number'?'n':'s'});
     });
@@ -18163,7 +19272,8 @@ function downloadExcel() {
     const areaLabel=AREA_OPTIONS.find(o=>o.value===item.area)?.label||item.area||'—';
     const nomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, nomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
     [{v:item.sno,t:'n',s:S.num},{v:item.name,t:'s',s:S.boldL},{v:areaLabel,t:'s',s:S.ctr},
-     {v:nomV||'—',t:nomV?'n':'s',s:S.num},{v:nomM||'—',t:nomM?'n':'s',s:S.num},
+     // a ranged nomination exports as text "500–600" (the planning figure is its top)
+     {v:_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||'—'),t:nomV&&!_nomRange(item,'V')?'n':'s',s:S.num},{v:_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||'—'),t:nomM&&!_nomRange(item,'M')?'n':'s',s:S.num},
      {v:item.spec||'—',t:'s',s:S.def},{v:fmtLC(item.lc),t:'s',s:S.ctr},{v:fmt24(item.eta),t:'s',s:S.ctr},
      {v:fmt24(item.bargeStart),t:'s',s:S.ctr},{v:fmt24(item.etc),t:'s',s:S.ctr},
      {v:plan,t:'s',s:{font:{sz:10,color:{rgb:'1A6FD4'}},fill:{fgColor:{rgb:'EBF3FD'}},alignment:{horizontal:'center'}}},
@@ -18338,7 +19448,7 @@ function downloadExcelForBarge(bargeId) {
     const areaLabel=AREA_OPTIONS.find(o=>o.value===item.area)?.label||item.area||'';
     const seqXl = classifySeq(item, i, rows);
     const nomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, nomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-    [item.sno,item.name,areaLabel,nomV||0,nomM||0,item.spec||'',fmtLC(item.lc),fmt24(item.eta),fmt24(item.bargeStart),fmt24(item.etc),seqXl.label,item.isDelayed?'Delayed':'On Laycan',item.paq==='yes'?'Received':'Pending',item.agent||'',item.mani||''].forEach((v,c)=>ws[XLSX.utils.encode_cell({r:3+i,c})]={v,t:typeof v==='number'?'n':'s'});
+    [item.sno,item.name,areaLabel,_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||0),_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||0),item.spec||'',fmtLC(item.lc),fmt24(item.eta),fmt24(item.bargeStart),fmt24(item.etc),seqXl.label,item.isDelayed?'Delayed':'On Laycan',item.paq==='yes'?'Received':'Pending',item.agent||'',item.mani||''].forEach((v,c)=>ws[XLSX.utils.encode_cell({r:3+i,c})]={v,t:typeof v==='number'?'n':'s'});
   });
   ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:3+rows.length-1,c:14}});
   ws['!cols']=[{wch:6},{wch:20},{wch:14},{wch:10},{wch:10},{wch:14},{wch:18},{wch:22},{wch:22},{wch:22},{wch:20},{wch:14},{wch:10},{wch:12},{wch:22}];
@@ -18411,11 +19521,15 @@ function renderWeekCalendar(offsetDays) {
       const cid = card.id.replace('vessel-','');
       const name  = document.getElementById('v'+cid+'-name')?.value   || ('Vessel '+cid);
       const ty    = document.getElementById('v'+cid+'-type')?.value    || 'BOTH';
-      const v     = ty!=='MGO'   ? (parseFloat(document.getElementById('v'+cid+'-vlsfo')?.value)||0) : 0;
-      const m     = ty!=='VLSFO' ? (parseFloat(document.getElementById('v'+cid+'-mgo')?.value)||0)   : 0;
+      const vP    = _cardQty(cid, 'vlsfo'), mP = _cardQty(cid, 'mgo');
+      const v     = ty!=='MGO'   ? vP.qty : 0;
+      const m     = ty!=='VLSFO' ? mP.qty : 0;
       const fp    = document.getElementById('v'+cid+'-eta')?._flatpickr;
       const d     = fp?.selectedDates?.[0] || null;
-      if ((v||m) && d) fallbackItems.push({ name, vQ:v, mQ:m, _etaDate:new Date(d), bargeLabel:'', area:'' });
+      const fb    = { name, vQ:v, mQ:m, _etaDate:new Date(d), bargeLabel:'', area:'' };
+      if (v && vP.min != null) { fb.nomVMin = vP.min; fb.nomVMax = vP.max; }
+      if (m && mP.min != null) { fb.nomMMin = mP.min; fb.nomMMax = mP.max; }
+      if ((v||m) && d) fallbackItems.push(fb);
     });
   }
   const source = allItems.length ? allItems : fallbackItems;
@@ -18577,7 +19691,7 @@ function renderWeekCalendar(offsetDays) {
               box-sizing:border-box;
               ${hasSno?'cursor:pointer':'cursor:default'};
               transition:border-color .12s, transform .12s;
-            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${calNomV.toLocaleString()} MT | MGO: ${calNomM.toLocaleString()} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
+            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
               <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                 <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
                 ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:item.isEarly?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--teal);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">BEFORE LAYCAN</span>`:''}
@@ -18585,8 +19699,8 @@ function renderWeekCalendar(offsetDays) {
               </div>
               <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(item.name)}</div>
               <div style="display:flex;flex-wrap:wrap;row-gap:2px;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
-                ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${calNomV.toLocaleString()}</span>`:''}
-                ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${calNomM.toLocaleString()}</span>`:''}
+                ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${esc(_nomQtyTxt(item,'V',calNomV))}</span>`:''}
+                ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${esc(_nomQtyTxt(item,'M',calNomM))}</span>`:''}
               </div>
               ${barge||loc?`<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:2px">
                 ${barge?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_BARGE}${esc(barge)}</div>`:''}
@@ -19128,7 +20242,7 @@ function printScheduleOnly() {
   const rows = printItems.map((item, idx) => {
     const nomV_ = (item.nomVQ !== undefined && item.nomVQ !== null) ? item.nomVQ : item.vQ;
     const nomM_ = (item.nomMQ !== undefined && item.nomMQ !== null) ? item.nomMQ : item.mQ;
-    const fo = nomV_>0?nomV_.toLocaleString():'—', mo = nomM_>0?nomM_.toLocaleString():'—';
+    const fo = nomV_>0?esc(_nomQtyTxt(item,'V',nomV_)):'—', mo = nomM_>0?esc(_nomQtyTxt(item,'M',nomM_)):'—';
     // Sequence within this vessel's own barge, over the full schedule (an
     // unticked previous vessel is still physically ahead of it).
     const sameBargePr = _lastSched.filter(x => (x.bargeLabel||'') === (item.bargeLabel||''));
@@ -19901,11 +21015,11 @@ async function init() {
         </div>
         <div>
           <label style="font-size:10px;font-weight:700;color:var(--fuel-v);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">VLSFO Quantity (MT)</label>
-          <input type="number" id="eta-vlsfo-qty" min="0" step="50" style="width:100%;padding:9px 12px;border:1.5px solid var(--azure-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+          <input type="text" id="eta-vlsfo-qty" autocomplete="off" placeholder="500 or 500-600" style="width:100%;padding:9px 12px;border:1.5px solid var(--azure-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
         </div>
         <div>
           <label style="font-size:10px;font-weight:700;color:var(--fuel-m);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">LSMGO Quantity (MT)</label>
-          <input type="number" id="eta-mgo-qty" min="0" step="50" style="width:100%;padding:9px 12px;border:1.5px solid var(--fuel-m-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+          <input type="text" id="eta-mgo-qty" autocomplete="off" placeholder="100 or 100-150" style="width:100%;padding:9px 12px;border:1.5px solid var(--fuel-m-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
         </div>
       </div>
 
@@ -20428,8 +21542,10 @@ function ciOpenForVessel(vid) {
   const vlsfoRaw = vlsfoEl ? vlsfoEl.value.trim() : '';
   const lsmgoRaw = mgoEl   ? mgoEl.value.trim()   : '';
   // Null if not entered — do NOT infer or default to nomination
-  const safeVlsfo = (type === 'MGO')   ? 0 : (vlsfoRaw !== '' && !isNaN(parseFloat(vlsfoRaw)) ? parseFloat(vlsfoRaw) : 0);
-  const safeLsmgo = (type === 'VLSFO') ? 0 : (lsmgoRaw !== '' && !isNaN(parseFloat(lsmgoRaw)) ? parseFloat(lsmgoRaw) : 0);
+  // A range ("500-600") plans at its top figure; the text keeps the range.
+  const vqP = _parseQtyInput(vlsfoRaw), mqP = _parseQtyInput(lsmgoRaw);
+  const safeVlsfo = (type === 'MGO')   ? 0 : vqP.qty;
+  const safeLsmgo = (type === 'VLSFO') ? 0 : mqP.qty;
   const vlsfoQty = safeVlsfo;
   const lsmgoQty = safeLsmgo;
   const area     = areaEl   ? areaEl.value   : '';
@@ -20440,14 +21556,14 @@ function ciOpenForVessel(vid) {
 
   // id = the vessel card number: ciGenerate/ciOpenPreview re-read the live
   // inputs `v${id}-…` through it, which never happened while it was unset.
-  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, area, location, laycan, lcRaw, tplKey };
+  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, vlsfoTxt: _qtyShow(vqP), lsmgoTxt: _qtyShow(mqP), area, location, laycan, lcRaw, tplKey };
 
   document.getElementById('ci-modal-title').textContent   = 'Calling Instructions — ' + vessel;
   document.getElementById('ci-prev-vessel').textContent   = vessel || '(no name)';
   document.getElementById('ci-prev-location').textContent = location;
   document.getElementById('ci-prev-laycan').textContent   = laycan || lcRaw || '—';
-  document.getElementById('ci-prev-vlsfo').textContent    = safeVlsfo > 0 ? safeVlsfo.toLocaleString() + ' MT' : '—';
-  document.getElementById('ci-prev-lsmgo').textContent    = safeLsmgo > 0 ? safeLsmgo.toLocaleString() + ' MT' : '—';
+  document.getElementById('ci-prev-vlsfo').textContent    = safeVlsfo > 0 ? _qtyShow(vqP) + ' MT' : '—';
+  document.getElementById('ci-prev-lsmgo').textContent    = safeLsmgo > 0 ? _qtyShow(mqP) + ' MT' : '—';
   document.getElementById('ci-prev-fueltype').textContent = type === 'BOTH' ? 'VLSFO + LSMGO' : type;
 
   const warnEl = document.getElementById('ci-modal-tpl-warn');
@@ -20485,18 +21601,27 @@ document.addEventListener('DOMContentLoaded', function() {
 // ══════════════════════════════════════════════════════════════
 
 // ─── Plain-text template replacement (for .txt templates + preview) ───
-function ciBuildFuelLines(type,vlsfoQty,lsmgoQty){
+// vTxt/mTxt: optional display text for a ranged nomination ("500–600").
+function ciBuildFuelLines(type,vlsfoQty,lsmgoQty,vTxt,mTxt){
   var v=Number(vlsfoQty)||0,m=Number(lsmgoQty)||0,lines=[];
-  if((type==='VLSFO'||type==='BOTH'||type==='RMG')&&v>0) lines.push('RMG: - '+v.toLocaleString()+' MT / 380 CST / 0.5% MAX SULFUR');
-  if((type==='MGO'||type==='LSMGO'||type==='BOTH')&&m>0) lines.push('MGO: - '+m.toLocaleString()+' MT / DMA / 0.1% MAX SULFUR');
+  if((type==='VLSFO'||type==='BOTH'||type==='RMG')&&v>0) lines.push('RMG: - '+(vTxt||v.toLocaleString())+' MT / 380 CST / 0.5% MAX SULFUR');
+  if((type==='MGO'||type==='LSMGO'||type==='BOTH')&&m>0) lines.push('MGO: - '+(mTxt||m.toLocaleString())+' MT / DMA / 0.1% MAX SULFUR');
   return lines.join('\n');
+}
+// "500–600" for a range, else the number — what people see for a card's qty box.
+function _qtyShow(q) { return q.min != null ? _fmtQtyRange(q.min, q.max) : Number(q.qty || 0).toLocaleString(); }
+// Re-read a card's quantities into a CI / email context (live, never cached).
+function _ctxQtyFromCard(ctx, vid) {
+  const t = ctx.type || 'VLSFO', vq = _cardQty(vid, 'vlsfo'), mq = _cardQty(vid, 'mgo');
+  ctx.vlsfoQty = t === 'MGO' ? 0 : vq.qty;   ctx.vlsfoTxt = _qtyShow(vq);
+  ctx.lsmgoQty = t === 'VLSFO' ? 0 : mq.qty; ctx.lsmgoTxt = _qtyShow(mq);
 }
 function ciApplyTemplate(tplText,ctx){
   var vessel=ctx.vessel||'',type=ctx.type||'VLSFO',vlsfoQty=ctx.vlsfoQty||0,lsmgoQty=ctx.lsmgoQty||0,location=ctx.location||'',laycan=ctx.laycan||'';
   tplText=tplText.replace(/[‘’‚‛]/g,"'").replace(/[“”]/g,'"');
   var v=Number(vlsfoQty)||0,m=Number(lsmgoQty)||0;
   if(v===0&&m===0) throw new Error('Both fuel quantities are 0.');
-  var fl=ciBuildFuelLines(type,v,m),vs=v>0?v.toLocaleString()+' MT':'',ms=m>0?m.toLocaleString()+' MT':'';
+  var fl=ciBuildFuelLines(type,v,m,ctx.vlsfoTxt,ctx.lsmgoTxt),vs=v>0?(ctx.vlsfoTxt||v.toLocaleString())+' MT':'',ms=m>0?(ctx.lsmgoTxt||m.toLocaleString())+' MT':'';
   if(tplText.indexOf('{{VESSEL_NAME}}')>=0||tplText.indexOf('{{FUEL_LINES}}')>=0||tplText.indexOf('{{VLSFO_QTY}}')>=0||tplText.indexOf('{{LAYCAN}}')>=0){
     return tplText.split('{{VESSEL_NAME}}').join(vessel).split('{{FUEL_LINES}}').join(fl).split('{{VLSFO_QTY}}').join(vs).split('{{MGO_QTY}}').join(ms).split('{{LSMGO_QTY}}').join(ms).split('{{LAYCAN}}').join(laycan).split('{{LOCATION}}').join(location);
   }
@@ -20567,14 +21692,13 @@ async function ciGenerate() {
     if (liveType)  ctx.type     = liveType.value;
     if (liveArea)  { ctx.area = liveArea.value; ctx.location = ciAreaLabel(liveArea.value); ctx.tplKey = ciGetTemplateKey(liveArea.value); }
     if (liveLc)    ctx.laycan   = ciLaycanStr(liveLc.value);
-    const freshType  = ctx.type || 'VLSFO';
-    ctx.vlsfoQty = (freshType === 'MGO')   ? 0 : (liveVlsfo ? parseFloat(liveVlsfo.value||0)||0 : 0);
-    ctx.lsmgoQty = (freshType === 'VLSFO') ? 0 : (liveMgo   ? parseFloat(liveMgo.value  ||0)||0 : 0);
+    if (liveVlsfo || liveMgo) _ctxQtyFromCard(ctx, vid);
+    else { ctx.vlsfoQty = 0; ctx.lsmgoQty = 0; }
     // Refresh preview panel
     const pv = document.getElementById('ci-prev-vlsfo');
     const pm = document.getElementById('ci-prev-lsmgo');
-    if (pv) pv.textContent = ctx.vlsfoQty > 0 ? ctx.vlsfoQty.toLocaleString() + ' MT' : '—';
-    if (pm) pm.textContent = ctx.lsmgoQty > 0 ? ctx.lsmgoQty.toLocaleString() + ' MT' : '—';
+    if (pv) pv.textContent = ctx.vlsfoQty > 0 ? ctx.vlsfoTxt + ' MT' : '—';
+    if (pm) pm.textContent = ctx.lsmgoQty > 0 ? ctx.lsmgoTxt + ' MT' : '—';
   }
 
   if (!ctx.tplKey || !_ciTemplates[ctx.tplKey]) {
@@ -20647,10 +21771,10 @@ async function _ciCloneDocxSubstitute(arrayBuffer, ctx) {
   // Regex sources are plain strings, so every backslash must be doubled —
   // with single '\d' / '\s' / '\b' the pattern silently became 'd', 's', 'b'
   // and never matched, leaving the template's old quantity in the file.
-  function xmlQtyReplace(xml, keyword, qty) {
+  function xmlQtyReplace(xml, keyword, qty, txt) {
     if (!qty || qty <= 0) return xml;
     const kw = String(keyword).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const qtyStr = Number(qty).toLocaleString(); // same formatting as the preview
+    const qtyStr = txt || Number(qty).toLocaleString(); // same formatting as the preview (a range stays a range)
     xml = xml.replace(
       new RegExp('(<w:t[^>]*>[^<]*' + kw + '[^<]*?)(\\d[\\d,]*(?:\\.\\d+)?)(\\s*MT\\b)', 'gi'),
       function(_, pre, _n, mt) { return pre + qtyStr + mt; }
@@ -20665,15 +21789,16 @@ async function _ciCloneDocxSubstitute(arrayBuffer, ctx) {
     return xml;
   }
 
+  const vTxt = ctx.vlsfoTxt, mTxt = ctx.lsmgoTxt;
   if (type === 'VLSFO' || type === 'RMG') {
-    docXml = xmlQtyReplace(docXml, 'RMG', vQty);
+    docXml = xmlQtyReplace(docXml, 'RMG', vQty, vTxt);
   } else if (type === 'MGO' || type === 'LSMGO') {
-    docXml = xmlQtyReplace(docXml, 'MGO', mQty);
-    docXml = xmlQtyReplace(docXml, 'DMA', mQty);
+    docXml = xmlQtyReplace(docXml, 'MGO', mQty, mTxt);
+    docXml = xmlQtyReplace(docXml, 'DMA', mQty, mTxt);
   } else {
-    docXml = xmlQtyReplace(docXml, 'RMG', vQty);
-    docXml = xmlQtyReplace(docXml, 'MGO', mQty);
-    docXml = xmlQtyReplace(docXml, 'DMA', mQty);
+    docXml = xmlQtyReplace(docXml, 'RMG', vQty, vTxt);
+    docXml = xmlQtyReplace(docXml, 'MGO', mQty, mTxt);
+    docXml = xmlQtyReplace(docXml, 'DMA', mQty, mTxt);
   }
 
   return { zip, docXml, warnings };
@@ -20838,8 +21963,9 @@ function ciDocxReplaceParagraphText(xml, ctx, warnings) {
   // showed the new vessel/location/quantities.
   const vlsfoNum = (type !== 'MGO')   ? Number(vlsfoQty) : 0;
   const mgoNum   = (type !== 'VLSFO') ? Number(lsmgoQty) : 0;
-  var fl2=ciBuildFuelLines(type,vlsfoNum,mgoNum);
-  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vlsfoNum.toLocaleString()+' MT':'','{{MGO_QTY}}':mgoNum>0?mgoNum.toLocaleString()+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mgoNum.toLocaleString()+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||''};
+  var fl2=ciBuildFuelLines(type,vlsfoNum,mgoNum,ctx.vlsfoTxt,ctx.lsmgoTxt);
+  const vS = ctx.vlsfoTxt || vlsfoNum.toLocaleString(), mS = ctx.lsmgoTxt || mgoNum.toLocaleString();
+  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vS+' MT':'','{{MGO_QTY}}':mgoNum>0?mS+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mS+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||''};
 
   // Validate all placeholders exist in raw XML text
   const docTextAll = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/gi)]
@@ -21053,7 +22179,7 @@ function ciOpenPreview(){
   if(vid){
     var lt=document.getElementById('v'+vid+'-type'),lv=document.getElementById('v'+vid+'-vlsfo'),lm=document.getElementById('v'+vid+'-mgo'),la=document.getElementById('v'+vid+'-area'),ll=document.getElementById('v'+vid+'-lc');
     if(lt)ctx.type=lt.value;if(la){ctx.area=la.value;ctx.location=ciAreaLabel(la.value);ctx.tplKey=ciGetTemplateKey(la.value);}if(ll)ctx.laycan=ciLaycanStr(ll.value);
-    var ft=ctx.type||'VLSFO';ctx.vlsfoQty=ft==='MGO'?0:(lv?parseFloat(lv.value||0)||0:0);ctx.lsmgoQty=ft==='VLSFO'?0:(lm?parseFloat(lm.value||0)||0:0);
+    if(lv||lm)_ctxQtyFromCard(ctx,vid);else{ctx.vlsfoQty=0;ctx.lsmgoQty=0;}
   }
   if(!ctx.tplKey||!_ciTemplates[ctx.tplKey]){errEl.innerHTML='No <strong>'+(ctx.tplKey||'?').toUpperCase()+'</strong> template uploaded.';errEl.style.display='';return;}
   if(!ctx.laycan){errEl.textContent='Laycan is empty.';errEl.style.display='';return;}
@@ -21291,8 +22417,8 @@ function _emailApply(tpl, ctx) {
   // only the grade(s) genuinely nominated appear at all — no dangling
   // "/ — MT LSMGO" when a vessel only takes VLSFO (or vice versa).
   var qtyParts = [];
-  if (v > 0) qtyParts.push(v.toLocaleString() + ' MT LSFO');
-  if (m > 0) qtyParts.push(m.toLocaleString() + ' MT LSMGO');
+  if (v > 0) qtyParts.push((ctx.vlsfoTxt || v.toLocaleString()) + ' MT LSFO');
+  if (m > 0) qtyParts.push((ctx.lsmgoTxt || m.toLocaleString()) + ' MT LSMGO');
   var qtyLine = qtyParts.length ? qtyParts.join(' / ') : '—';
   return tpl
     .split('{{AGENT}}').join(ctx.agent || '')
@@ -21404,14 +22530,15 @@ function emailOpenForVessel(vid) {
 
   var vessel   = (nEl.value || '').trim().toUpperCase();
   var type     = typeEl  ? typeEl.value  : 'VLSFO';
-  var vlsfoQty = type === 'MGO'   ? 0 : parseFloat((vlsfoEl && vlsfoEl.value) || 0) || 0;
-  var lsmgoQty = type === 'VLSFO' ? 0 : parseFloat((mgoEl   && mgoEl.value)   || 0) || 0;
+  var vqP = _parseQtyInput(vlsfoEl && vlsfoEl.value), mqP = _parseQtyInput(mgoEl && mgoEl.value);
+  var vlsfoQty = type === 'MGO'   ? 0 : vqP.qty;
+  var lsmgoQty = type === 'VLSFO' ? 0 : mqP.qty;
   var area     = areaEl  ? areaEl.value  : '';
   var location = ciAreaLabel(area);
   var laycan   = ciLaycanStr(lcEl ? lcEl.value : '');
   var agent    = agentEl ? agentEl.value : '';
 
-  _emailVesselCtx = { id:vid, vessel:vessel, type:type, vlsfoQty:vlsfoQty, lsmgoQty:lsmgoQty,
+  _emailVesselCtx = { id:vid, vessel:vessel, type:type, vlsfoQty:vlsfoQty, lsmgoQty:lsmgoQty, vlsfoTxt:_qtyShow(vqP), lsmgoTxt:_qtyShow(mqP),
     area:area, location:location, laycan:laycan, agent:agent };
 
   // Look up the typed/selected agent against the Agent Directory (case-insensitive,
