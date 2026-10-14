@@ -36,6 +36,10 @@ const SUITES = [
   ['layout-space', 'suites/layout/space.test.js', 'sidebar and activity feed fill the window'],
   ['realtime', 'suites/realtime/realtime.test.js', 'Supabase realtime sync, fallback polling, reconnect'],
   ['loose-ends', 'suites/realtime/loose.test.js', 'FY labels by year, Danger zone typed confirmation'],
+  ['nominations-parse', 'suites/nominations/parse.test.js', 'import parser: e-mail, WhatsApp, tables, ranges, IMO, dates, places'],
+  ['nominations-import', 'suites/nominations/import.test.js', 'import panel: paste/drop → review → edit → add, duplicates, trader'],
+  ['nominations-range', 'suites/nominations/range.test.js', 'quantity ranges: entry, displays, exports, planning max, sync'],
+  ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
 ];
 
 const args = process.argv.slice(2);

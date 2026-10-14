@@ -73,6 +73,11 @@ const CDN_MAP = [
   [/chartjs-plugin-datalabels\/2\.2\.0\/chartjs-plugin-datalabels\.min\.js/, vendor('chartjs-plugin-datalabels', 'dist/chartjs-plugin-datalabels.min.js')],
   [/jszip\/3\.10\.1\/jszip\.min\.js/, vendor('jszip', 'dist/jszip.min.js')],
   [/@emailjs\/browser@[^/]+\/dist\/email\.min\.js/, vendor('@emailjs/browser', 'dist/email.min.js')],
+  // Import nomination OCR (lazy-loaded): library, worker, WebAssembly core, English model.
+  [/tesseract\.js@6\.0\.1\/dist\/tesseract\.min\.js/, vendor('tesseract.js', 'dist/tesseract.min.js')],
+  [/tesseract\.js@6\.0\.1\/dist\/worker\.min\.js/, vendor('tesseract.js', 'dist/worker.min.js')],
+  [/tesseract\.js-core@6\.0\.0\/(tesseract-core[\w-]*\.(?:wasm\.js|js|wasm))$/, (m) => path.join(pkgDir('tesseract.js-core'), m[1])],
+  [/@tesseract\.js-data\/eng@1\.0\.0\/4\.0\.0_best_int\/eng\.traineddata\.gz$/, vendor('@tesseract.js-data/eng', '4.0.0_best_int/eng.traineddata.gz')],
 ];
 
 function createDb(opts) {
@@ -281,7 +286,13 @@ async function openApp(browser, db, opts) {
       return route.fulfill({ status: 404, body: 'not found' });
     }
     for (const [re, fileOf] of CDN_MAP) {
-      if (re.test(url)) { const file = fileOf(); return route.fulfill({ path: file, headers: { 'access-control-allow-origin': '*', 'content-type': file.endsWith('.css') ? 'text/css' : 'application/javascript' } }); }
+      const m = url.match(re);
+      if (m) {
+        const file = fileOf(m);
+        const type = file.endsWith('.css') ? 'text/css' : file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.gz') ? 'application/gzip' : 'application/javascript';
+        if (db.cdnLog) db.cdnLog.push(url);
+        return route.fulfill({ path: file, headers: { 'access-control-allow-origin': '*', 'content-type': type } });
+      }
     }
     if (/fonts\.(googleapis|gstatic)\.com/.test(url)) return route.fulfill({ status: 200, body: '', headers: { 'content-type': 'text/css' } });
     if (/^(data|blob):/.test(url)) return route.continue();
