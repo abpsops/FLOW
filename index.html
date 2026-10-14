@@ -935,6 +935,52 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .aq-btn:hover{border-color:var(--azure);color:var(--azure)}
 .aq-btn-primary{background:var(--azure);color:#fff;border-color:var(--azure)}
 .aq-btn-primary:hover{background:var(--azure-dk);color:#fff}
+/* Barge reload planner (Barge Fleet / trader dashboard) — tokens only, so
+   Harbour, Classic and Classic dark all colour it. */
+.rl-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.rl-intro{flex:1 1 320px;font-size:11px;color:var(--muted);line-height:1.5}
+.rl-horizon{display:flex;gap:4px;flex-shrink:0}
+.rl-stale{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);border:1px solid var(--amber-bd);border-left:3px solid var(--amber);border-radius:6px;padding:7px 10px;margin-bottom:10px}
+.rl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,440px),1fr));gap:14px}
+.rl-card{margin:0;padding:14px 16px;min-width:0}
+.rl-card.rl-flash{animation:rlFlash 1.6s ease-out 1}
+@keyframes rlFlash{0%,40%{box-shadow:0 0 0 3px var(--azure)}100%{box-shadow:none}}
+.rl-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.rl-name{font-size:13.5px;font-weight:700;color:var(--ink)}
+.rl-now{font-size:11px;color:var(--sub)}
+.rl-chart{position:relative;height:150px;border:1px solid var(--border2);border-radius:6px;background:var(--surface);overflow:hidden}
+.rl-chart svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.rl-cap{position:absolute;top:1px;right:4px;font-size:9px;color:var(--muted);line-height:1}
+.rl-rb{position:absolute;top:12px;transform:translateX(-50%);font-size:8.5px;font-weight:700;color:var(--red);background:var(--surface);border:1px solid var(--red);border-radius:3px;padding:0 3px;line-height:13px;white-space:nowrap}
+.rl-marks{position:absolute;left:0;right:0;bottom:3px;height:10px}
+.rl-mk{position:absolute;bottom:0;width:9px;height:9px;transform:translateX(-50%) rotate(45deg);border:1.5px solid var(--surface);box-sizing:border-box;cursor:help}
+.rl-mk-load{transform:translateX(-50%);background:var(--surface);border:2.5px solid var(--fuel-v);border-radius:2px}
+.rl-mk-block{transform:translateX(-50%);background:var(--muted);border-radius:50%}
+.rl-xaxis{position:relative;height:16px;margin-top:2px}
+.rl-xl{position:absolute;top:0;transform:translateX(-50%);font-size:9.5px;color:var(--muted);white-space:nowrap}
+.rl-legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:10px;color:var(--sub);margin:4px 0 10px}
+.rl-legend span{display:inline-flex;align-items:center;gap:4px}
+.rl-legend i{display:inline-block;width:12px;height:8px;border-radius:2px}
+.rl-legend i.rl-dash{height:0;border-top:2px dashed var(--sub);border-radius:0}
+.rl-legend i.rl-lg-job{width:8px;height:8px;background:var(--sub);transform:rotate(45deg)}
+.rl-legend i.rl-lg-load{width:8px;height:8px;border:2px solid var(--sub);box-sizing:border-box}
+.rl-recs{display:flex;flex-direction:column;gap:6px}
+.rl-rec{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--amber-bd);border-left:3px solid var(--amber);background:var(--amber-lt);border-radius:6px}
+.rl-rec.rl-rec-urgent{border-color:var(--red-bd);border-left-color:var(--red);background:var(--red-lt)}
+.rl-rec-body{flex:1 1 260px;min-width:0}
+.rl-rec-main{font-size:12px;color:var(--ink);line-height:1.45}
+.rl-rec-why{font-size:10.5px;color:var(--sub);margin-top:3px;line-height:1.45}
+.rl-rec-warn{font-size:10.5px;font-weight:700;color:var(--red);margin-top:4px;line-height:1.45}
+.rl-rec-act{flex-shrink:0}
+.rl-tag{font-size:9.5px;font-weight:700;padding:1px 6px;border-radius:4px}
+.rl-tag-red{color:var(--red);border:1px solid var(--red)}
+.rl-ok{font-size:11.5px;font-weight:700;color:var(--green);background:var(--green-lt2);border-left:3px solid var(--green);border-radius:6px;padding:8px 10px}
+.rl-empty{font-size:12px;color:var(--muted);padding:12px 0}
+.rl-events{margin-top:8px;font-size:10.5px;color:var(--sub)}
+.rl-events summary{cursor:pointer;font-weight:700;color:var(--sub)}
+.rl-events ol{margin:6px 0 0 18px;padding:0;line-height:1.6}
+@media (max-width:600px){.rl-chart{height:130px}.rl-card{padding:12px}}
+.ga-link:hover,.ga-link:focus-visible{background:var(--surface2);outline:none}
 
 /* ════════════════════════════════════════
    TOAST NOTIFICATIONS
@@ -2984,6 +3030,14 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
+  <!-- Stock forecast & reload plan — traders only (operators have it on
+       Barge Fleet, which traders can't open). renderDashReloadPlanner(). -->
+  <div class="chart-card" id="dash-reload-planner" style="display:none;margin-top:16px">
+    <div class="chart-title">Stock forecast &amp; reload plan</div>
+    <div class="chart-subtitle" style="margin-bottom:10px">Projected barge stock against committed jobs</div>
+    <div id="dash-reload-planner-body"></div>
+  </div>
+
   <!-- Monthly Quantity — current fiscal (= calendar) year. FY26 has Jan–Jul
        seeded from historical records; everything else is computed live from
        the same data the Monthly Report uses. Title/subtitle filled by
@@ -3404,6 +3458,12 @@ function flowWelcomeGo(pageId) {
     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
     Register New Barge
   </button>
+
+  <!-- Stock forecast & reload plan — rendered by renderReloadPlanner() -->
+  <div id="reload-planner-section">
+    <div class="sec-hdr" style="margin-top:1.5rem"><span class="sec-label">Stock forecast &amp; reload plan</span></div>
+    <div id="reload-planner-body"></div>
+  </div>
 
   <!-- CI Templates -->
   <div class="sec-hdr" style="margin-top:1.5rem"><span class="sec-label">Calling Instructions Reference Files</span></div>
@@ -4572,6 +4632,7 @@ function showPage(id) {
   if (id === 'records')      renderSavedRecords();
   if (id === 'checklist')    { renderChecklist(_lastSched || []); }
   if (id === 'loading')      { renderLoadingPage(); }
+  if (id === 'bargefleet')   renderReloadPlanner('reload-planner-body');
   if (id === 'bargetracking') { renderBargeTrackingPage(); }
   if (id === 'timeline')     {
     renderLiveROBDashboard();
@@ -4823,6 +4884,7 @@ function _parseLocalDate(s) {
    Pulls delayed operations + PAQ-pending nominations into one ranked
    list with inline actions, so the dashboard is something you act
    from, not just something you read. ── */
+let _rlQueueCount = 0; // reload items in Needs Attention — the hero line counts them too
 function renderActionQueue() {
   const el = document.getElementById('dash-action-queue');
   if (!el) return;
@@ -4840,6 +4902,17 @@ function renderActionQueue() {
       });
     }
   });
+
+  // Projected barge shortfalls (reload planner, next 7 days).
+  _rlQueueCount = 0;
+  if (typeof _rlAlerts === 'function') {
+    try {
+      _rlAlerts().forEach(function(a) {
+        _rlQueueCount++;
+        items.push({ urgency: a.severity === 'error' ? 0 : 0.5, kind: 'RELOAD', name: a.rec.bargeName + ' — ' + a.rec.grade + ' reload', detail: a.sub, go: a.go, key: a.key });
+      });
+    } catch (e) { console.warn('ABPS: reload queue items failed', e); }
+  }
 
   vcCards.forEach(card => {
     const cid = card.id.replace('vessel-', '');
@@ -4868,7 +4941,8 @@ function renderActionQueue() {
 
   const KIND_STYLE = {
     DELAYED: { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   },
-    PAQ:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' }
+    PAQ:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' },
+    RELOAD:  { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   }
   };
 
   const shown = items.slice(0, 8);
@@ -4880,8 +4954,10 @@ function renderActionQueue() {
     } else if (it.kind === 'PAQ') {
       actionHtml = `<button class="aq-btn aq-btn-primary" onclick="_aqMarkPaqReceived('${escJs(it.cid)}')">Mark Received</button>
         <button class="aq-btn" onclick="_globalSearchGoNomination('${escJs(it.cid)}')">Open</button>`;
+    } else if (it.kind === 'RELOAD') {
+      actionHtml = `<button class="aq-btn aq-btn-primary" onclick="rlGoToForecast('${escJs(it.go)}')">View reload plan</button>`;
     }
-    return `<div class="aq-row">
+    return `<div class="aq-row"${it.key ? ` data-alert-key="${esc(it.key)}"` : ''}>
       <span class="aq-tag" style="color:${s.color};background:${s.bg};border-color:${s.border}">${it.kind}</span>
       <div class="aq-body">
         <div class="aq-name">${esc(it.name)}</div>
@@ -5066,9 +5142,10 @@ function refreshDashboard() {
   _dashSafe('charts',   () => renderDashCharts(savedRecs, []));
   _dashSafe('fueling',  () => renderDashFuelingStatus());
   _dashSafe('fleet',    () => renderDashFleetStatus());
+  _dashSafe('reload planner', renderDashReloadPlanner);
   _dashSafe('watchlist',() => renderTrackRecordWatchlist());
   _dashSafe('activity', () => renderDashActivity(savedRecs, []));
-  _dashSafe('hero',     () => _renderDashHero(now, totalAlerts));
+  _dashSafe('hero',     () => _renderDashHero(now, totalAlerts + _rlQueueCount));
 }
 /* Harbour Light hero banner text (the banner itself is CSS-hidden in
    Classic). "Supplies today" = schedule items whose barge start falls on
@@ -5784,6 +5861,7 @@ function _routerOnScheduleReady() {
     refreshDashboard();
     refreshAlertsPage();
     updateAlertsBadge();
+    if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown();
   }, 150);
   showPage('schedule');
 }
@@ -5825,6 +5903,8 @@ function _scheduleDashRefresh(nomKPIs) {
     _dashRefreshTimer = null;
     if (_dashRefreshNomKPIs) { _dashRefreshNomKPIs = false; try { refreshNominationKPIs(); } catch(e) { console.warn('ABPS: nomination KPI refresh failed:', e); } }
     if (_currentPage === 'dashboard') refreshDashboard();
+    // Barge edits (ROB, buffers, capacity) re-draw the forecast on Barge Fleet.
+    if (_currentPage === 'bargefleet' && typeof renderReloadPlanner === 'function') { try { renderReloadPlanner('reload-planner-body'); } catch(e) { console.warn('ABPS: reload planner refresh failed:', e); } }
   }, 200);
 }
 // Alias function names for compatibility
@@ -6135,6 +6215,11 @@ function computeGlobalAlerts() {
     if (b.vcap && (rob.liveV || 0) / b.vcap < 0.2) alerts.push({ key: 'vrob|' + b.name, label: 'VLSFO ROB low', sub: b.name, severity: 'error' });
     if (b.mcap && (rob.liveM || 0) / b.mcap < 0.2) alerts.push({ key: 'mrob|' + b.name, label: 'LSMGO ROB low', sub: b.name, severity: 'error' });
   });
+  // Projected shortfalls from the reload planner (next 7 days), one per
+  // barge + grade + nomination; `go` = barge id to open the forecast at.
+  if (typeof _rlAlerts === 'function') {
+    try { _rlAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: reload alerts failed', e); }
+  }
   return alerts;
 }
 
@@ -6164,6 +6249,11 @@ function _refreshGlobalAlertsBell() {
     list.innerHTML = alerts.length
       ? alerts.map(function(a) {
           const color = a.severity === 'error' ? 'var(--red)' : 'var(--amber)';
+          // Reload alerts open the barge's forecast.
+          if (a.go != null) return `<div class="ga-item ga-link" role="button" tabindex="0" data-alert-key="${esc(a.key)}" onclick="rlGoToForecast('${escJs(a.go)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();rlGoToForecast('${escJs(a.go)}')}" style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px;cursor:pointer">
+            <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
+            <div style="color:var(--sub);font-size:11px;margin-top:1px">${esc(a.sub)}</div>
+          </div>`;
           return `<div style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px">
             <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
             <div style="color:var(--sub);font-size:11px;margin-top:1px">${esc(a.sub)}</div>
@@ -7384,6 +7474,7 @@ function _applyPayload(payload, replaceUnions) {
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
   if (typeof renderTrashBin === 'function') renderTrashBin();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
+  if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
   _restoreFocus(focus);
 }
 
@@ -8112,6 +8203,7 @@ function _readLoadingForm() {
 }
 
 function _clearLoadingForm() {
+  if (typeof _rlClearPrefillNote === 'function') _rlClearPrefillNote();
   ['ld-terminal','ld-qty','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
@@ -8291,6 +8383,7 @@ function _refreshLoadingConsumers() {
   if (typeof renderWeekCalendar === 'function') renderWeekCalendar(_calWeekOffset || 0);
   if (typeof renderTimelineLoadingStrip === 'function') renderTimelineLoadingStrip();
   if (typeof refreshDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) refreshDashboard();
+  if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // forecast + reload alerts
 }
 
 function _refreshLoadingTerminalDatalist() {
@@ -10855,7 +10948,9 @@ async function saveManualROB() {
   // new supply happened to trigger a bake first. saveSharedState() now
   // strips override keys only for a barge it actually bakes in that write.
   try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB || {})); } catch(e) {}
-  return saveSharedState(); // local-only when no cloud; errors surface via the banner
+  const saved = saveSharedState(); // local-only when no cloud; errors surface via the banner
+  if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // new ROB → new forecast
+  return saved;
 }
 
 async function loadManualROB() {
@@ -13986,6 +14081,10 @@ function _getBargeTimeline(bargeId, bargeName, includePastUnsaved) {
         etc:    item.etc,
         vQ:     item.vQ || 0,
         mQ:     item.mQ || 0,
+        // Nominated (planning) quantity — vQ/mQ are capped at the ROB the
+        // scheduler saw, so a short barge's job shows less than it needs.
+        nomVQ:  item.nomVQ != null ? item.nomVQ : (item.vQ || 0),
+        nomMQ:  item.nomMQ != null ? item.nomMQ : (item.mQ || 0),
         sno:    item.sno,
         pastEtc: item.etc <= now,
         kind:   'vessel',
@@ -14034,47 +14133,51 @@ function _blocksForBarge(bargeId, bargeName) {
 var FW_MIN_PARCEL_MT = 50;   // below this a gap isn't a sellable parcel
 var FW_LOOKAHEAD_DAYS = 30;  // later commitments still claim stock even outside the week shown
 
-function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd) {
-  var H = 3600000;
+/* ─── Barge stock projection — the ONE simulation of a barge's stock that
+   Free Windows (available-to-promise) and the reload planner both read, so
+   the two can never disagree. Start = live ROB now (supplies, reloads and
+   overrides already in it) less committed jobs whose ETC passed but whose
+   supply isn't saved yet; then, in start order up to lookEnd: vessel jobs
+   (completed ones skipped by _getBargeTimeline), Unavailable blocks and
+   planned Loadings. opts.liveROBs: a getAllLiveROBs() result to reuse when
+   projecting several barges in one pass. ─── */
+function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   var now = new Date();
-  // Never start before "now" — even if the given range begins earlier.
-  var cursor0 = (rangeStart && rangeStart > now) ? rangeStart : now;
-  var horizonEnd = rangeEnd || new Date(cursor0.getTime() + 7 * 86400000);
-  var lookEnd = new Date(Math.max(horizonEnd.getTime(), now.getTime() + FW_LOOKAHEAD_DAYS * 86400000));
   var cont = _contingencyHrs();
-  var travel = Math.max(0, Number(_calcParams && _calcParams.travelHrs) || 0);
-  var hoseHrs = (_calcParams && _calcParams.hoseHrs != null && !isNaN(Number(_calcParams.hoseHrs))) ? Number(_calcParams.hoseHrs) : 6;
-
   var barge = (_bargeConfig || []).find(function(x) { return x.id === bargeId || x.name === bargeName; }) || {};
-  var vtph = barge.vtph || 300, mtph = barge.mtph || 100;
   // Same minimum-stock buffers the Availability Check protects.
   var vbuf = Math.max(0, Number(barge.vbuf) || 0), mbuf = Math.max(0, Number(barge.mbuf) || 0);
-
-  var liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
+  var liveROBs = (opts && opts.liveROBs) || ((typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {});
   var liveRob = liveROBs[bargeId] || Object.values(liveROBs).find(function(r) { return r.bargeName === bargeName; }) || {};
   var vcap = liveRob.vcap || 0, mcap = liveRob.mcap || 0;
   var st = { v: liveRob.liveV || 0, m: liveRob.liveM || 0 };
 
-  var items = [];
+  var items = [], past = [];
   var pastBusyEnd = null;
+  // A job commits its planning quantity (nominated, top of a range) — not
+  // the scheduler's vQ/mQ, which stop at whatever ROB it saw at generation
+  // and so hid a shortfall (or a loading planned before the job).
+  var qV = function(op) { return op.nomVQ != null ? op.nomVQ : (op.vQ || 0); };
+  var qM = function(op) { return op.nomMQ != null ? op.nomMQ : (op.mQ || 0); };
   _getBargeTimeline(bargeId, bargeName, true).forEach(function(op) {
     if (op.pastEtc) {
       // ETC passed but supply not saved: still committed fuel (live ROB
       // hasn't deducted it) and the barge may still be in its contingency.
-      st.v = Math.max(0, st.v - (op.vQ || 0));
-      st.m = Math.max(0, st.m - (op.mQ || 0));
+      st.v = Math.max(0, st.v - qV(op));
+      st.m = Math.max(0, st.m - qM(op));
+      past.push({ vessel: op.vessel, nomUid: op.nomUid, nomV: qV(op), nomM: qM(op), start: op.start, end: op.etc });
       var pe = _opBusyEnd(op);
       if (!pastBusyEnd || pe > pastBusyEnd) pastBusyEnd = pe;
       return;
     }
     if (op.start >= lookEnd) return;
     if (op.kind === 'block') items.push({ kind: 'block', start: op.start, end: op.etc, busyEnd: op.etc, label: 'Unavailable — ' + (op.reason || 'blocked'), reason: op.reason || '', blockId: op.blockId });
-    else items.push({ kind: 'vessel', start: op.start, end: op.etc, busyEnd: _opBusyEnd(op), label: 'Vessel — ' + op.vessel, vessel: op.vessel, nomV: op.vQ || 0, nomM: op.mQ || 0 });
+    else items.push({ kind: 'vessel', start: op.start, end: op.etc, busyEnd: _opBusyEnd(op), label: 'Vessel — ' + op.vessel, vessel: op.vessel, nomUid: op.nomUid, sno: op.sno, nomV: qV(op), nomM: qM(op) });
   });
   (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
     var s = new Date(r.startAt), e = new Date(r.endAt);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= lookEnd) return;
-    items.push({ kind: 'loading', start: s, end: e, busyEnd: addHrs(e, cont), label: 'Loading — ' + (r.terminal || 'Terminal'), grade: r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO', qty: Number(r.qty) || 0 });
+    items.push({ kind: 'loading', start: s, end: e, busyEnd: addHrs(e, cont), label: 'Loading — ' + (r.terminal || 'Terminal'), terminal: r.terminal || '', loadingId: r.id, grade: r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO', qty: Number(r.qty) || 0 });
   });
   items.sort(function(a, b) { return (a.start - b.start) || (a.end - b.end); });
 
@@ -14100,6 +14203,32 @@ function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd) {
     }
     return { v: Math.max(0, minV - vbuf), m: Math.max(0, minM - mbuf), lowV: minV, lowM: minM };
   }
+  return { now: now, barge: barge, liveRob: liveRob, vcap: vcap, mcap: mcap, vbuf: vbuf, mbuf: mbuf, cont: cont,
+           robNow: { v: liveRob.liveV || 0, m: liveRob.liveM || 0 }, start: { v: st.v, m: st.m },
+           past: past, pastBusyEnd: pastBusyEnd, items: items, apply: apply, atpFrom: atpFrom };
+}
+
+// opts.liveROBs: passed through to _bargeStockProjection (see there).
+function computeFreeWindows(bargeId, bargeName, rangeStart, rangeEnd, opts) {
+  var H = 3600000;
+  var now = new Date();
+  // Never start before "now" — even if the given range begins earlier.
+  var cursor0 = (rangeStart && rangeStart > now) ? rangeStart : now;
+  var horizonEnd = rangeEnd || new Date(cursor0.getTime() + 7 * 86400000);
+  var lookEnd = new Date(Math.max(horizonEnd.getTime(), now.getTime() + FW_LOOKAHEAD_DAYS * 86400000));
+  var travel = Math.max(0, Number(_calcParams && _calcParams.travelHrs) || 0);
+  var hoseHrs = (_calcParams && _calcParams.hoseHrs != null && !isNaN(Number(_calcParams.hoseHrs))) ? Number(_calcParams.hoseHrs) : 6;
+
+  // Stock simulation shared with the reload planner (_bargeStockForecast).
+  var proj = _bargeStockProjection(bargeId, bargeName, lookEnd, opts);
+  var cont = proj.cont;
+  var barge = proj.barge;
+  var vtph = barge.vtph || 300, mtph = barge.mtph || 100;
+  var vbuf = proj.vbuf, mbuf = proj.mbuf;
+  var liveRob = proj.liveRob;
+  var st = { v: proj.start.v, m: proj.start.m };
+  var items = proj.items, apply = proj.apply, atpFrom = proj.atpFrom;
+  var pastBusyEnd = proj.pastBusyEnd;
 
   var rows = [];
   function inRange(s, e) { return e > cursor0 && s < horizonEnd; }
@@ -14181,6 +14310,594 @@ function _freeWindowsWeekRange() {
   var weekStart = new Date(today.getTime() + (_calWeekOffset || 0) * 86400000);
   var weekEnd = new Date(weekStart.getTime() + 7 * 86400000);
   return { weekStart: weekStart, weekEnd: weekEnd };
+}
+
+/* ══════════════════════════════════════════════════════════════════
+   BARGE RELOAD PLANNER — per-barge VLSFO/LSMGO stock forecast and
+   "reload by" advice. Built on _bargeStockProjection(), the same
+   simulation Free Windows' available-to-promise reads, so the two can
+   never disagree:
+   • a vessel job deducts its PLANNING quantity (top of a quantity range —
+     schedule vQ/mQ already are) at its START: the fuel has to be onboard
+     when the hoses connect, so that is the conservative moment;
+   • a job whose ETC passed but whose supply isn't saved is still
+     committed and comes off "now";
+   • a planned Loading adds at its end, capped at tank capacity; dated
+     reload events are already inside live ROB.
+   Breach = first job of a grade (starting from now on, inside the
+   horizon) after which projected stock is below the barge's minimum-stock
+   buffer (or below zero). Nothing here writes data: "Plan this loading"
+   only pre-fills the Loading form, which the operator still has to save.
+   ══════════════════════════════════════════════════════════════════ */
+var RL_HORIZON_DAYS = [3, 7, 14];
+var RL_DEFAULT_DAYS = 7;
+var RL_ALERT_HORIZON_HRS = 7 * 24;   // dashboard alerts use a fixed week, whatever the selector shows
+var RL_ROUND_MT = 50;                // reload quantity rounded UP to a 50 MT parcel
+var RL_SLOT_STEP_MIN = 15;           // suggested start rounded up to a quarter hour (the form takes HH:MM)
+// Same pre-/post-loading defaults the Loading form starts with (berthing,
+// connection, line-up / disconnection, sampling, documents).
+var RL_PRE_OPS_HRS = 2.5, RL_POST_OPS_HRS = 3.5;
+var RL_LS_KEY = 'flow_reload_horizon_days';
+var _rlDaysMem = null; // in-memory fallback when localStorage is blocked
+
+var RL_GRADES = [
+  { g: 'VLSFO', k: 'v', nom: 'nomV', cap: 'vcap', buf: 'vbuf', color: 'var(--fuel-v)', lt: 'var(--fuel-v-lt)' },
+  { g: 'LSMGO', k: 'm', nom: 'nomM', cap: 'mcap', buf: 'mbuf', color: 'var(--fuel-m)', lt: 'var(--fuel-m-lt)' }
+];
+
+function _rlHorizonDays() {
+  if (_rlDaysMem) return _rlDaysMem;
+  try { var d = parseInt(localStorage.getItem(RL_LS_KEY), 10); if (RL_HORIZON_DAYS.indexOf(d) !== -1) return d; } catch (e) {}
+  return RL_DEFAULT_DAYS;
+}
+function rlSetHorizon(days) {
+  days = Number(days);
+  if (RL_HORIZON_DAYS.indexOf(days) === -1) return;
+  _rlDaysMem = days;
+  try { localStorage.setItem(RL_LS_KEY, String(days)); } catch (e) {} // per-viewer convenience only
+  _rlRenderAllHosts();
+}
+
+function _rlTravelHrs() { return Math.max(0, Number(_calcParams && _calcParams.travelHrs) || 0); }
+// Terminal time for a loading: pre-ops + quantity ÷ terminal rate + post-ops
+// (the Loading form's own model, so the pre-filled form shows the same).
+function _rlLoadingHrs(qty, grade) { return RL_PRE_OPS_HRS + computeLoadingDurationHours(qty, grade) + RL_POST_OPS_HRS; }
+function _rlCeilTo(d, mins) {
+  var step = mins * 60000, t = Math.ceil(d.getTime() / step) * step;
+  return new Date(t);
+}
+function _rlFloorTo(d, mins) {
+  var step = mins * 60000;
+  return new Date(Math.floor(d.getTime() / step) * step);
+}
+function _rlHM(d) { return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }
+function _rlDay(d) { return d.toLocaleDateString('en-GB', { weekday: 'short' }); }
+// "Wed 15 Oct 20:00"
+function _rlFmt(d) { return _rlDay(d) + ' ' + d.getDate() + ' ' + MO[d.getMonth()] + ' ' + _rlHM(d); }
+// "Wed 20:00" — for alerts that sit next to today's date anyway
+function _rlFmtShort(d) { return _rlDay(d) + ' ' + _rlHM(d); }
+function _rlFmtSlot(a, b) {
+  return a.toDateString() === b.toDateString() ? _rlDay(a) + ' ' + _rlHM(a) + '–' + _rlHM(b) : _rlFmtShort(a) + ' – ' + _rlFmtShort(b);
+}
+function _rlMT(n) { return Math.round(n || 0).toLocaleString() + ' MT'; }
+function _rlDurText(h) { return h >= 10 ? Math.round(h) + ' h' : (Math.round(h * 2) / 2) + ' h'; }
+
+// Barges the planner looks at — the ROB engine's own config, read only:
+// filling it in from here would let the next save bake supplies into the
+// opening ROB earlier than it otherwise would.
+function _rlBarges() { return _bargeConfig || []; }
+
+/* Usable loading windows for a barge between now and `until`: Free
+   Windows' own gaps (jobs + ETC contingency, Loadings, Unavailable blocks,
+   conflicts), less travel to the terminal at the start and travel +
+   contingency before the next commitment at the end, less any
+   hypothetical reloads already proposed. [{from, to}] */
+function _rlLoadingWindows(b, until, hyps, liveROBs) {
+  var now = new Date(), H = 3600000;
+  if (!(until > now)) return [];
+  var travel = _rlTravelHrs(), cont = _contingencyHrs();
+  var rows = computeFreeWindows(b.id, b.name, now, until, { liveROBs: liveROBs });
+  var out = [];
+  rows.forEach(function(w) {
+    if (w.status !== 'free' && w.status !== 'short') return; // short = too short for a VESSEL parcel; a loading has its own maths
+    var from = new Date(Math.max(w.gapStart.getTime(), now.getTime()) + travel * H);
+    var to = w.gapEnd ? new Date(Math.min(until.getTime(), w.gapEnd.getTime() - (travel + cont) * H)) : until;
+    if (to > from) out.push({ from: from, to: to });
+  });
+  (hyps || []).forEach(function(h) {
+    var bf = new Date(h.start.getTime() - travel * H), bt = new Date(h.end.getTime() + (cont + travel) * H);
+    out = [].concat.apply([], out.map(function(w) {
+      if (bt <= w.from || bf >= w.to) return [w];
+      var parts = [];
+      if (bf > w.from) parts.push({ from: w.from, to: bf });
+      if (bt < w.to) parts.push({ from: bt, to: w.to });
+      return parts;
+    }));
+  });
+  return out;
+}
+
+// Other barges whose projected stock of `grade` at `at` covers `qty` on
+// top of everything they're already committed to (Free Windows' ATP at
+// that instant) — candidates to take the job over.
+function _rlAltBarges(excludeId, gi, at, qty, liveROBs) {
+  var out = [];
+  var lookEnd = new Date(Math.max(at.getTime(), Date.now()) + FW_LOOKAHEAD_DAYS * 86400000);
+  _rlBarges().forEach(function(b) {
+    if (String(b.id) === String(excludeId)) return;
+    var p = _bargeStockProjection(b.id, b.name, lookEnd, { liveROBs: liveROBs });
+    var s = { v: p.start.v, m: p.start.m }, idx = 0;
+    while (idx < p.items.length && p.items[idx].start < at) { p.apply(p.items[idx], s); idx++; }
+    var atp = p.atpFrom(idx, s.v, s.m);
+    var spare = Math.round(atp[gi.k]);
+    if (spare >= qty) out.push({ id: b.id, name: b.name, spare: spare });
+  });
+  return out.sort(function(a, c) { return c.spare - a.spare; });
+}
+
+/* _bargeStockForecast(bargeId, horizonHrs[, {liveROBs}]) →
+   { bargeId, bargeName, now, end, horizonHrs, vcap, mcap, vbuf, mbuf,
+     robNow {v,m}, events [...], series {VLSFO:[{t,q}], LSMGO:[...]},
+     recs [...], ok }
+   events: one row per thing that moves (or blocks) stock, in Free
+   Windows' order, with stock of both grades after it (clamped at 0
+   exactly as Free Windows clamps). recs: one per breach — see _rlRecommend. */
+function _bargeStockForecast(bargeId, horizonHrs, opts) {
+  opts = opts || {};
+  var H = 3600000;
+  var b = _rlBarges().find(function(x) { return String(x.id) === String(bargeId); });
+  if (!b) return null;
+  var hrs = Number(horizonHrs) > 0 ? Number(horizonHrs) : RL_DEFAULT_DAYS * 24;
+  var now = new Date(), end = new Date(now.getTime() + hrs * H);
+  var liveROBs = opts.liveROBs || getAllLiveROBs();
+  // Same 30-day look-ahead Free Windows uses, so later jobs still count
+  // when sizing a reload.
+  var lookEnd = new Date(Math.max(end.getTime(), now.getTime() + FW_LOOKAHEAD_DAYS * 86400000));
+  var proj = _bargeStockProjection(b.id, b.name, lookEnd, { liveROBs: liveROBs });
+
+  // ── Time series: the projection walked exactly as Free Windows walks it.
+  var s = { v: proj.robNow.v, m: proj.robNow.m };
+  var events = [{ t: now, kind: 'now', label: 'ROB now', v: s.v, m: s.m, dv: 0, dm: 0 }];
+  proj.past.forEach(function(p) {
+    s.v = Math.max(0, s.v - p.nomV); s.m = Math.max(0, s.m - p.nomM);
+    events.push({ t: now, kind: 'overdue', label: p.vessel, vessel: p.vessel, nomUid: p.nomUid, jobStart: p.start, dv: -p.nomV, dm: -p.nomM, v: s.v, m: s.m });
+  });
+  s = { v: proj.start.v, m: proj.start.m };
+  var lastT = now;
+  proj.items.forEach(function(it, idx) {
+    if (it.start >= end) return;
+    var before = { v: s.v, m: s.m };
+    proj.apply(it, s);
+    // Stock moves at a job's start and a loading's end (an overlap/conflict
+    // can't make the line run backwards in time).
+    var t = it.kind === 'loading' ? it.end : it.start;
+    if (t < lastT) t = lastT;
+    if (t > end) t = end;
+    lastT = t;
+    var ev = { t: t, idx: idx, kind: it.kind, label: it.kind === 'vessel' ? it.vessel : (it.kind === 'loading' ? (it.terminal || 'Terminal') : (it.reason || 'blocked')),
+      start: it.start, end: it.end, v: s.v, m: s.m, dv: s.v - before.v, dm: s.m - before.m, beforeV: before.v, beforeM: before.m };
+    if (it.kind === 'vessel') { ev.vessel = it.vessel; ev.nomUid = it.nomUid; ev.nomV = it.nomV; ev.nomM = it.nomM; }
+    if (it.kind === 'loading') { ev.grade = it.grade; ev.qty = it.qty; }
+    events.push(ev);
+  });
+  var series = {};
+  RL_GRADES.forEach(function(gi) {
+    series[gi.g] = events.map(function(e) { return { t: e.t, q: e[gi.k] }; });
+    series[gi.g].push({ t: end, q: s[gi.k] });
+  });
+
+  var fc = { bargeId: b.id, bargeName: b.name, now: now, end: end, horizonHrs: hrs,
+    vcap: proj.vcap, mcap: proj.mcap, vbuf: proj.vbuf, mbuf: proj.mbuf, robNow: proj.robNow, start: proj.start,
+    events: events, series: series, recs: [], travelHrs: _rlTravelHrs(), contingencyHrs: proj.cont };
+  fc.recs = _rlAnalyse(b, proj, now, end, liveROBs);
+  fc.recs.sort(function(a, c) { return (a.jobStart - c.jobStart) || (a.grade < c.grade ? -1 : 1); });
+  fc.ok = fc.recs.length === 0;
+  return fc;
+}
+
+/* Breaches of both grades, earliest first, each with its recommendation.
+   After each one a hypothetical reload of the recommended size is assumed
+   done and the walk repeats, so a further breach is only reported if one
+   reload can't cover everything (tank too small, or a later stretch after
+   the next planned loading). Proposed reloads of either grade occupy the
+   barge, so two recommendations never share one terminal slot. */
+function _rlAnalyse(b, proj, now, end, liveROBs) {
+  var H = 3600000, travel = _rlTravelHrs(), cont = proj.cont;
+  var busy = []; // every proposed reload so far (both grades)
+  var gs = RL_GRADES.map(function(gi) {
+    var steps = [];
+    proj.items.forEach(function(it, idx) {
+      if (it.kind === 'vessel' && it[gi.nom] > 0) steps.push({ t: it.start, kind: 'vessel', q: it[gi.nom], it: it, idx: idx });
+      else if (it.kind === 'loading' && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
+    });
+    return { gi: gi, buf: proj[gi.buf], cap: proj[gi.cap], steps: steps, hyps: [], lastIdx: -1, done: false };
+  });
+  function merged(g) {
+    var all = g.steps.concat(g.hyps.map(function(h) { return { t: h.start, kind: 'hyp', q: h.qty }; }));
+    return all.sort(function(a, c) { return (a.t - c.t) || ((a.kind === 'hyp' ? 0 : 1) - (c.kind === 'hyp' ? 0 : 1)); });
+  }
+  function add(g, run, q) { return g.cap ? Math.min(g.cap, run + q) : run + q; }
+  // Same clamped walk as Free Windows; the signed value after a job is kept
+  // only to say how short it is.
+  function firstBreach(g, afterIdx) {
+    var run = proj.start[g.gi.k], seq = merged(g);
+    for (var i = 0; i < seq.length; i++) {
+      var st = seq[i];
+      if (st.kind !== 'vessel') { run = add(g, Math.max(0, run), st.q); continue; }
+      var before = Math.max(0, run);
+      run = before - st.q;
+      // A job already under way (started before now) can't be reloaded for.
+      if (st.t >= now && st.t < end && st.idx > afterIdx && run < g.buf) return { step: st, before: before, after: run };
+    }
+    return null;
+  }
+  // Stock just before T, and what's needed from T to stay ≥ buffer for
+  // every job of this grade until the next planned loading (or horizon end).
+  function sizeAt(g, T) {
+    var seq = merged(g), run = proj.start[g.gi.k], i = 0;
+    for (; i < seq.length && seq[i].t < T; i++) {
+      run = seq[i].kind === 'vessel' ? Math.max(0, run) - seq[i].q : add(g, Math.max(0, run), seq[i].q);
+    }
+    var stock = Math.max(0, run), low = stock, jobs = 0, until = end, untilWhy = 'horizon';
+    for (; i < seq.length; i++) {
+      var s2 = seq[i];
+      if (s2.t >= end) break;
+      if (s2.kind !== 'vessel') { until = s2.t; untilWhy = s2.kind === 'loading' ? 'loading' : 'reload'; break; }
+      low -= s2.q; jobs++;
+    }
+    var need = Math.max(0, g.buf - low);
+    var want = Math.ceil(need / RL_ROUND_MT) * RL_ROUND_MT;
+    var room = g.cap ? Math.max(0, Math.floor(g.cap - stock)) : Infinity;
+    return { stock: stock, need: need, want: want, qty: Math.min(want, room), room: room, capped: want > room, jobs: jobs, until: until, untilWhy: untilWhy };
+  }
+
+  var recs = [];
+  for (var iter = 0; iter < 10; iter++) {
+    var pick = null;
+    gs.forEach(function(g) {
+      if (g.done) return;
+      var br = firstBreach(g, g.lastIdx);
+      if (!br) { g.done = true; return; }
+      if (!pick || br.step.t < pick.br.step.t) pick = { g: g, br: br };
+    });
+    if (!pick) break;
+    var g = pick.g, gi = g.gi, br = pick.br, it = br.step.it;
+    var reloadBy = new Date(it.start.getTime() - (travel + cont) * H);
+    // Latest free window that fits travel + the whole loading before reload-by.
+    var wins = _rlLoadingWindows(b, reloadBy, busy, liveROBs);
+    var slot = null, size = null;
+    for (var w = wins.length - 1; w >= 0 && !slot; w--) {
+      var T = _rlCeilTo(wins[w].from, RL_SLOT_STEP_MIN);
+      var sz = sizeAt(g, T);
+      if (!(sz.qty > 0)) continue;
+      var dur = _rlLoadingHrs(sz.qty, gi.g);
+      if (T.getTime() + dur * H <= wins[w].to.getTime()) {
+        slot = { start: T, end: new Date(T.getTime() + dur * H), windowFrom: wins[w].from, windowTo: wins[w].to };
+        size = sz;
+      }
+    }
+    var overdue = reloadBy <= now, planStart;
+    if (!slot) {
+      // No window: sized as if it finished right at reload-by (or now).
+      size = sizeAt(g, overdue ? now : reloadBy);
+      var d0 = _rlLoadingHrs(size.qty, gi.g);
+      planStart = new Date(Math.max(_rlCeilTo(now, RL_SLOT_STEP_MIN).getTime(), _rlFloorTo(new Date(reloadBy.getTime() - d0 * H), RL_SLOT_STEP_MIN).getTime()));
+    } else planStart = slot.start;
+    var durHrs = _rlLoadingHrs(size.qty, gi.g);
+    var rec = {
+      key: 'reload|' + b.id + '|' + gi.g + '|' + (it.nomUid || it.vessel),
+      bargeId: b.id, bargeName: b.name, grade: gi.g, vessel: it.vessel, nomUid: it.nomUid || null,
+      jobStart: it.start, jobQty: it[gi.nom], before: br.before, after: br.after, buffer: g.buf,
+      shortBy: Math.round(g.buf - br.after), belowZero: br.after < 0,
+      reloadBy: reloadBy, overdue: overdue, travelHrs: travel, contingencyHrs: cont,
+      qty: size.qty, need: Math.round(size.need), want: size.want, fill: size.room === Infinity ? null : size.room,
+      capped: size.capped, stockAtLoad: Math.round(size.stock),
+      coversJobs: size.jobs, coversUntil: size.until, coversUntilWhy: size.untilWhy,
+      durHrs: durHrs, pumpHrs: computeLoadingDurationHours(size.qty, gi.g),
+      slot: slot, planStart: planStart, alternatives: slot ? [] : _rlAltBarges(b.id, gi, it.start, it[gi.nom], liveROBs), insufficient: false
+    };
+    recs.push(rec);
+    g.lastIdx = br.step.idx;
+    if (!(rec.qty > 0)) { rec.insufficient = true; g.done = true; continue; }
+    var h = { start: planStart, end: new Date(planStart.getTime() + durHrs * H), qty: rec.qty };
+    g.hyps.push(h); busy.push(h);
+    // Even with this reload the same job still short? Say by how much.
+    var again = firstBreach(g, -1);
+    if (again && again.step.idx === br.step.idx) { rec.insufficient = true; rec.stillShort = Math.round(g.buf - again.after); }
+  }
+  return recs;
+}
+
+/* ─── Dashboard alerts: one per breach in the next 7 days, keyed by
+   barge + grade + nomination so it stays the same alert across renders. ─── */
+function _rlAlerts() {
+  var out = [], seen = {};
+  var barges = _rlBarges();
+  if (!barges.length) return out;
+  var liveROBs = getAllLiveROBs(), now = Date.now();
+  barges.forEach(function(b) {
+    var fc;
+    try { fc = _bargeStockForecast(b.id, RL_ALERT_HORIZON_HRS, { liveROBs: liveROBs }); } catch (e) { console.warn('ABPS: reload forecast failed for', b.name, e); return; }
+    (fc && fc.recs || []).forEach(function(r) {
+      if (seen[r.key]) return;
+      seen[r.key] = 1;
+      out.push({
+        key: r.key, label: 'Reload needed', go: String(b.id), kind: 'reload', rec: r,
+        sub: b.name + ' ' + r.grade + ' short for ' + r.vessel + ' (' + _rlFmtShort(r.jobStart) + ') — ' +
+          (r.overdue ? 'reload overdue (was due ' + _rlFmtShort(r.reloadBy) + ')' : 'reload by ' + _rlFmtShort(r.reloadBy)),
+        severity: (r.reloadBy.getTime() - now) < 24 * 3600000 ? 'error' : 'warning'
+      });
+    });
+  });
+  return out;
+}
+
+// Alert / Needs Attention click → the barge's forecast (Barge Fleet for
+// operators; traders can't open Barge Fleet, so their copy on the dashboard).
+function rlGoToForecast(bargeId) {
+  var dd = document.getElementById('global-alerts-dropdown');
+  if (dd) dd.style.display = 'none';
+  var hostId = isTrader() ? 'dash-reload-planner' : 'reload-planner-section';
+  _rlFlash = { key: _fwKey(bargeId), until: Date.now() + 1600 }; // survives a re-render mid-animation
+  showPage(isTrader() ? 'dashboard' : 'bargefleet'); // renders the planner there
+  var card = document.querySelector('#' + hostId + ' .rl-card[data-barge-key="' + _fwKey(bargeId) + '"]') || document.getElementById(hostId);
+  if (!card) return;
+  try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { card.scrollIntoView(); }
+  card.classList.add('rl-flash');
+}
+var _rlFlash = null;
+
+/* ─── Plan this loading → the EXISTING Loading form, pre-filled. Saves
+   nothing: the operator reviews it and presses Add Loading (which runs the
+   usual conflict check). ─── */
+// hrs: the horizon the recommendation was shown with (its size depends on it).
+function rlPlanLoading(bargeId, key, hrs) {
+  if (isTrader()) return;
+  var fc = _bargeStockForecast(bargeId, Number(hrs) > 0 ? Number(hrs) : _rlHorizonDays() * 24);
+  var rec = fc && fc.recs.find(function(r) { return r.key === key; });
+  if (!rec) { showToast('That reload is no longer needed — the forecast has changed.', 'info'); _rlRenderAllHosts(); return; }
+  showPage('loading');
+  cancelLoadingEdit(); // a fresh form, never an edit of another loading
+  _populateLoadingBargeSelect();
+  var set = function(id, v) { var el = document.getElementById(id); if (el) el.value = v; };
+  set('ld-barge', rec.bargeName);
+  set('ld-grade', rec.grade);
+  set('ld-qty', rec.qty);
+  set('ld-start-date', _localDateInputStr(rec.planStart));
+  set('ld-start-time', _localTimeInputStr(rec.planStart));
+  set('ld-pre-ops', RL_PRE_OPS_HRS);
+  set('ld-post-ops', RL_POST_OPS_HRS);
+  // Most recent terminal this barge loaded at, as a starting point.
+  var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.terminal && r.barge === rec.bargeName; })
+    .sort(function(a, c) { return new Date(c.startAt) - new Date(a.startAt); })[0];
+  set('ld-terminal', last ? last.terminal : '');
+  set('ld-notes', 'Reload plan — ' + rec.grade + ' for ' + rec.vessel + ' (' + _rlFmt(rec.jobStart) + '), reload by ' + _rlFmt(rec.reloadBy));
+  _recalcLoadingEstimate();
+  var card = document.getElementById('loading-form-card');
+  if (card) {
+    var note = document.getElementById('ld-prefill-note');
+    if (!note) {
+      note = document.createElement('div');
+      note.id = 'ld-prefill-note';
+      note.style.cssText = 'font-size:12px;color:var(--azure);background:var(--azure-lt);border:1px solid var(--border);border-left:3px solid var(--azure);border-radius:6px;padding:8px 10px;margin-bottom:12px';
+      card.insertBefore(note, card.children[2] || null);
+    }
+    note.textContent = 'Pre-filled from the reload plan for ' + rec.bargeName + ' (' + rec.grade + ' short for ' + rec.vessel + '). Check the terminal and times, then press Add Loading — nothing is saved until you do.';
+    note.style.display = '';
+    try { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+  }
+  var focusEl = document.getElementById(last ? 'ld-qty' : 'ld-terminal');
+  if (focusEl) { try { focusEl.focus({ preventScroll: true }); } catch (e) { focusEl.focus(); } }
+}
+function _rlClearPrefillNote() {
+  var note = document.getElementById('ld-prefill-note');
+  if (note) note.style.display = 'none';
+}
+
+/* ─── Rendering ─────────────────────────────────────────────────── */
+// Step-line chart: both grades as % of their own tank (VLSFO and LSMGO
+// tanks differ ~5×, so a shared MT axis would flatten LSMGO). The SVG
+// stretches to the card (lines keep 2px via non-scaling strokes); text and
+// markers are HTML on top so they stay legible at phone width.
+function _rlChartHtml(fc) {
+  var span = fc.end - fc.now;
+  var X = function(t) { return Math.max(0, Math.min(1000, ((t - fc.now) / span) * 1000)); };
+  var pct = function(t) { return (X(t) / 10).toFixed(2); };
+  var TOP = 8, BOT = 96;
+  var scales = {};
+  RL_GRADES.forEach(function(gi) {
+    var cap = fc[gi.cap];
+    if (!(cap > 0)) cap = Math.max(fc[gi.buf] || 0, Math.max.apply(null, fc.series[gi.g].map(function(p) { return p.q; }))) * 1.1 || 1;
+    scales[gi.g] = cap;
+  });
+  var Y = function(q, g) { return BOT - Math.max(0, Math.min(1.04, q / scales[g])) * (BOT - TOP); };
+  var stepPath = function(g) {
+    var pts = fc.series[g], d = 'M0 ' + Y(pts[0].q, g).toFixed(2);
+    for (var i = 1; i < pts.length; i++) d += ' H' + X(pts[i].t).toFixed(1) + ' V' + Y(pts[i].q, g).toFixed(2);
+    return d;
+  };
+  var svg = '';
+  // day grid
+  var day = new Date(fc.now); day.setHours(24, 0, 0, 0);
+  var labels = [], every = fc.horizonHrs > 7 * 24 ? 2 : 1, n = 0;
+  for (; day < fc.end; day = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1), n++) {
+    svg += '<line x1="' + X(day).toFixed(1) + '" y1="0" x2="' + X(day).toFixed(1) + '" y2="100" style="stroke:var(--border)" stroke-width="1" vector-effect="non-scaling-stroke"/>';
+    if (n % every === 0) labels.push('<span class="rl-xl" style="left:' + pct(day) + '%">' + esc(_rlDay(day) + ' ' + day.getDate()) + '</span>');
+  }
+  // capacity ceiling
+  svg += '<line x1="0" y1="' + TOP + '" x2="1000" y2="' + TOP + '" style="stroke:var(--muted)" stroke-width="1" stroke-dasharray="2 3" vector-effect="non-scaling-stroke"/>';
+  // planned loadings: a tinted band over their terminal time
+  fc.events.forEach(function(e) {
+    if (e.kind !== 'loading') return;
+    var x1 = X(e.start), x2 = X(e.end);
+    svg += '<rect x="' + x1.toFixed(1) + '" y="0" width="' + Math.max(2, x2 - x1).toFixed(1) + '" height="100" style="fill:' + (e.grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)') + '"/>';
+  });
+  // suggested slots + reload-by lines
+  fc.recs.forEach(function(r) {
+    if (r.slot && r.slot.start < fc.end) {
+      var a = X(r.slot.start), z = X(r.slot.end);
+      svg += '<rect x="' + a.toFixed(1) + '" y="0" width="' + Math.max(2, z - a).toFixed(1) + '" height="100" style="fill:var(--green-lt2);stroke:var(--green)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>';
+    }
+    if (r.reloadBy > fc.now && r.reloadBy < fc.end) {
+      svg += '<line x1="' + X(r.reloadBy).toFixed(1) + '" y1="0" x2="' + X(r.reloadBy).toFixed(1) + '" y2="100" style="stroke:var(--red)" stroke-width="1.5" stroke-dasharray="4 3" vector-effect="non-scaling-stroke"/>';
+    }
+  });
+  var defs = '';
+  RL_GRADES.forEach(function(gi) {
+    var yb = Y(fc[gi.buf] || 0, gi.g), id = 'rlclip-' + _fwKey(fc.bargeId) + '-' + gi.k;
+    defs += '<clipPath id="' + id + '"><rect x="0" y="' + yb.toFixed(2) + '" width="1000" height="' + (100 - yb).toFixed(2) + '"/></clipPath>';
+    // red zone: between the line and the buffer wherever the line is below
+    // it (area above the line, clipped to the band under the buffer)
+    svg += '<path d="' + stepPath(gi.g) + ' V0 H0 Z" clip-path="url(#' + id + ')" style="fill:var(--red-lt)"/>';
+    // buffer
+    svg += '<line x1="0" y1="' + yb.toFixed(2) + '" x2="1000" y2="' + yb.toFixed(2) + '" style="stroke:' + gi.color + '" stroke-width="1" stroke-dasharray="5 4" opacity=".75" vector-effect="non-scaling-stroke"/>';
+  });
+  RL_GRADES.forEach(function(gi) {
+    var id = 'rlclip-' + _fwKey(fc.bargeId) + '-' + gi.k;
+    svg += '<path d="' + stepPath(gi.g) + '" fill="none" style="stroke:' + gi.color + '" stroke-width="2" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>';
+    svg += '<path d="' + stepPath(gi.g) + '" fill="none" clip-path="url(#' + id + ')" style="stroke:var(--red)" stroke-width="2.5" vector-effect="non-scaling-stroke"/>';
+  });
+  // HTML markers along the bottom edge: vessel jobs (diamond), loadings (square)
+  var marks = fc.events.filter(function(e) { return e.kind === 'vessel' || e.kind === 'loading' || e.kind === 'block'; }).map(function(e) {
+    var tip, col, cls = 'rl-mk';
+    if (e.kind === 'vessel') {
+      col = e.nomV > 0 && e.nomM > 0 ? 'var(--ink)' : (e.nomM > 0 ? 'var(--fuel-m)' : 'var(--fuel-v)');
+      tip = e.vessel + ' · ' + _rlFmt(e.start) + ' · ' + [e.nomV > 0 ? e.nomV.toLocaleString() + ' MT VLSFO' : '', e.nomM > 0 ? e.nomM.toLocaleString() + ' MT LSMGO' : ''].filter(Boolean).join(' + ');
+      return '<span class="' + cls + ' rl-mk-job" style="left:' + pct(e.start) + '%;background:' + col + '" title="' + esc(tip) + '"></span>';
+    }
+    if (e.kind === 'loading') {
+      col = e.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      tip = 'Loading — ' + e.label + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.qty.toLocaleString() + ' MT ' + e.grade;
+      return '<span class="' + cls + ' rl-mk-load" style="left:' + pct(e.end) + '%;border-color:' + col + '" title="' + esc(tip) + '"></span>';
+    }
+    tip = 'Unavailable — ' + e.label + ' · ' + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
+    return '<span class="' + cls + ' rl-mk-block" style="left:' + pct(e.start) + '%" title="' + esc(tip) + '"></span>';
+  }).join('');
+  var rbl = fc.recs.filter(function(r) { return r.reloadBy > fc.now && r.reloadBy < fc.end; }).map(function(r) {
+    return '<span class="rl-rb" style="left:' + pct(r.reloadBy) + '%" title="' + esc('Reload ' + r.grade + ' by ' + _rlFmt(r.reloadBy)) + '">' + esc(r.grade) + '</span>';
+  }).join('');
+  var aria = fc.bargeName + ' stock forecast to ' + _rlFmt(fc.end) + ': VLSFO ' + _rlMT(fc.series.VLSFO[0].q) + ' now, lowest ' + _rlMT(Math.min.apply(null, fc.series.VLSFO.map(function(p) { return p.q; }))) +
+    '; LSMGO ' + _rlMT(fc.series.LSMGO[0].q) + ' now, lowest ' + _rlMT(Math.min.apply(null, fc.series.LSMGO.map(function(p) { return p.q; }))) + '.';
+  return '<div class="rl-chart" role="img" aria-label="' + esc(aria) + '">' +
+      '<svg viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true" focusable="false"><defs>' + defs + '</defs>' + svg + '</svg>' +
+      '<span class="rl-cap">Capacity</span>' + rbl + '<div class="rl-marks">' + marks + '</div>' +
+    '</div>' +
+    '<div class="rl-xaxis" aria-hidden="true">' + labels.join('') + '</div>';
+}
+
+function _rlRecHtml(r, operator, hrs) {
+  var gi = RL_GRADES.find(function(x) { return x.g === r.grade; });
+  var urgent = r.overdue || (r.reloadBy - Date.now()) < 24 * 3600000;
+  var main = 'Reload <b style="color:' + gi.color + '">' + esc(r.grade) + ' ≥ ' + esc(r.qty.toLocaleString()) + ' MT</b> by <b>' + esc(_rlFmt(r.reloadBy)) + '</b>' +
+    (r.overdue ? ' <span class="rl-tag rl-tag-red">overdue</span>' : '') +
+    (r.slot ? ' · suggested slot ' + esc(_rlFmtSlot(r.slot.start, r.slot.end)) : '') +
+    ' · ~' + esc(_rlDurText(r.durHrs)) + ' at terminal';
+  var why = esc(r.vessel) + ' (' + esc(_rlFmt(r.jobStart)) + ') needs ' + esc(_rlMT(r.jobQty)) + ' ' + esc(r.grade) + '; ' +
+    esc(_rlMT(r.before)) + ' projected onboard leaves ' + (r.belowZero ? '<b>' + esc(_rlMT(-r.after)) + ' short</b>' : esc(_rlMT(r.after))) +
+    ' against a ' + esc(_rlMT(r.buffer)) + ' buffer (' + esc(_rlMT(r.shortBy)) + ' below).';
+  var cover = 'Covers ' + r.coversJobs + ' job' + (r.coversJobs === 1 ? '' : 's') + ' until ' +
+    (r.coversUntilWhy === 'loading' ? 'the next planned loading (' + esc(_rlFmt(r.coversUntil)) + ')' : r.coversUntilWhy === 'reload' ? 'the next reload above' : 'the end of the forecast (' + esc(_rlFmt(r.coversUntil)) + ')') +
+    (r.fill != null ? ' · fill to capacity: ' + esc(_rlMT(r.fill)) : '') +
+    ' · reload by = job start − ' + esc(String(r.travelHrs)) + 'h travel − ' + esc(String(r.contingencyHrs)) + 'h contingency.';
+  var warn = '';
+  if (r.capped) warn += '<div class="rl-rec-warn">Tank room caps this at ' + esc(_rlMT(r.qty)) + ' (' + esc(_rlMT(r.want)) + ' wanted) — plan a second loading or move a job.</div>';
+  if (r.insufficient && r.stillShort > 0) warn += '<div class="rl-rec-warn">Even after this reload ' + esc(r.vessel) + ' is ' + esc(_rlMT(r.stillShort)) + ' below buffer — the job is larger than this barge can hold; split or reassign it.</div>';
+  if (!r.slot) {
+    var alts = r.alternatives.length
+      ? ' Barges with enough ' + esc(r.grade) + ' then: ' + r.alternatives.slice(0, 4).map(function(a) { return '<b>' + esc(a.name) + '</b> (' + esc(_rlMT(a.spare)) + ' spare)'; }).join(', ') + '.'
+      : ' No other barge has ' + esc(_rlMT(r.jobQty)) + ' ' + esc(r.grade) + ' to spare then.';
+    warn += '<div class="rl-rec-warn rl-noslot">No free slot before ' + esc(_rlFmt(r.reloadBy)) + ' — reassign ' + esc(r.vessel) + ' or reload earlier.' + alts + '</div>';
+  }
+  var btn = operator && r.qty > 0
+    ? '<button class="btn btn-primary btn-sm rl-plan-btn" onclick="rlPlanLoading(\'' + escJs(String(r.bargeId)) + '\',\'' + escJs(r.key) + '\',' + Number(hrs) + ')">Plan this loading</button>'
+    : '';
+  return '<div class="rl-rec ' + (urgent ? 'rl-rec-urgent' : '') + '" data-key="' + esc(r.key) + '" data-grade="' + esc(r.grade) + '">' +
+      '<div class="rl-rec-body"><div class="rl-rec-main">' + main + '</div>' +
+      '<div class="rl-rec-why">' + why + ' ' + cover + '</div>' + warn + '</div>' +
+      (btn ? '<div class="rl-rec-act">' + btn + '</div>' : '') +
+    '</div>';
+}
+
+function _rlEventListHtml(fc) {
+  var rows = fc.events.filter(function(e) { return e.kind !== 'now'; }).map(function(e) {
+    var when = esc(_rlFmt(e.kind === 'overdue' ? e.jobStart : e.kind === 'loading' ? e.end : e.start));
+    var after = 'VLSFO ' + _rlMT(e.v) + ' · LSMGO ' + _rlMT(e.m);
+    if (e.kind === 'vessel' || e.kind === 'overdue') {
+      var q = [e.dv ? '−' + _rlMT(-e.dv) + ' VLSFO' : '', e.dm ? '−' + _rlMT(-e.dm) + ' LSMGO' : ''].filter(Boolean).join(', ') || 'no fuel';
+      return '<li>' + when + ' — ' + esc(e.vessel) + (e.kind === 'overdue' ? ' (ETC passed, supply not saved)' : '') + ': ' + esc(q) + ' → ' + esc(after) + '</li>';
+    }
+    if (e.kind === 'loading') return '<li>' + when + ' — Loading at ' + esc(e.label) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
+    return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
+  });
+  return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +
+    (rows.length ? '<ol>' + rows.join('') + '</ol>' : '<div style="padding:4px 0">No committed jobs or loadings in this period.</div>') + '</details>';
+}
+
+function _rlCardHtml(fc, operator) {
+  var head = '<div class="rl-head"><div class="rl-name">' + esc(fc.bargeName) + '</div>' +
+    '<div class="rl-now">ROB now <b style="color:var(--fuel-v)">' + esc(_rlMT(fc.robNow.v)) + '</b>' + (fc.vcap ? ' / ' + esc(_rlMT(fc.vcap)) : '') + ' VLSFO · ' +
+    '<b style="color:var(--fuel-m)">' + esc(_rlMT(fc.robNow.m)) + '</b>' + (fc.mcap ? ' / ' + esc(_rlMT(fc.mcap)) : '') + ' LSMGO</div></div>';
+  var legend = '<div class="rl-legend">' +
+    '<span><i style="background:var(--fuel-v)"></i>VLSFO</span><span><i style="background:var(--fuel-m)"></i>LSMGO</span>' +
+    '<span><i class="rl-dash"></i>buffer (' + esc(fc.vbuf.toLocaleString()) + ' / ' + esc(fc.mbuf.toLocaleString()) + ' MT)</span>' +
+    '<span><i style="background:var(--red-lt);border:1px solid var(--red)"></i>below buffer</span>' +
+    '<span><i class="rl-lg-job"></i>vessel job</span><span><i class="rl-lg-load"></i>loading</span>' +
+    (fc.recs.some(function(r) { return r.slot; }) ? '<span><i style="background:var(--green-lt2);border:1px dashed var(--green)"></i>suggested slot</span>' : '') +
+    '<span style="color:var(--muted)">% of tank</span></div>';
+  var recs = fc.recs.length
+    ? fc.recs.map(function(r) { return _rlRecHtml(r, operator, fc.horizonHrs); }).join('')
+    : '<div class="rl-ok">All good through ' + esc(_rlFmt(fc.end)) + ' — stock stays above buffer for every committed job.</div>';
+  var flash = _rlFlash && _rlFlash.key === _fwKey(fc.bargeId) && Date.now() < _rlFlash.until ? ' rl-flash' : '';
+  return '<div class="card rl-card' + flash + '" data-barge-key="' + esc(_fwKey(fc.bargeId)) + '" data-barge-id="' + esc(String(fc.bargeId)) + '">' +
+    head + _rlChartHtml(fc) + legend + '<div class="rl-recs">' + recs + '</div>' + _rlEventListHtml(fc) + '</div>';
+}
+
+// Render the planner into a host element (Barge Fleet section for
+// operators; dashboard copy for traders). One forecast per barge per render.
+function renderReloadPlanner(hostId) {
+  var host = document.getElementById(hostId || 'reload-planner-body');
+  if (!host) return;
+  var days = _rlHorizonDays(), operator = !isTrader();
+  var barges = _rlBarges();
+  var sel = '<div class="rl-horizon" role="group" aria-label="Forecast horizon">' + RL_HORIZON_DAYS.map(function(d) {
+    return '<button type="button" class="btn btn-sm ' + (d === days ? 'btn-primary' : 'btn-secondary') + '" aria-pressed="' + (d === days) + '" onclick="rlSetHorizon(' + d + ')">' + d + ' days</button>';
+  }).join('') + '</div>';
+  var stale = _fwScheduleStaleness();
+  var hasSched = (_lastSched || []).length > 0;
+  var gen = !hasSched ? 'No schedule generated yet — only loadings and live ROB are reflected.'
+    : stale.known && stale.generatedAt ? 'Based on schedule generated ' + fmt24(stale.generatedAt) + '.' : 'Based on the last generated schedule.';
+  var staleBox = stale.stale ? '<div class="rl-stale">⚠ Nominations/barges changed since (' + esc(stale.reasons.join(', ')) + ') — regenerate the schedule for an up-to-date forecast.</div>' : '';
+  var intro = '<div class="rl-intro">' + esc(gen) + ' Jobs take their planned (maximum) quantity at supply start; loadings add at completion, capped at tank capacity. ' +
+    'Reload by = the short job\'s start − ' + _rlTravelHrs() + 'h travel − ' + _contingencyHrs() + 'h contingency. Quantities round up to ' + RL_ROUND_MT + ' MT; terminal time = ' +
+    RL_PRE_OPS_HRS + 'h pre-ops + quantity ÷ terminal rate + ' + RL_POST_OPS_HRS + 'h post-ops.</div>';
+  var body;
+  if (!barges.length) body = '<div class="rl-empty">' + ((_barges || []).length ? 'Generate the schedule to see the forecast.' : 'No barges configured.') + '</div>';
+  else {
+    var liveROBs = getAllLiveROBs();
+    body = '<div class="rl-grid">' + barges.map(function(b) {
+      try { return _rlCardHtml(_bargeStockForecast(b.id, days * 24, { liveROBs: liveROBs }), operator); }
+      catch (e) { console.warn('ABPS: reload forecast failed for', b.name, e); return '<div class="card rl-card"><div class="rl-name">' + esc(b.name) + '</div><div class="rl-empty">Forecast unavailable.</div></div>'; }
+    }).join('') + '</div>';
+  }
+  host.innerHTML = '<div class="rl-top">' + intro + sel + '</div>' + staleBox + body;
+}
+function renderDashReloadPlanner() {
+  var card = document.getElementById('dash-reload-planner');
+  if (!card) return;
+  // Operators have the full planner on Barge Fleet; traders can't open that page.
+  if (!isTrader()) { card.style.display = 'none'; return; }
+  card.style.display = '';
+  renderReloadPlanner('dash-reload-planner-body');
+}
+function _rlRenderAllHosts() {
+  if (_currentPage === 'bargefleet') renderReloadPlanner('reload-planner-body');
+  if (_currentPage === 'dashboard') renderDashReloadPlanner();
+}
+// Shared refresh point: schedule, loadings, ROB, blocks or a colleague's
+// sync changed — re-render whatever planner is on screen and the bell.
+function _rlRefreshIfShown() {
+  try { _rlRenderAllHosts(); } catch (e) { console.warn('ABPS: reload planner refresh failed', e); }
+  try { if (typeof _refreshGlobalAlertsBell === 'function') _refreshGlobalAlertsBell(); } catch (e) { console.warn('ABPS: alerts refresh failed', e); }
 }
 
 /* ─── Schedule staleness — Free Windows reads _lastSched, which is only as
@@ -14334,6 +15051,7 @@ async function addBargeBlock(bargeId) {
   }]);
   saveSharedState();
   renderFreeWindowsPanel();
+  _rlRefreshIfShown();
   // Already-scheduled jobs inside the block now show as Conflicts — say so.
   var hits = _getBargeTimeline(b.id, b.name).filter(function(op) { return !op.isBlock && op.start < end && op.etc > start; });
   showToast('Blocked ' + b.name + ' ' + fmt24(start) + ' → ' + fmt24(end) +
@@ -14348,6 +15066,7 @@ function deleteBargeBlock(id) {
   _bargeBlocks = _bargeBlocks.filter(function(x) { return x.id !== id; });
   saveSharedState();
   renderFreeWindowsPanel();
+  _rlRefreshIfShown();
 }
 
 // Re-render an open Free Windows panel after data changes — but not while
@@ -18539,6 +19258,7 @@ function refreshAllModules() {
   refreshScheduleKPIs();
   refreshDashboard();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen();
+  if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown();
 }
 
 /* ── Alerts page — mirror data from rendered panels ── */
@@ -19853,6 +20573,7 @@ async function saveReloadQty() {
   renderLiveROBDashboard();
   renderRemainingSupplyTracker();
   renderBargeROBSummaryFromLive();
+  if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown();
 
   // Confirmation
   showToast('Reload saved — ' + b.name + ': VLSFO ' + Math.round(newV).toLocaleString() + ' MT | MGO ' + Math.round(newM).toLocaleString() + ' MT', 'success');

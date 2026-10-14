@@ -31,6 +31,7 @@ const SUITES = [
   ['xss', 'suites/fix/xss.test.js', 'stored-XSS sweep over every page and modal'],
   ['free-windows', 'suites/fw/fw.test.js', 'Free Windows planner calculations and exports'],
   ['sync-race', 'suites/fw/race.test.js', 'deletions survive a save racing a pull (forced interleavings)'],
+  ['reload-planner', 'suites/reload/reload.test.js', 'stock forecast, breaches, reload-by, slot, Plan this loading, alerts'],
   ['skin', 'suites/skin/skin.test.js', 'Harbour Light / Classic look switch'],
   ['bunker-modal', 'suites/layout/bunker.test.js', 'Bunker Message opens from dashboard links'],
   ['layout-space', 'suites/layout/space.test.js', 'sidebar and activity feed fill the window'],

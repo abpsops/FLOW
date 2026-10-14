@@ -30,6 +30,7 @@ blocked and fails the test.
 | `xss` | hostile text in every field shows as text on every page and modal |
 | `free-windows` | Free Windows planner maths and exports |
 | `sync-race` | a colleague's deletion never comes back when a save races a pull (forced interleavings; `RACE_ITER=n` repeats) |
+| `reload-planner` | Barge stock forecast + reload plan: forecast equals Free Windows' stock/ATP, first breach per grade, reload-by = job start − travel − contingency, quantity to the next planned loading (rounded to 50, capped at tank room), slot around jobs and Unavailable blocks, no-slot → reassign + barges with stock, ranges plan the max, completed jobs out, Plan this loading pre-fills the Loading form (nothing saved until Add; then syncs to a 2nd device), trader view, dashboard alerts, hostile names, Harbour/Classic/phone (`SHOTS_DIR=…` saves screenshots) |
 | `skin` | Harbour Light / Classic look switch |
 | `bunker-modal` | Bunker Message opens from dashboard links |
 | `layout-space` | sidebar and activity feed fill the window |
