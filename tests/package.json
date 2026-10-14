@@ -1,0 +1,30 @@
+{
+  "name": "flow-tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Browser tests for FLOW's index.html (Playwright + a fake Supabase). Not part of the deployed site.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node run-all.js",
+    "check": "node check-scripts.js",
+    "smoke": "node run-all.js smoke",
+    "test:sync": "node run-all.js r3-",
+    "test:realtime": "node run-all.js realtime"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "@emailjs/browser": "4.4.1",
+    "chart.js": "4.4.0",
+    "chartjs-plugin-datalabels": "2.2.0",
+    "exceljs": "4.4.0",
+    "flatpickr": "4.6.13",
+    "html2canvas": "1.4.1",
+    "jspdf": "2.5.1",
+    "jszip": "3.10.1",
+    "mammoth": "1.6.0",
+    "playwright": "1.56.1",
+    "xlsx": "0.18.5"
+  }
+}
