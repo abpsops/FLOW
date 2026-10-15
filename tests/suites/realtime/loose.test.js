@@ -1,5 +1,5 @@
 /* Loose ends: FY labels follow the current year (FY27 in 2027 with live data
-   only, FY26 still reachable) + Danger zone / typed confirmation.
+   only, FY26 still reachable) + Data Management / typed confirmation.
    node loose.test.js [appDir] [shotDir]   — screenshots only when shotDir (or $SHOTS_DIR) is given */
 const path = require('path');
 const fs = require('fs');
@@ -80,8 +80,8 @@ async function fyProbe(app) {
       await app.ctx.close();
     }
 
-    // ── 2. Danger zone + typed confirmation ──
-    console.log('Danger zone');
+    // ── 2. Data Management + typed confirmation ──
+    console.log('Data Management');
     {
       const db = U.H.createDb({ workspace: payloadWithRecords() });
       const dialogs = [];
@@ -98,8 +98,8 @@ async function fyProbe(app) {
         redLinks: [...document.querySelectorAll('#sidebar a.sidebar-item')].filter(a => /Full Reset|Clear All Data/.test(a.textContent)).length,
         pageBtns: [...document.querySelectorAll('.page-actions button')].filter(b => /Clear Checklist|Clear All Records/.test(b.textContent)).length,
       }));
-      check(z.shown && z.tag === 'BUTTON' && z.exp === 'false' && z.hidden, 'operator: collapsed Danger zone <button aria-expanded=false> ' + JSON.stringify(z));
-      check(z.inZone, 'all five actions (existing ids kept) live inside the Danger zone');
+      check(z.shown && z.tag === 'BUTTON' && z.exp === 'false' && z.hidden, 'operator: collapsed Data Management <button aria-expanded=false> ' + JSON.stringify(z));
+      check(z.inZone, 'all five actions (existing ids kept) live inside the Data Management');
       check(JSON.stringify(z.menu) === JSON.stringify(['Log Out']) && z.redLinks === 0 && z.pageBtns === 0, 'no other always-visible destructive buttons ' + JSON.stringify({ menu: z.menu, red: z.redLinks, page: z.pageBtns }));
       await p.click('#danger-zone-toggle');
       check(await p.evaluate(() => document.getElementById('danger-zone-toggle').getAttribute('aria-expanded') === 'true' && !document.getElementById('danger-zone-panel').hidden), 'toggle reveals the actions');
@@ -179,7 +179,7 @@ async function fyProbe(app) {
       await app.ctx.close();
     }
 
-    // ── 3. Traders: no Danger zone, wrappers refuse ──
+    // ── 3. Traders: no Data Management, wrappers refuse ──
     console.log('Trader');
     {
       const db = U.H.createDb({ workspace: payloadWithRecords() });
@@ -190,7 +190,7 @@ async function fyProbe(app) {
         await new Promise(r => setTimeout(r, 100));
         return { zone, modal: getComputedStyle(document.getElementById('danger-confirm-modal')).display, role: ABPS_ROLE };
       });
-      check(t.role === 'trader' && t.zone === 'none' && t.modal === 'none', 'trader: Danger zone hidden and confirm* wrappers do nothing ' + JSON.stringify(t));
+      check(t.role === 'trader' && t.zone === 'none' && t.modal === 'none', 'trader: Data Management hidden and confirm* wrappers do nothing ' + JSON.stringify(t));
       check(U.realErrors(app).length === 0, 'no page errors');
       await app.ctx.close();
     }

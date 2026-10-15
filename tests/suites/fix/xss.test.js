@@ -29,7 +29,7 @@ function workspace() {
   const dlEntry = (id, t) => ({ id, checklistUid: 'cl_' + id, nomUid: 'nx_' + id, vessel: X, dateStr: X, supplyDate: iso(t), barge: X, vlsfoAct: 480, mgoAct: 40, loggedAt: iso(t), remarks: X });
   const deliveryLog = {};
   [now - 2 * day, now - 40 * day, now - 70 * day].forEach((t, i) => {
-    deliveryLog[monthKey(t)] = { timely: [dlEntry('t' + i, t)], delayed: [dlEntry('d' + i, t)], disputes: [dlEntry('p' + i, t)] };
+    deliveryLog[monthKey(t)] = { timely: [dlEntry('t' + i, t)], delayed: [dlEntry('d' + i, t)], disputes: [Object.assign(dlEntry('p' + i, t), { isDispute: true })] };
   });
   const lastY = new Date(now - 400 * day).getFullYear();
   const archives = {};

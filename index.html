@@ -558,7 +558,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .sidebar-badge.amber{background:var(--amber)}
 .sidebar-badge.red{background:var(--red)}
 .sidebar-divider{height:1px;background:var(--border);margin:6px 14px}
-/* Sidebar "Danger zone" — bulk-delete actions behind a collapsed disclosure */
+/* Sidebar "Data Management" — bulk-delete actions behind a collapsed disclosure */
 .danger-zone{margin-top:auto;padding-bottom:8px}
 .danger-zone-toggle,.danger-zone-item{
   display:flex;align-items:center;gap:9px;width:calc(100% - 12px);margin:1px 6px;padding:7px 14px;
@@ -1046,6 +1046,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .nimp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--sh-xs);margin-bottom:12px}
 .nimp > summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:11px 14px;font-size:13px;font-weight:700;color:var(--ink);border-radius:var(--radius)}
 .nimp > summary::-webkit-details-marker{display:none}
+.tr-watch-row > summary::-webkit-details-marker{display:none}
 .nimp > summary:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
 .nimp-ico{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:var(--azure-lt);color:var(--azure);flex-shrink:0}
 .nimp-sub{font-weight:500;color:var(--muted);font-size:11.5px}
@@ -1641,7 +1642,7 @@ html[data-skin="harbour"] .sidebar-badge.amber,
 html[data-skin="harbour"] .sidebar-badge.red{background:#F26A4B;color:#FFFFFF;border-radius:999px;padding:2px 7px;min-width:22px;font-size:11px;font-weight:700}
 html[data-skin="harbour"] .sidebar-divider{background:rgba(255,255,255,.07);margin:10px 24px}
 html[data-skin="harbour"] .sidebar-item[style*="color:var(--red)"]{color:#FF9B85!important}
-/* Danger zone — muted until opened, coral-red items on the navy sidebar */
+/* Data Management — muted until opened, coral-red items on the navy sidebar */
 html[data-skin="harbour"] :is(.danger-zone-toggle,.danger-zone-item){font-size:13px;min-height:40px;margin:2px 12px;width:calc(100% - 24px);border-radius:12px;padding:0 14px}
 html[data-skin="harbour"] .danger-zone-toggle{color:#6F88AA;font-weight:700}
 html[data-skin="harbour"] .danger-zone-toggle .sidebar-icon{color:inherit;opacity:.9}
@@ -2759,7 +2760,7 @@ function flowWelcomeGo(pageId) {
       </button>
       <div id="topbar-menu-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lg);z-index:9900;overflow:hidden;padding:6px">
         <!-- Full Reset / Wipe Cloud / Clear All Data live in the sidebar's
-             collapsed "Danger zone" (same ids), behind a typed confirmation. -->
+             collapsed "Data Management" (same ids), behind a typed confirmation. -->
         <button id="topbar-logout-btn" onclick="closeTopbarMenu();operatorLogout()" class="topbar-menu-item">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log Out
@@ -2871,14 +2872,14 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     Trash Bin
   </a>
-  <!-- Danger zone — every bulk-delete action, collapsed by default and
+  <!-- Data Management — every bulk-delete action, collapsed by default and
        operator-only (hidden until the role lookup confirms an operator, see
        _applyRoleUIRestrictions). Each one opens a typed confirmation. -->
   <div class="danger-zone" id="danger-zone" style="display:none">
     <div class="sidebar-divider"></div>
     <button type="button" class="danger-zone-toggle" id="danger-zone-toggle" aria-expanded="false" aria-controls="danger-zone-panel" onclick="toggleDangerZone()">
       <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span>Danger zone</span>
+      <span>Data Management</span>
       <svg class="danger-zone-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     <div class="danger-zone-panel" id="danger-zone-panel" hidden>
@@ -3886,7 +3887,7 @@ function flowWelcomeGo(pageId) {
       <div class="page-subtitle">Mark each vessel as supplied, enter actuals and save the record</div>
     </div>
     <div class="page-actions">
-      <!-- Clear Checklist moved to the sidebar Danger zone (typed confirmation) -->
+      <!-- Clear Checklist moved to the sidebar Data Management (typed confirmation) -->
       <button class="btn btn-secondary btn-sm" onclick="downloadChecklist()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download Checklist
@@ -3936,7 +3937,7 @@ function flowWelcomeGo(pageId) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         Remove Duplicates
       </button>
-      <!-- Clear All Records moved to the sidebar Danger zone (typed confirmation) -->
+      <!-- Clear All Records moved to the sidebar Data Management (typed confirmation) -->
     </div>
   </div>
   <div id="saved-records-panel" style="background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
@@ -4035,7 +4036,7 @@ function flowWelcomeGo(pageId) {
   </div>
 
   <div style="background:var(--surface);box-shadow:var(--sh-sm);border-radius:var(--radius);padding:1.25rem 1.5rem">
-    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">⚠ Dispute Log — from Checklist Remarks</div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">⚠ Dispute Log — deliveries marked ⚠ Dispute on the Checklist</div>
     <div id="dl-list-disputes"><div style="font-size:12px;color:var(--muted);padding:8px 0">No disputes logged for this month.</div></div>
   </div>
 </div>
@@ -6260,7 +6261,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    access to everything, exactly as before. Trader accounts are
    restricted to Dashboard (view only) + Vessel Nominations
    (view + edit) — every other sidebar page and every destructive
-   admin action (the sidebar Danger zone: Full Reset, Wipe Cloud,
+   admin action (the sidebar Data Management: Full Reset, Wipe Cloud,
    Clear All Data, Clear Checklist, Clear Saved Records) is hidden
    from them.
 
@@ -6434,7 +6435,7 @@ function _applyRoleUIRestrictions() {
   });
 
   // Hide sidebar links that don't have nav- ids: Monthly Report (the
-  // destructive actions sit in the Danger zone, hidden above)
+  // destructive actions sit in the Data Management section, hidden above)
   document.querySelectorAll('#sidebar a[onclick^="openMonthlyReport"]').forEach(function(a) {
     a.style.display = 'none';
   });
@@ -18149,9 +18150,11 @@ function renderChecklist(sched) {
         <td style="padding:9px 12px">
           <input type="text" value="${esc(rec.notes||'')}" ${isLocked?'disabled':''}
             onchange="clUpdateNotes('${uJ}',this.value)"
-            placeholder="Remarks…"
+            placeholder="Remarks…" title="Free notes. To log a dispute, press ⚠ Dispute below — the remarks are then kept as its details."
             style="font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;width:110px;font-family:DM Sans,sans-serif;${lockStyle}">
-          <div style="display:flex;gap:4px;margin-top:4px">
+          <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px">
+            <button type="button" id="cl-flag-disputed-${uA}" onclick="clToggleFlag('${uJ}','disputed')" title="Mark this delivery as disputed (logged in the Delivery Log and the vessel's Track Record, with the Remarks as details). Remarks alone are never counted as a dispute."
+              style="font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;border:1px solid ${_clDisputeState(rec)?'var(--red-bd)':'var(--border2)'};background:${_clDisputeState(rec)?'var(--red-lt)':'transparent'};color:${_clDisputeState(rec)?'var(--red)':'var(--muted)'}">⚠ Dispute</button>
             <button type="button" id="cl-flag-unready-${uA}" onclick="clToggleFlag('${uJ}','unready')" title="Vessel arrived on time but was not ready to commence bunkering"
               style="font-size:8.5px;font-weight:700;padding:2px 6px;border-radius:3px;cursor:pointer;white-space:nowrap;border:1px solid ${rec.flagUnready?'var(--red-bd)':'var(--border2)'};background:${rec.flagUnready?'var(--red-lt)':'transparent'};color:${rec.flagUnready?'var(--red)':'var(--muted)'}">⚠ Unready</button>
             <button type="button" id="cl-flag-dispute-${uA}" onclick="clToggleFlag('${uJ}','dispute')" title="Vessel's quantity dispute claim changed/was inconsistent"
@@ -18220,10 +18223,11 @@ function clToggleFlag(uid, kind) {
   if (!rec) return;
   if (kind === 'unready') rec.flagUnready = !rec.flagUnready;
   else if (kind === 'dispute') rec.flagInconsistentDispute = !rec.flagInconsistentDispute;
+  else if (kind === 'disputed') rec.flagDispute = !_clDisputeState(rec);
 
   const btn = document.getElementById('cl-flag-' + kind + '-' + uid);
   if (btn) {
-    const active = kind === 'unready' ? rec.flagUnready : rec.flagInconsistentDispute;
+    const active = kind === 'unready' ? rec.flagUnready : kind === 'disputed' ? rec.flagDispute : rec.flagInconsistentDispute;
     btn.style.border = '1px solid ' + (active ? 'var(--red-bd)' : 'var(--border2)');
     btn.style.background = active ? 'var(--red-lt)' : 'transparent';
     btn.style.color = active ? 'var(--red)' : 'var(--muted)';
@@ -18250,18 +18254,34 @@ function _updateDeliveryLogFlags(rec) {
   let touched = false;
   Object.keys(_deliveryLog || {}).forEach(function(key) {
     const month = _deliveryLog[key];
+    let logged = null;
     ['timely', 'delayed'].forEach(function(bucket) {
       _dlLive(month[bucket]).forEach(function(e) {
         if (e.checklistUid === rec.uid) {
           e.flagUnready = !!rec.flagUnready;
           e.flagInconsistentDispute = !!rec.flagInconsistentDispute;
           e.updatedAt = Date.now(); // so the merge keeps this newer copy
+          logged = e;
           touched = true;
         }
       });
     });
+    if (logged && typeof rec.flagDispute === 'boolean') _dlSetDispute(month, logged, rec.flagDispute, rec.notes);
   });
   if (touched) _saveDeliveryLog();
+}
+
+// The ⚠ Dispute button's current state. Records saved before the button
+// existed have no flagDispute yet: they show whatever the Delivery Log
+// already counts for them (see _dlIsDispute).
+function _clDisputeState(rec) {
+  if (!rec) return false;
+  if (typeof rec.flagDispute === 'boolean') return rec.flagDispute;
+  let found = false;
+  Object.keys(_deliveryLog || {}).forEach(function(key) {
+    _dlLive((_deliveryLog[key] || {}).disputes).forEach(function(e) { if (e.checklistUid === rec.uid && _dlIsDispute(e)) found = true; });
+  });
+  return found;
 }
 
 // BDN No. — stored separately per grade (bdnV for VLSFO, bdnM for LSMGO) since
@@ -18560,31 +18580,43 @@ function _trackRecordSinceLabel() {
   return MO[Number(p[1]) - 1] + ' ' + p[0];
 }
 
+// One key per vessel however its name was typed: case, extra spaces and an
+// "MV"/"M/V"/"M.V." prefix are ignored ("Elandra sea" = "ELANDRA SEA").
+function _trVesselKey(name) {
+  return String(name || '').toLowerCase().replace(/[\s\u00a0]+/g, ' ').trim()
+    .replace(/^m\s*[.\/]?\s*v\.?\s+/, '').replace(/[.,;:]+$/, '').trim();
+}
+
 function computeVesselTrackRecord(vesselName) {
-  const name = (vesselName || '').trim().toLowerCase();
+  const name = _trVesselKey(vesselName);
   if (!name) return null;
   let timely = 0, delayed = 0, unready = 0, inconsistentDispute = 0;
   const disputes = [];
+  const deliveries = [];
   Object.keys(_deliveryLog || {}).sort().forEach(function(monthKey) {
     if (monthKey < TRACK_RECORD_START_MONTH) return;
     const month = _deliveryLog[monthKey];
-    _dlLive(month.timely).forEach(function(e) {
-      if ((e.vessel || '').trim().toLowerCase() !== name) return;
-      timely++;
-      if (e.flagUnready) unready++;
-      if (e.flagInconsistentDispute) inconsistentDispute++;
+    const disputeByUid = {};
+    _dlLive(month.disputes).forEach(function(e) {
+      if (_trVesselKey(e.vessel) !== name || !_dlIsDispute(e)) return;
+      disputes.push(e);
+      if (e.checklistUid) disputeByUid[e.checklistUid] = e;
     });
-    _dlLive(month.delayed).forEach(function(e) {
-      if ((e.vessel || '').trim().toLowerCase() !== name) return;
-      delayed++;
-      if (e.flagUnready) unready++;
-      if (e.flagInconsistentDispute) inconsistentDispute++;
+    [['timely', false], ['delayed', true]].forEach(function(b) {
+      _dlLive(month[b[0]]).forEach(function(e) {
+        if (_trVesselKey(e.vessel) !== name) return;
+        if (b[1]) delayed++; else timely++;
+        if (e.flagUnready) unready++;
+        if (e.flagInconsistentDispute) inconsistentDispute++;
+        const d = e.checklistUid && disputeByUid[e.checklistUid];
+        deliveries.push({ entry: e, delayed: b[1], dispute: d || null });
+      });
     });
-    _dlLive(month.disputes).forEach(function(e) { if ((e.vessel || '').trim().toLowerCase() === name) disputes.push(e); });
   });
   const total = timely + delayed;
   if (total < 2) return null; // not enough history yet to mean anything
-  return { total, timely, delayed, disputes, unready, inconsistentDispute };
+  deliveries.sort(function(a, b) { return String(b.entry.supplyDate || b.entry.loggedAt || '').localeCompare(String(a.entry.supplyDate || a.entry.loggedAt || '')); });
+  return { total, timely, delayed, disputes, unready, inconsistentDispute, deliveries };
 }
 
 // Renders the banner into a given container id, reading the vessel name
@@ -18639,21 +18671,22 @@ function renderTrackRecordWatchlist() {
   const el = document.getElementById('dash-track-record-watchlist');
   if (!el) return;
   const sub = document.getElementById('dash-track-record-subtitle');
-  if (sub) sub.textContent = 'Vessels with 2+ completed deliveries since ' + _trackRecordSinceLabel() + ' — laycan compliance & disputes';
+  if (sub) sub.textContent = 'Vessels with 2+ completed deliveries since ' + _trackRecordSinceLabel() + ' — laycan compliance & disputes. Click a vessel for details.';
 
-  const names = new Set();
+  // One row per vessel (see _trVesselKey), shown in capitals.
+  const names = new Map();
   Object.keys(_deliveryLog || {}).forEach(function(monthKey) {
     if (monthKey < TRACK_RECORD_START_MONTH) return;
     const month = _deliveryLog[monthKey];
-    ['timely', 'delayed', 'disputes'].forEach(function(bucket) {
+    ['timely', 'delayed'].forEach(function(bucket) {
       _dlLive(month[bucket]).forEach(function(e) {
-        const n = (e.vessel || '').trim();
-        if (n) names.add(n);
+        const k = _trVesselKey(e.vessel);
+        if (k && !names.has(k)) names.set(k, String(e.vessel).replace(/\s+/g, ' ').trim().toUpperCase());
       });
     });
   });
 
-  const records = Array.from(names)
+  const records = Array.from(names.values())
     .map(function(n) { const tr = computeVesselTrackRecord(n); return tr ? Object.assign({ name: n }, tr) : null; })
     .filter(Boolean)
     .sort(function(a, b) {
@@ -18688,12 +18721,41 @@ function renderTrackRecordWatchlist() {
     parts.push(r.delayed > 0
       ? 'Outside laycan in <strong>' + r.delayed + ' of ' + r.total + '</strong> (' + delayPct + '%)'
       : 'Within laycan on all <strong>' + r.total + '</strong>');
-    if (r.disputes.length) parts.push('<strong>' + r.disputes.length + '</strong> dispute' + (r.disputes.length > 1 ? 's' : ''));
-    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;background:' + bg + ';border:1px solid ' + border + ';border-radius:8px">' +
-      '<span style="font-size:12px;font-weight:700;color:var(--ink)">' + esc(r.name) + '</span>' +
-      '<span style="font-size:11px;color:' + color + ';text-align:right">' + parts.join(' · ') + '</span>' +
-    '</div>';
-  }).join('') + '</div>';
+    parts.push(r.disputes.length
+      ? '<strong>' + r.disputes.length + '</strong> dispute' + (r.disputes.length > 1 ? 's' : '')
+      : 'no disputes');
+    // The deliveries behind the numbers, newest first.
+    const rows = r.deliveries.map(function(d) {
+      const e = d.entry;
+      const qty = [e.vlsfoAct ? 'VLSFO ' + Number(e.vlsfoAct).toLocaleString() + ' MT' : '', e.mgoAct ? 'MGO ' + Number(e.mgoAct).toLocaleString() + ' MT' : ''].filter(Boolean).join(' · ');
+      const lay = d.delayed
+        ? '<span style="color:var(--amber);font-weight:700">Arrived after laycan</span>'
+        : '<span style="color:var(--green);font-weight:700">Within laycan</span>';
+      const flags = [];
+      if (e.flagUnready) flags.push('<span style="color:var(--red);font-weight:700">⚠ Unready</span>');
+      if (e.flagInconsistentDispute) flags.push('<span style="color:var(--red);font-weight:700">⚠ Inconsistent claim</span>');
+      if (d.dispute) flags.push('<span style="color:var(--red);font-weight:700">⚠ Dispute</span>' + (d.dispute.remarks ? ': ' + esc(d.dispute.remarks) : ''));
+      return '<div style="display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:6px 0;border-top:1px solid var(--border2);font-size:11.5px;color:var(--ink)">' +
+        '<span style="min-width:110px;font-weight:600">' + esc(e.dateStr || '—') + '</span>' +
+        '<span style="color:var(--muted)">' + (e.barge ? esc(e.barge) : '—') + (qty ? ' · ' + esc(qty) : '') + '</span>' +
+        '<span>' + lay + '</span>' +
+        (flags.length ? '<span>' + flags.join(' · ') + '</span>' : '') +
+      '</div>';
+    }).join('');
+    return '<details class="tr-watch-row" style="background:' + bg + ';border:1px solid ' + border + ';border-radius:8px">' +
+      '<summary style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;cursor:pointer;list-style:none">' +
+        '<span style="font-size:12px;font-weight:700;color:var(--ink)">' + esc(r.name) + '</span>' +
+        '<span style="font-size:11px;color:' + color + ';text-align:right">' + parts.join(' · ') + ' <span aria-hidden="true" style="color:var(--muted)">▾</span></span>' +
+      '</summary>' +
+      '<div style="padding:0 12px 8px">' + rows + '</div>' +
+    '</details>';
+  }).join('') + '</div>' +
+  '<div style="margin-top:10px;font-size:10.5px;color:var(--muted);line-height:1.5">' +
+    '<strong>How this is worked out:</strong> each completed delivery since ' + esc(_trackRecordSinceLabel()) + ' counts once. ' +
+    '<em>Within laycan</em> / <em>arrived after laycan</em> compares the vessel\'s ETA with the end of its nominated laycan when the supply was saved. ' +
+    'A <em>dispute</em> is a delivery marked <strong>⚠ Dispute</strong> on the Checklist — Remarks on their own don\'t count. ' +
+    'Green = all within laycan and no disputes, amber = a late arrival or a dispute, red = unready on arrival or an inconsistent claim. Click a vessel to see its deliveries.' +
+  '</div>';
 }
 
 // Called from saveChecklistRecord() at the exact moment a supply is saved —
@@ -18713,6 +18775,7 @@ function _logDelivery(rec, supplyRec) {
     mgoAct: supplyRec.mgoAct,
     flagUnready: !!rec.flagUnready,
     flagInconsistentDispute: !!rec.flagInconsistentDispute,
+    remarks: (rec.notes || '').trim(),
     loggedAt: new Date().toISOString(),
     updatedAt: Date.now(),
   };
@@ -18726,20 +18789,47 @@ function _logDelivery(rec, supplyRec) {
   // A re-log after a deletion: this newer entry supersedes the tombstone.
   if (month.removed && month.removed[rec.uid]) delete month.removed[rec.uid];
 
-  // Dispute — automatic, whenever Remarks has text at the moment of saving.
-  const remarks = (rec.notes || '').trim();
-  if (remarks) {
-    const existingDispute = month.disputes.find(function(e) { return e && !e.deleted && e.checklistUid === rec.uid; });
-    if (existingDispute) {
-      existingDispute.remarks = remarks;
-      existingDispute.loggedAt = base.loggedAt;
-      existingDispute.updatedAt = base.updatedAt;
-    } else {
-      month.disputes.push(Object.assign({}, base, { remarks: remarks }));
-    }
-  }
+  // Dispute — only when the delivery is marked ⚠ Dispute on the Checklist;
+  // the Remarks are kept as its details. (Remarks on their own used to count
+  // as a dispute, so any note at all, even "no dispute", was logged as one.)
+  const marked = typeof rec.flagDispute === 'boolean' ? rec.flagDispute : _clDisputeState(rec);
+  _dlSetDispute(month, base, marked, rec.notes);
 
   _saveDeliveryLog();
+}
+
+// Adds, updates or clears (isDispute:false, kept so the change syncs and
+// wins the merge) this delivery's entry in month.disputes.
+function _dlSetDispute(month, base, isDispute, notes) {
+  if (!month || !base) return;
+  if (!Array.isArray(month.disputes)) month.disputes = [];
+  const remarks = (notes || '').trim();
+  const now = Date.now();
+  const existing = month.disputes.find(function(e) { return e && !e.deleted && e.checklistUid === base.checklistUid; });
+  if (existing) {
+    existing.isDispute = !!isDispute;
+    existing.remarks = remarks;
+    existing.updatedAt = Math.max(now, _dlStamp(existing) + 1);
+  } else if (isDispute) {
+    month.disputes.push(Object.assign({}, base, { remarks: remarks, isDispute: true, updatedAt: now }));
+  }
+}
+
+// Is this Delivery Log dispute entry a real dispute? Entries logged since the
+// ⚠ Dispute button carry isDispute. Older ones were logged for ANY remark, so
+// they count only when the remark actually reads like a dispute (a claim,
+// shortfall, discrepancy, protest…) and isn't a "no dispute" / "nil" note.
+const _DL_DISPUTE_WORDS = /disput|claim|short|discrepan|protest|\blop\b|less\s+(?:qty|quantity|received)|differen|\bdiff\b|off[\s-]?spec|complain|contaminat|water\s+content|sample|surveyor\s+(?:found|reported)|reject|underdeliver|under[\s-]delivered|over[\s-]?claim/i;
+const _DL_NEG_TOPIC = '(?:disput\\w*|claims?|issues?|discrepanc\\w*|protests?|shortfall|shortage|complaints?|differences?)';
+const _DL_NO_DISPUTE = new RegExp('\\b(?:no|nil|without|zero|not\\s+any|none)\\s+(?:\\w+\\s+)?' + _DL_NEG_TOPIC + '(?:\\s*(?:,|/|or|and|nor)\\s*' + _DL_NEG_TOPIC + ')*\\b', 'gi');
+function _dlRemarkLooksLikeDispute(text) {
+  const t = String(text || '').replace(_DL_NO_DISPUTE, ' ');
+  return _DL_DISPUTE_WORDS.test(t);
+}
+function _dlIsDispute(e) {
+  if (!e) return false;
+  if (typeof e.isDispute === 'boolean') return e.isDispute;
+  return _dlRemarkLooksLikeDispute(e.remarks);
 }
 
 function _saveDeliveryLog() {
@@ -18806,7 +18896,7 @@ function renderDeliveryLog() {
   // Months holding only tombstones (all entries deleted) aren't offered.
   const keys = Object.keys(_deliveryLog).filter(function(k) {
     const m = _deliveryLog[k] || {};
-    return _dlLive(m.timely).length || _dlLive(m.delayed).length || _dlLive(m.disputes).length;
+    return _dlLive(m.timely).length || _dlLive(m.delayed).length || _dlLive(m.disputes).filter(_dlIsDispute).length;
   }).sort().reverse();
   const currentKey = _dlMonthKey(new Date());
   if (!keys.length) keys.push(currentKey);
@@ -18819,7 +18909,7 @@ function renderDeliveryLog() {
   const key = sel.value;
   // Live entries only — deleted ones are tombstones (see _dlLive).
   const rawMonth = _deliveryLog[key] || {};
-  const month = { timely: _dlLive(rawMonth.timely), delayed: _dlLive(rawMonth.delayed), disputes: _dlLive(rawMonth.disputes) };
+  const month = { timely: _dlLive(rawMonth.timely), delayed: _dlLive(rawMonth.delayed), disputes: _dlLive(rawMonth.disputes).filter(_dlIsDispute) };
 
   document.getElementById('dl-count-timely').textContent   = month.timely.length;
   document.getElementById('dl-count-delayed').textContent  = month.delayed.length;
@@ -18850,7 +18940,7 @@ function renderDeliveryLog() {
           + '<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">'
           + '<strong>'+esc(e.vessel||'—')+'</strong><span style="color:var(--muted)">'+esc(e.dateStr||'')+'</span>'
           + '</div>'
-          + '<div style="margin-top:4px;padding:8px 10px;background:var(--red-lt);border:1px solid #F3C7C0;border-radius:6px;color:var(--red-dk,#9B2C2C)">'+esc(e.remarks)+'</div>'
+          + '<div style="margin-top:4px;padding:8px 10px;background:var(--red-lt);border:1px solid #F3C7C0;border-radius:6px;color:var(--red-dk,#9B2C2C)">'+(e.remarks ? esc(e.remarks) : '<em>No remarks entered</em>')+'</div>'
           + '</div>';
       }).join('')
     : '<div style="font-size:12px;color:var(--muted);padding:8px 0">No disputes logged for this month.</div>';
@@ -21193,7 +21283,7 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 'Enter' && e.target && e.target.id === 'danger-confirm-input') { e.preventDefault(); if (_dangerConfirmMatches()) _dangerConfirmClose(true); }
 });
 
-// Sidebar "Danger zone" disclosure — collapsed by default on every load.
+// Sidebar "Data Management" disclosure — collapsed by default on every load.
 function toggleDangerZone(force) {
   const btn = document.getElementById('danger-zone-toggle');
   const panel = document.getElementById('danger-zone-panel');
