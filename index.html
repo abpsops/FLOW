@@ -3049,6 +3049,21 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
+  <!-- Vessel Positions (AIS) — live positions of the nominated vessels, read
+       from ais_positions / ais_status (filled server-side by the ais-poll
+       Edge Function). Hidden until loaded; traders only see it once
+       positions exist. renderDashAis() in the LIVE VESSEL POSITIONS module. -->
+  <div class="chart-card" id="dash-ais" style="margin-bottom:14px;display:none">
+    <div class="ais-card-hdr">
+      <div>
+        <div class="chart-title">Vessel Positions (AIS)</div>
+        <div class="chart-subtitle" id="dash-ais-sub" aria-live="polite"></div>
+      </div>
+      <button type="button" class="btn btn-secondary btn-sm" id="ais-refresh-btn" onclick="aisRefreshNow()" style="display:none">Refresh now</button>
+    </div>
+    <div id="dash-ais-body"></div>
+  </div>
+
   <!-- Track Record Watchlist — the standing, passive version of Counterparty
        Track Record Intelligence. The per-nomination banner only shows when
        you're actively typing/viewing a specific vessel's name, which
@@ -4992,6 +5007,8 @@ function _parseLocalDate(s) {
    list with inline actions, so the dashboard is something you act
    from, not just something you read. ── */
 let _rlQueueCount = 0; // reload items in Needs Attention — the hero line counts them too
+let _aisQueueCount = 0; // AIS arrival warnings in Needs Attention — counted in the hero line too
+let _dashHeroBase = 0;  // hero 'need your attention' count without the AIS part (the AIS module re-renders the hero alone)
 function renderActionQueue() {
   const el = document.getElementById('dash-action-queue');
   if (!el) return;
@@ -5019,6 +5036,17 @@ function renderActionQueue() {
         items.push({ urgency: a.severity === 'error' ? 0 : 0.5, kind: 'RELOAD', name: a.rec.bargeName + ' — ' + a.rec.grade + ' reload', detail: a.sub, go: a.go, key: a.key });
       });
     } catch (e) { console.warn('ABPS: reload queue items failed', e); }
+  }
+
+  // Live AIS position says the vessel arrives after its ETA / laycan.
+  _aisQueueCount = 0;
+  if (typeof _aisAlerts === 'function') {
+    try {
+      _aisAlerts().forEach(function(a) {
+        _aisQueueCount++;
+        items.push({ urgency: a.severity === 'error' ? 0 : 0.6, kind: 'AIS', red: a.severity === 'error', name: a.vesselName, detail: a.text, cid: a.cid, key: a.key });
+      });
+    } catch (e) { console.warn('ABPS: AIS queue items failed', e); }
   }
 
   vcCards.forEach(card => {
@@ -5049,12 +5077,13 @@ function renderActionQueue() {
   const KIND_STYLE = {
     DELAYED: { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   },
     PAQ:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' },
-    RELOAD:  { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   }
+    RELOAD:  { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   },
+    AIS:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' }
   };
 
   const shown = items.slice(0, 8);
   const rows = shown.map(it => {
-    const s = KIND_STYLE[it.kind];
+    const s = (it.kind === 'AIS' && it.red) ? KIND_STYLE.DELAYED : KIND_STYLE[it.kind];
     let actionHtml = '';
     if (it.kind === 'DELAYED') {
       actionHtml = `<button class="aq-btn" onclick="_globalSearchGoSchedule('${escJs(String(it.sno))}')">View in Schedule</button>`;
@@ -5063,6 +5092,8 @@ function renderActionQueue() {
         <button class="aq-btn" onclick="_globalSearchGoNomination('${escJs(it.cid)}')">Open</button>`;
     } else if (it.kind === 'RELOAD') {
       actionHtml = `<button class="aq-btn aq-btn-primary" onclick="rlGoToForecast('${escJs(it.go)}')">View reload plan</button>`;
+    } else if (it.kind === 'AIS') {
+      actionHtml = `<button class="aq-btn" onclick="_globalSearchGoNomination('${escJs(it.cid)}')">Open</button>`;
     }
     return `<div class="aq-row"${it.key ? ` data-alert-key="${esc(it.key)}"` : ''}>
       <span class="aq-tag" style="color:${s.color};background:${s.bg};border-color:${s.border}">${it.kind}</span>
@@ -5250,9 +5281,11 @@ function refreshDashboard() {
   _dashSafe('fueling',  () => renderDashFuelingStatus());
   _dashSafe('fleet',    () => renderDashFleetStatus());
   _dashSafe('reload planner', renderDashReloadPlanner);
+  _dashSafe('ais',      () => { if (typeof renderDashAis === 'function') renderDashAis(); });
   _dashSafe('watchlist',() => renderTrackRecordWatchlist());
   _dashSafe('activity', () => renderDashActivity(savedRecs, []));
-  _dashSafe('hero',     () => _renderDashHero(now, totalAlerts + _rlQueueCount));
+  _dashHeroBase = totalAlerts + _rlQueueCount;
+  _dashSafe('hero',     () => _renderDashHero(now, _dashHeroBase + _aisQueueCount));
 }
 /* Harbour Light hero banner text (the banner itself is CSS-hidden in
    Classic). "Supplies today" = schedule items whose barge start falls on
@@ -5995,7 +6028,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // screen (showPage('dashboard') refreshes on arrival anyway).
   const vcEl = document.getElementById('vc');
   if (vcEl) {
-    new MutationObserver(() => { _scheduleDashRefresh(true); }).observe(vcEl, {childList:true, subtree:true});
+    // The live-position (AIS) line inside a card changes nothing the dashboard shows — ignore it.
+    new MutationObserver((muts) => {
+      if (muts.every(m => m.target && m.target.closest && m.target.closest('.ais-line'))) return;
+      _scheduleDashRefresh(true);
+    }).observe(vcEl, {childList:true, subtree:true});
   }
   // Observe barge list for KPI refresh
   const blEl = document.getElementById('barge-list');
@@ -6328,6 +6365,11 @@ function computeGlobalAlerts() {
   if (typeof _rlAlerts === 'function') {
     try { _rlAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: reload alerts failed', e); }
   }
+  // Live AIS position suggests arriving > 2 h after ETA / after laycan —
+  // one per nomination ('ais|<nomUid>'), see LIVE VESSEL POSITIONS.
+  if (typeof _aisAlerts === 'function') {
+    try { _aisAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: AIS alerts failed', e); }
+  }
   return alerts;
 }
 
@@ -6375,6 +6417,12 @@ function _refreshGlobalAlertsBell() {
   // there when you open the app is a "new" surprise.
   if (_globalAlertsPrevKeys) {
     alerts.forEach(function(a) {
+      // AIS warnings toast once per nomination AND level per session: amber → red
+      // (same key) toasts again, a borderline ETA flapping on and off does not.
+      if (a.kind === 'ais' && typeof _aisToastOnce === 'function') {
+        if (_aisToastOnce(a)) showToast(`${a.label} — ${a.sub}`, a.severity, 5000);
+        return;
+      }
       if (!_globalAlertsPrevKeys.has(a.key)) {
         showToast(`${a.label} — ${a.sub}`, a.severity, 5000);
       }
@@ -9042,6 +9090,7 @@ function _rtStart() {
   _rtSubscribe();
 }
 function _rtStop() {
+  if (typeof _aisStop === 'function') _aisStop(); // live vessel positions channel + timers too
   _rtWanted = false;
   if (_rtRetryTimer) { clearTimeout(_rtRetryTimer); _rtRetryTimer = null; }
   if (_rtPullTimer) { clearTimeout(_rtPullTimer); _rtPullTimer = null; }
@@ -11923,6 +11972,8 @@ function upd(id) {
     // an early arrival look just as alarming as one that's actually overdue.
     else { lcbx.className='lc-box early show'; lcbx.innerHTML=`ETA${win?' frame':''} is <strong>before laycan opens — Before Laycan</strong> (${fmtLC(lc)}).`; }
   } else { lcbx.className='lc-box'; }
+  // Live position (AIS): ETA / laycan feed its arrival warnings.
+  if (typeof _aisRenderCard === 'function') _aisRenderCard(id);
   // auto-save on change (debounced) — also refresh the dashboard so the
   // Operational Activity card picks up the new ETA/quantity right away.
   // (The MutationObserver on #vc only fires when cards are added/removed;
@@ -13259,6 +13310,7 @@ function addVessel(def = {}) {
   </div>
   <div class="lc-box" id="v${id}-lcbox"></div>
   <div class="etc-prev" id="v${id}-prev"></div>
+  <div class="ais-line" id="v${id}-ais" aria-live="polite"></div>
   <div class="field" style="margin-top:10px">
     <label>Remarks <span style="font-weight:400;color:var(--muted)">— optional, included in nomination emails</span></label>
     <textarea id="v${id}-remarks" rows="2" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500)" style="width:100%;resize:vertical">${esc(remarks)}</textarea>
@@ -13292,6 +13344,7 @@ function addVessel(def = {}) {
   tQ(id);
   _qtyHints(id);
   if (lc || eta) upd(id);
+  if (typeof _aisRenderCard === 'function') _aisRenderCard(id); // Live position (AIS) line
   populateBargeDropdowns();
   // Show the track record immediately for a restored/existing nomination
   // too, not just when someone types a new name — a card can load with a
@@ -22121,6 +22174,7 @@ async function init() {
 
   startAutoSync();
   _rtStart(); // instant updates on top of the poll (see REALTIME)
+  if (typeof _aisStart === 'function') _aisStart(); // live vessel positions (read-only, see LIVE VESSEL POSITIONS)
   startReminderAutoRefresh();
   await loadROBAudit();
   await loadManualROB();
@@ -24040,6 +24094,776 @@ function _emailShowPasteReminder() {
         </div>
       </div>
     </div>
+
+<style>
+/* ── Live vessel positions (AIS) — nomination card line + dashboard card ── */
+.ais-line{display:none;margin-top:6px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface2);font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center;gap:4px 10px;line-height:1.45;min-width:0}
+.ais-line.show{display:flex}
+.ais-lbl{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);white-space:nowrap}
+.ais-chip{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:1px 8px;border-radius:999px;border:1px solid;white-space:nowrap;letter-spacing:.02em;line-height:1.6}
+.ais-chip::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.ais-st-arrived{color:var(--green);background:var(--green-lt);border-color:var(--green-bd)}
+.ais-st-approaching{color:var(--azure);background:var(--azure-lt);border-color:var(--azure-bd)}
+.ais-st-underway{color:var(--purple);background:var(--purple-lt);border-color:var(--purple-bd)}
+.ais-st-stale{color:var(--amber);background:var(--amber-lt);border-color:var(--amber-bd)}
+.ais-st-notseen{color:var(--muted);background:var(--surface);border-color:var(--border)}
+.ais-fact{white-space:nowrap;font-variant-numeric:tabular-nums;min-width:0}
+.ais-fact b{color:var(--text);font-weight:600}
+.ais-wrap{white-space:normal;overflow-wrap:anywhere}
+.ais-note{font-style:italic;color:var(--amber);white-space:nowrap}
+.ais-links{display:inline-flex;gap:10px;margin-left:auto;flex-wrap:wrap}
+.ais-links a{color:var(--azure);font-weight:600;text-decoration:none;white-space:nowrap}
+.ais-links a:hover{text-decoration:underline}
+.ais-warn{flex:1 1 100%;font-weight:600;padding:4px 8px;border-radius:6px;border:1px solid;white-space:normal;overflow-wrap:anywhere}
+.ais-warn.amber{color:var(--amber);background:var(--amber-lt);border-color:var(--amber-bd)}
+.ais-warn.red{color:var(--red);background:var(--red-lt);border-color:var(--red-bd)}
+.ais-card-hdr{display:flex;align-items:flex-start;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:10px}
+.ais-card-hdr > div{min-width:0}
+.ais-sub-err{color:var(--amber);font-weight:600;overflow-wrap:anywhere}
+.ais-list{display:flex;flex-direction:column;border:1px solid var(--border);border-radius:var(--radius-xs);overflow:hidden}
+.ais-row{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;padding:9px 12px;border-top:1px solid var(--border);font-size:11.5px;color:var(--sub);background:var(--surface);min-width:0}
+.ais-row:first-child{border-top:0}
+.ais-row-name{font-weight:700;color:var(--text);font-size:12.5px;min-width:0;overflow-wrap:anywhere}
+.ais-row-main{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;flex:1 1 220px;min-width:0}
+.ais-row-facts{display:flex;align-items:center;gap:4px 12px;flex-wrap:wrap;flex:2 1 320px;min-width:0}
+.ais-empty{font-size:12px;color:var(--muted);text-align:center;padding:18px 10px;overflow-wrap:anywhere}
+.ais-empty b{color:var(--sub)}
+#ais-refresh-btn[disabled]{opacity:.65;cursor:default}
+@media (max-width:600px){ .ais-links{margin-left:0} .ais-row-facts{flex-basis:100%} }
+html[data-skin="harbour"] .ais-line{border:0;background:#F1F5FA;border-radius:12px;padding:7px 12px}
+html[data-skin="harbour"] .ais-list{border-color:#E3E9F1;border-radius:14px}
+html[data-skin="harbour"] .ais-row{border-top-color:#EEF2F7}
+html[data-skin="harbour"] .ais-warn{border:0;border-radius:10px}
+</style>
+<script>
+/* ═══════════════════════════════════════════════════════════════
+   LIVE VESSEL POSITIONS (AIS)
+   ─────────────────────────────────────────────────────────────
+   Positions are collected SERVER-SIDE by the Supabase Edge Function
+   supabase/functions/ais-poll/index.ts (aisstream.io; the API key never
+   reaches the browser) into two tables, set up by supabase_ais_setup.sql:
+     ais_positions — latest position + static data per ship (MMSI)
+     ais_status    — one row (id = 1) describing the last run
+   This module only READS them (on login, every 2 minutes while the tab
+   is visible, and on Realtime changes) and shows per nomination:
+   status, distance to its anchorage/berth, speed, an AIS arrival estimate
+   and warnings against the nominated ETA / laycan. It never writes the
+   workspace and adds nothing to the shared payload.
+   States: not set up (tables missing / function never ran) → operators
+   see a short note on the dashboard card, traders nothing. Feed stopped
+   (no successful update for 24 h) → per-vessel lines and warnings are
+   hidden, operators see "AIS feed not updating since …". Operators are
+   also warned when scheduled runs seem to have stopped (> 25 min).
+   Operators can trigger a run ("Refresh now" → functions.invoke); the
+   function answers at once (202) and collects in the background, so the
+   app waits for ais_status.last_run_at to change.
+   Rendering never rebuilds the rest of the dashboard: the card lines
+   change only when their content changes ("seen N min ago" is updated
+   in place), and only the Needs Attention list / hero count follow
+   changes in the set of AIS warnings.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Reference point per Anchorage / Berth (AREA_OPTIONS values) used for the
+   distance and the "Arrived" rule. APPROXIMATE offshore positions — change
+   the numbers here if your usual anchorage spots differ. */
+const AIS_REF_POINTS = {
+  'FUJ-A': { lat: 25.170, lon: 56.440, label: 'Fujairah Anchorage' },
+  'FUJ-B': { lat: 25.200, lon: 56.380, label: 'Fujairah Berth' },
+  'KFK-A': { lat: 25.370, lon: 56.420, label: 'Khor Fakkan Anchorage' },
+  'KFK-B': { lat: 25.350, lon: 56.365, label: 'Khor Fakkan Berth' },
+};
+const AIS_CFG = {
+  arrivedNm: 5,        // Arrived: within 5 nm of the reference point and SOG < 1 kn …
+  arrivedSog: 1,
+  anchoredNm: 8,       // … or AIS status "at anchor"/"moored" within 8 nm
+  approachNm: 60,      // Approaching: within 60 nm (further = Underway)
+  movingSog: 1,        // an arrival estimate only for ships doing ≥ 1 kn …
+  courseTolDeg: 70,    // … whose course points within ±70° of the reference point …
+  nearNm: 3,           // within 3 nm and moving (manoeuvring, or leaving after supply): no estimate, no warning
+  waitNm: 15,          // slower than waitSog within 15 nm = waiting / drifting off the port (OPL): no estimate, no warning
+  waitSog: 3,
+  staleHrs: 6,         // Stale: last position older than 6 h
+  lateHrs: 2,          // amber warning: AIS estimate > 2 h after the ETA (frame END for a time frame)
+  feedDownHrs: 24,     // no successful update for this long → hide per-vessel lines / warnings
+  cronLateMin: 25,     // operators warned when the last scheduled run is older than this
+  pollMs: 120000,      // re-read the tables every 2 min while visible
+  refreshPollMs: 10000,     // after "Refresh now": check ais_status every 10 s …
+  refreshTimeoutMs: 150000, // … for up to 2½ min
+};
+const AIS_NAME_LEN = 20; // AIS carries at most 20 characters of a ship's name
+const AIS_STATUS_LABEL = { arrived: 'Arrived', approaching: 'Approaching', underway: 'Underway', stale: 'Stale', notseen: 'Not seen' };
+const AIS_POS_COLUMNS = 'mmsi,imo,name,lat,lon,sog,cog,heading,nav_status,destination,ais_eta,draught,matched_by,position_time,static_time,updated_at';
+let _ais = {
+  state: 'idle',   // 'idle' | 'loading' | 'ready' | 'missing' (tables not created) | 'error' (never loaded)
+  positions: [], status: null, loadedAt: 0, everLoaded: false, error: '',
+  wanted: false, loading: null, timer: null, channel: null, chRetry: null, chN: 0, rtTimer: null,
+  refresh: null,   // {prevRun, until, timer} while "Refresh now" waits for the run
+  alertSig: '', loads: 0,
+  toasted: new Set(), // 'ais|<nomUid>|<severity>' already toasted this session (a borderline ETA can flap)
+};
+
+/* ── Pure helpers (mirrors of supabase/functions/ais-poll/index.ts — keep in sync) ── */
+function _aisNormName(s) {
+  const t = String(s == null ? '' : s).toUpperCase().replace(/@+/g, ' ').replace(/\s+/g, ' ').trim();
+  return t.replace(/^(?:M\s*[\/.]\s*[VT]\.?|M[VT]\.?)\s+/, '');
+}
+// Names are compared on AIS's 20 characters ("MARAN GAS ALEXANDROUPOLIS" is broadcast "MARAN GAS ALEXANDROU").
+function _aisNameKey(s) { return _aisNormName(s).slice(0, AIS_NAME_LEN).trim(); }
+function _aisClassifyId(raw) {
+  const s = String(raw == null ? '' : raw).toUpperCase().replace(/(MMSI|IMO)[\s:.#-]*/g, '').replace(/[\s.\-]/g, '');
+  if (/^\d{7}$/.test(s)) return { kind: 'imo', value: s };
+  if (/^\d{9}$/.test(s)) return { kind: 'mmsi', value: s };
+  return null;
+}
+function _aisNum(x) { if (x === null || x === undefined || x === '') return null; const n = Number(x); return isFinite(n) ? n : null; }
+// Great-circle distance in nautical miles.
+function _aisDistNm(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, R = 3440.065;
+  const dLat = (lat2 - lat1) * r, dLon = (lon2 - lon1) * r;
+  const a = Math.pow(Math.sin(dLat / 2), 2) + Math.cos(lat1 * r) * Math.cos(lat2 * r) * Math.pow(Math.sin(dLon / 2), 2);
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(a)));
+}
+// Initial great-circle bearing (degrees true) from point 1 to point 2.
+function _aisBearing(lat1, lon1, lat2, lon2) {
+  const r = Math.PI / 180, p1 = lat1 * r, p2 = lat2 * r, dl = (lon2 - lon1) * r;
+  const y = Math.sin(dl) * Math.cos(p2), x = Math.cos(p1) * Math.sin(p2) - Math.sin(p1) * Math.cos(p2) * Math.cos(dl);
+  return (Math.atan2(y, x) / r + 360) % 360;
+}
+function _aisRef(area) { return AIS_REF_POINTS[area] ? Object.assign({ key: area }, AIS_REF_POINTS[area]) : Object.assign({ key: 'FUJ-A' }, AIS_REF_POINTS['FUJ-A']); }
+function _aisPosTime(p) { const t = p && p.position_time ? Date.parse(p.position_time) : NaN; return isNaN(t) ? null : t; }
+function _aisHasPos(p) { return !!p && _aisNum(p.lat) != null && _aisNum(p.lon) != null && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180 && _aisPosTime(p) != null; }
+
+/* A nomination ({name, imo, area}) → its AIS row. The IMO box decides:
+   7 digits → by IMO, 9 digits → by MMSI; empty/other → by name (normalised,
+   first 20 characters — "matched by name"). Several candidates (same name,
+   re-flagged ship): one with a fresh position first, then the one nearest
+   the anchorage, then the newest. */
+function _aisMatch(v, positions, now) {
+  positions = positions || [];
+  now = now == null ? Date.now() : now;
+  const id = _aisClassifyId(v && v.imo);
+  let hits, by;
+  if (id) {
+    by = id.kind;
+    hits = positions.filter(function(p) { return p && String(id.kind === 'imo' ? (p.imo || '') : (p.mmsi || '')) === id.value; });
+  } else {
+    const n = _aisNameKey(v && v.name);
+    if (!n) return null;
+    by = 'name';
+    hits = positions.filter(function(p) { return p && _aisNameKey(p.name) === n; });
+  }
+  if (!hits.length) return null;
+  const ref = _aisRef(v && v.area);
+  const score = function(p) {
+    const has = _aisHasPos(p), t = _aisPosTime(p) || 0;
+    const fresh = has && (now - t) <= AIS_CFG.staleHrs * 3600000;
+    return [has ? 1 : 0, fresh ? 1 : 0, has ? -_aisDistNm(+p.lat, +p.lon, ref.lat, ref.lon) : 0, t];
+  };
+  hits.sort(function(a, b) { const x = score(a), y = score(b); for (let i = 0; i < x.length; i++) { if (x[i] !== y[i]) return y[i] - x[i]; } return 0; });
+  return { pos: hits[0], by: by };
+}
+
+/* Status + distance + arrival estimate + ETA/laycan warning for one
+   nomination v = {name, area, etaEnd (Date|null: ETA, or the frame END for
+   a time frame), lcTo (Date|null: laycan end), etaWin} and its match m.
+   The arrival estimate counts from the TIME OF THE FIX (not from now — an
+   old fix must not make an on-time ship look late) and is only made for a
+   ship doing ≥ 1 kn on a course roughly toward the reference point. */
+function _aisAssess(v, m, now) {
+  now = now == null ? Date.now() : now;
+  const ref = _aisRef(v && v.area);
+  const out = { status: 'notseen', by: m ? m.by : null, pos: m ? m.pos : null, ref: ref, distNm: null, sog: null, est: null, warn: null, ageMs: null, course: null, matchedByName: false };
+  if (m && (m.by === 'name' || (m.pos && m.pos.matched_by === 'name'))) out.matchedByName = true;
+  const p = m && m.pos;
+  if (!_aisHasPos(p)) return out;
+  out.distNm = _aisDistNm(+p.lat, +p.lon, ref.lat, ref.lon);
+  out.sog = _aisNum(p.sog);
+  const tPos = Math.min(_aisPosTime(p), now); // a fix "in the future" (clock skew) counts as now
+  out.ageMs = Math.max(0, now - tPos);
+  if (out.ageMs > AIS_CFG.staleHrs * 3600000) { out.status = 'stale'; return out; }
+  const sog = out.sog == null ? 0 : out.sog;
+  const ns = _aisNum(p.nav_status);
+  if ((out.distNm <= AIS_CFG.arrivedNm && sog < AIS_CFG.arrivedSog) || ((ns === 1 || ns === 5) && out.distNm <= AIS_CFG.anchoredNm)) {
+    out.status = 'arrived';
+    return out;
+  }
+  out.status = out.distNm <= AIS_CFG.approachNm ? 'approaching' : 'underway';
+  if (sog < AIS_CFG.movingSog) return out;
+  // Moving inside the anchorage area (manoeuvring, or leaving after supply): nothing to estimate.
+  if (out.distNm <= AIS_CFG.nearNm) { out.course = 'near'; return out; }
+  // Slow near the port = waiting / drifting at the OPL, whatever the drift direction.
+  if (out.distNm <= AIS_CFG.waitNm && sog < AIS_CFG.waitSog) { out.course = 'waiting'; return out; }
+  const dir = _aisNum(p.cog) != null ? _aisNum(p.cog) : _aisNum(p.heading);
+  if (dir == null) out.course = 'unknown';
+  else {
+    const brg = _aisBearing(+p.lat, +p.lon, ref.lat, ref.lon);
+    const off = Math.abs((((dir - brg) % 360) + 540) % 360 - 180);
+    // Closing: course within ±70° AND at least 1 kn of the speed actually toward the point.
+    out.course = (off <= AIS_CFG.courseTolDeg && sog * Math.cos(off * Math.PI / 180) >= AIS_CFG.movingSog) ? 'toward' : 'away';
+  }
+  if (out.course === 'away') return out; // heading away / not really closing: no estimate, no warning
+  out.est = new Date(tPos + out.distNm / Math.max(sog, 1) * 3600000);
+  const etaEnd = (v && v.etaEnd instanceof Date && !isNaN(v.etaEnd.getTime())) ? v.etaEnd : null;
+  const lcTo = (v && v.lcTo instanceof Date && !isNaN(v.lcTo.getTime())) ? v.lcTo : null;
+  if (lcTo && out.est.getTime() > lcTo.getTime()) {
+    const h = (out.est - lcTo) / 3600000;
+    out.warn = { level: 'red', hrs: h, text: 'AIS suggests arrival ~' + _aisWhen(out.est) + ', ' + _aisHrs(h) + 'h after the laycan closes (' + _aisWhen(lcTo) + ') — may miss laycan' };
+  } else if (etaEnd && out.est.getTime() - etaEnd.getTime() > AIS_CFG.lateHrs * 3600000) {
+    const h = (out.est - etaEnd) / 3600000;
+    out.warn = { level: 'amber', hrs: h, text: 'AIS suggests arrival ~' + _aisWhen(out.est) + ', ' + _aisHrs(h) + 'h after ETA' + (v && v.etaWin ? ' (end of the ' + v.etaWin + ' frame)' : '') };
+  }
+  return out;
+}
+
+/* ── Formatting (NaN-safe) ── */
+function _aisWhen(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return d.getDate() + ' ' + MO[d.getMonth()] + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function _aisHrs(h) { return !isFinite(h) ? '?' : (h < 10 ? h.toFixed(1) : String(Math.round(h))); }
+function _aisNm(d) { return !isFinite(d) ? '—' : (d < 10 ? d.toFixed(1) : Math.round(d).toLocaleString('en-US')) + ' nm'; }
+function _aisKn(s) { return s == null || !isFinite(s) ? '— kn' : s.toFixed(1) + ' kn'; }
+function _aisAgo(ms) {
+  if (ms == null || !isFinite(ms)) return '';
+  const min = Math.floor(Math.max(0, ms) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return min + ' min ago';
+  const h = Math.floor(min / 60);
+  if (h < 48) return h + ' h ago';
+  return Math.floor(h / 24) + ' days ago';
+}
+/* "seen 8 min ago" as a span updated IN PLACE (text node .data) by _aisTickAgo —
+   so the passing of time never rewrites the card line (and never trips the
+   #vc MutationObserver, which would rebuild the dashboard). */
+function _aisAgoSpan(prefix, ts) {
+  const t = typeof ts === 'number' ? ts : Date.parse(ts || '');
+  if (!isFinite(t)) return '';
+  return '<span class="ais-ago" data-ts="' + t + '" data-prefix="' + esc(prefix) + '" title="' + esc(new Date(t).toISOString()) + '">' + esc(prefix + _aisAgo(Date.now() - t)) + '</span>';
+}
+function _aisTickAgo(root) {
+  const now = Date.now();
+  (root || document).querySelectorAll('.ais-ago[data-ts]').forEach(function(el) {
+    const txt = (el.getAttribute('data-prefix') || '') + _aisAgo(now - Number(el.getAttribute('data-ts')));
+    const tn = el.firstChild;
+    if (tn && tn.nodeType === 3 && el.childNodes.length === 1) { if (tn.data !== txt) tn.data = txt; }
+    else if (el.textContent !== txt) el.textContent = txt;
+  });
+}
+function _aisEtaTxt(v) {
+  if (!v || !(v.eta instanceof Date) || isNaN(v.eta.getTime())) return '';
+  return v.etaWin && typeof _fmtEtaWinShort === 'function' ? _fmtEtaWinShort(v.eta, v.etaWin) : _aisWhen(v.eta);
+}
+/* The ship's own AIS ETA is broadcast in UTC as "MM-DD HH:MM" with no year:
+   converted to this device's time, the year that puts it nearest to now. */
+function _aisEtaLocal(raw, now) {
+  const m = /^(\d{2})-(\d{2})(?: (\d{2}):(\d{2}))?$/.exec(String(raw == null ? '' : raw).trim());
+  if (!m || +m[1] < 1 || +m[1] > 12 || +m[2] < 1 || +m[2] > 31) return null;
+  const ref = now == null ? Date.now() : now, y = new Date(ref).getUTCFullYear();
+  let best = null;
+  [y - 1, y, y + 1].forEach(function(yr) {
+    const t = Date.UTC(yr, +m[1] - 1, +m[2], m[3] != null ? +m[3] : 0, m[4] != null ? +m[4] : 0);
+    if (!isNaN(t) && (best == null || Math.abs(t - ref) < Math.abs(best - ref))) best = t;
+  });
+  return best == null ? null : { date: new Date(best), hasTime: m[3] != null };
+}
+function _aisEtaFact(raw) {
+  if (!raw) return '';
+  const e = _aisEtaLocal(raw);
+  const title = 'As broadcast by the ship: ' + raw + ' UTC';
+  if (!e) return '<span class="ais-fact ais-wrap">AIS ETA ' + esc(raw) + ' UTC</span>';
+  const d = e.date;
+  const txt = e.hasTime ? _aisWhen(d) : (d.getUTCDate() + ' ' + MO[d.getUTCMonth()] + ' (UTC date)');
+  return '<span class="ais-fact" title="' + esc(title) + (e.hasTime ? ' — shown in your local time' : '') + '">AIS ETA ' + esc(txt) + '</span>';
+}
+// Why there is no arrival estimate for a moving ship ('' when there is one / it isn't moving).
+function _aisCourseTxt(a) {
+  const where = areaShort(a.ref.key);
+  if (a.course === 'away') return 'heading away from ' + where;
+  if (a.course === 'near') return 'moving within 3 nm of ' + where;
+  if (a.course === 'waiting') return 'slow / waiting near ' + where;
+  return '';
+}
+function _aisLinks(p) {
+  if (!p) return '';
+  const mmsi = /^\d{9}$/.test(String(p.mmsi || '')) ? String(p.mmsi) : '';
+  const imo = /^\d{7}$/.test(String(p.imo || '')) ? String(p.imo) : '';
+  const out = [];
+  if (mmsi) out.push('<a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:' + mmsi + '" target="_blank" rel="noopener" title="MarineTraffic map">Open map</a>');
+  if (imo || mmsi) out.push('<a href="https://www.vesselfinder.com/vessels/details/' + (imo || mmsi) + '" target="_blank" rel="noopener">VesselFinder</a>');
+  return out.length ? '<span class="ais-links">' + out.join('') + '</span>' : '';
+}
+
+/* ── Nominations as AIS sees them (read from the cards, like the rest of the app) ── */
+function _aisCardVessel(id) {
+  const card = document.getElementById('vessel-' + id);
+  if (!card) return null;
+  const val = function(f) { const el = document.getElementById('v' + id + '-' + f); return el && el.value != null ? String(el.value) : ''; };
+  const name = val('name').trim().replace(/\s+/g, ' '), imo = val('imo').trim();
+  const win = typeof _cardEtaWin === 'function' ? _cardEtaWin(id) : '';
+  const eta0 = val('eta') ? parseDT(val('eta')) : null;
+  const eta = (eta0 && win) ? _etaFrameStart(eta0, win) : eta0;
+  const etaEnd = (eta && win) ? _etaFrameEnd(eta, win) : eta;
+  let lc = null;
+  try { lc = val('lc') ? parseLaycan(val('lc')) : null; } catch (e) { lc = null; }
+  return { cid: String(id), nomUid: card.dataset.nomUid || '', name: name, imo: imo, area: val('area') || 'FUJ-A', eta: eta || null, etaWin: win, etaEnd: etaEnd || null, lcTo: lc && lc.to instanceof Date ? lc.to : null };
+}
+function _aisAllInfos(now) {
+  now = now == null ? Date.now() : now;
+  const out = [];
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
+    const v = _aisCardVessel(card.id.replace('vessel-', ''));
+    if (!v || (!v.name && !_aisClassifyId(v.imo))) return;
+    out.push({ v: v, a: _aisAssess(v, _aisMatch(v, _ais.positions, now), now) });
+  });
+  return out;
+}
+// Tables exist and the function has run (or produced rows) at least once.
+function _aisConfigured() {
+  return _ais.state === 'ready' && (_ais.positions.length > 0 || !!(_ais.status && (_ais.status.last_run_at || _ais.status.last_ok_at)));
+}
+// When positions last really updated: the last successful run, or the newest row.
+function _aisLastGood() {
+  let t = Date.parse((_ais.status && _ais.status.last_ok_at) || '');
+  if (isNaN(t)) t = 0;
+  _ais.positions.forEach(function(p) { const u = Date.parse((p && p.updated_at) || ''); if (!isNaN(u) && u > t) t = u; });
+  return t;
+}
+// Set up, but nothing has updated for a day (cron deleted, key revoked…).
+function _aisFeedDown(now) {
+  if (!_aisConfigured()) return false;
+  const t = _aisLastGood();
+  return !t || (now == null ? Date.now() : now) - t > AIS_CFG.feedDownHrs * 3600000;
+}
+// Per-vessel lines, rows and warnings are shown only while the feed is alive.
+function _aisActive() { return _aisConfigured() && !_aisFeedDown(); }
+
+/* ── Alerts (bell, Command Center, Needs Attention) — one per nomination ── */
+function _aisAlerts() {
+  if (!_aisActive()) return [];
+  const out = [];
+  _aisAllInfos().forEach(function(x) {
+    if (!x.a.warn) return;
+    const red = x.a.warn.level === 'red';
+    out.push({
+      key: 'ais|' + (x.v.nomUid || _aisNormName(x.v.name) || x.v.cid),
+      label: red ? 'AIS: may miss laycan' : 'AIS: arriving after ETA',
+      sub: (x.v.name || 'Vessel') + ' — ' + x.a.warn.text,
+      severity: red ? 'error' : 'warning',
+      kind: 'ais', cid: x.v.cid, vesselName: x.v.name || 'Vessel', text: x.a.warn.text
+    });
+  });
+  return out;
+}
+// The bell toasts an AIS warning once per nomination and level per session.
+function _aisToastOnce(a) {
+  const k = a.key + '|' + a.severity;
+  if (_ais.toasted.has(k)) return false;
+  _ais.toasted.add(k);
+  return true;
+}
+function _aisAlertSig() {
+  // text included: a new fix changes the estimate / hours shown in the bell and Needs Attention
+  try { return _aisAlerts().map(function(a) { return a.key + ':' + a.severity + ':' + a.text; }).join('|'); } catch (e) { return ''; }
+}
+
+/* ── Nomination card: "Live position (AIS)" line under the ETA strip ── */
+function _aisCardLineHtml(x) {
+  const a = x.a, v = x.v, p = a.pos;
+  const parts = ['<span class="ais-lbl">Live position (AIS)</span>', '<span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>'];
+  if (a.status === 'notseen') {
+    const id = _aisClassifyId(v.imo);
+    if (p && /^\d{9}$/.test(String(p.mmsi || ''))) parts.push('<span class="ais-fact ais-wrap">Identified on AIS (MMSI ' + esc(p.mmsi) + ') — no position received yet</span>');
+    else parts.push('<span class="ais-fact ais-wrap">No AIS position yet for ' + (id ? (id.kind === 'imo' ? 'IMO ' : 'MMSI ') + esc(id.value) : 'this vessel name') + '</span>');
+    if (a.matchedByName) parts.push('<span class="ais-note">matched by name</span>');
+    parts.push(_aisLinks(p));
+    return parts.join('');
+  }
+  parts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point)"><b>' + _aisNm(a.distNm) + '</b> to ' + esc(areaShort(a.ref.key)) + '</span>');
+  parts.push('<span class="ais-fact"><b>' + _aisKn(a.sog) + '</b></span>');
+  if (a.est) parts.push('<span class="ais-fact" title="Time of the last position + distance ÷ speed">AIS arrival <b>~' + _aisWhen(a.est) + '</b></span>');
+  else if (_aisCourseTxt(a)) parts.push('<span class="ais-fact">' + esc(_aisCourseTxt(a)) + '</span>');
+  if (p.destination) parts.push('<span class="ais-fact ais-wrap">Dest. ' + esc(p.destination) + '</span>');
+  if (p.ais_eta) parts.push(_aisEtaFact(p.ais_eta));
+  parts.push('<span class="ais-fact">' + _aisAgoSpan('seen ', p.position_time) + '</span>');
+  if (a.matchedByName) parts.push('<span class="ais-note" title="No IMO/MMSI on this nomination — matched on the AIS name, check it is the right ship">matched by name</span>');
+  parts.push(_aisLinks(p));
+  if (a.warn) parts.push('<div class="ais-warn ' + a.warn.level + '" role="status">' + esc(a.warn.text) + '</div>');
+  return parts.join('');
+}
+// The HTML without the time-relative text — what decides whether the line is rewritten.
+// (keeps the fix time itself: a new fix with the same rounded facts must still reset "seen …")
+function _aisStaticSig(html) { return html.replace(/(<span class="ais-ago" data-ts="[^"]*")[^>]*>[^<]*<\/span>/g, '$1>'); }
+function _aisRenderCard(id) {
+  const el = document.getElementById('v' + id + '-ais');
+  if (!el) return;
+  let html = '', st = '';
+  try {
+    if (_aisActive()) {
+      const v = _aisCardVessel(id);
+      if (v && (v.name || _aisClassifyId(v.imo))) {
+        const a = _aisAssess(v, _aisMatch(v, _ais.positions));
+        html = _aisCardLineHtml({ v: v, a: a });
+        st = a.status + (a.warn ? ' ' + a.warn.level : '');
+      }
+    }
+  } catch (e) { console.warn('ABPS: AIS card line failed', e); html = ''; }
+  // Only touch the DOM when the content changed — the #vc MutationObserver refreshes the dashboard.
+  const sig = _aisStaticSig(html);
+  if (el._aisSig === sig) { _aisTickAgo(el); return; }
+  el._aisSig = sig;
+  el.innerHTML = html;
+  el.classList.toggle('show', !!html);
+  if (st) el.setAttribute('data-ais-status', st); else el.removeAttribute('data-ais-status');
+}
+function _aisRenderCards() {
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) { _aisRenderCard(card.id.replace('vessel-', '')); });
+}
+
+/* ── Dashboard card "Vessel Positions (AIS)" ── */
+// Operators: is the scheduled job alive? ('' when fine)
+function _aisScheduleNote(now) {
+  const st = _ais.status;
+  if (!st || isTrader()) return '';
+  now = now == null ? Date.now() : now;
+  const late = AIS_CFG.cronLateMin * 60000;
+  if (Object.prototype.hasOwnProperty.call(st, 'last_cron_at')) {
+    const c = Date.parse(st.last_cron_at || '');
+    if (isNaN(c)) return 'No scheduled call yet — if the cron job is set up, one arrives within 10 minutes (README step 5).';
+    if (now - c > late) return 'Automatic updates seem to have stopped — last scheduled call ' + _aisAgo(now - c) + '. Check the cron job (README steps 5–6).';
+    return '';
+  }
+  const r = Date.parse(st.last_run_at || '');
+  if (!isNaN(r) && now - r > late) return 'Updates seem to have stopped — last run ' + _aisAgo(now - r) + '. Check the cron job (README steps 5–6).';
+  return '';
+}
+function renderDashAis() {
+  const card = document.getElementById('dash-ais');
+  const body = document.getElementById('dash-ais-body');
+  const sub = document.getElementById('dash-ais-sub');
+  const btn = document.getElementById('ais-refresh-btn');
+  if (!card || !body || !sub) return;
+  const operator = !isTrader();
+  const configured = _aisConfigured(), active = configured && !_aisFeedDown();
+  const started = _ais.state !== 'idle';
+  // Traders only see the card while positions are live; operators always (with a note).
+  const show = started && (active || operator);
+  card.style.display = show ? '' : 'none';
+  if (btn) {
+    const canRefresh = operator && started && _ais.state !== 'missing' && !!supabaseClient;
+    btn.style.display = canRefresh ? '' : 'none';
+    btn.disabled = !!_ais.refresh;
+    btn.textContent = _ais.refresh ? 'Refreshing…' : 'Refresh now';
+    btn.setAttribute('aria-busy', _ais.refresh ? 'true' : 'false');
+  }
+  if (!show) { body.innerHTML = ''; sub.textContent = ''; return; }
+  if (_ais.state === 'loading') { sub.textContent = 'Loading live positions…'; body.innerHTML = ''; return; }
+  const st = _ais.status || {};
+  const refreshing = _ais.refresh ? 'Refreshing… (about 1½ minutes)' : '';
+  if (!configured) {
+    sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
+    body.innerHTML = _ais.state === 'error'
+      ? '<div class="ais-empty">Live positions are unavailable right now — will retry automatically.</div>'
+      : '<div class="ais-empty" data-ais-setup="1"><b>Live positions not set up yet</b> — see README → “Live vessel positions (AIS)”.' + (_ais.state !== 'missing' ? ' Then press Refresh now to collect the first positions.' : '') + '</div>';
+    return;
+  }
+  if (!active) {
+    // Operators only (traders don't see the card): one note instead of stale lines everywhere.
+    const good = _aisLastGood();
+    sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
+    body.innerHTML = '<div class="ais-empty" data-ais-down="1"><b>AIS feed not updating' + (good ? ' since ' + esc(_aisWhen(new Date(good))) : '') + '</b> — ' +
+      (good ? 'no successful update for ' + esc(_aisAgo(Date.now() - good).replace(/ ago$/, '')) + '. ' : 'no successful update yet. ') +
+      'Vessel positions are hidden until it runs again — see README → “Live vessel positions (AIS)”.' +
+      (st.ok === false && st.error ? '<br><span class="ais-sub-err">Last error: ' + esc(String(st.error).slice(0, 200)) + '</span>' : '') + '</div>';
+    return;
+  }
+  const infos = _aisAllInfos();
+  const seen = infos.filter(function(x) { return x.a.status !== 'notseen' && x.a.status !== 'stale'; }).length;
+  const good = _aisLastGood();
+  const parts = [good ? _aisAgoSpan('Updated ', good) : 'Not updated yet'];
+  if (operator && st.last_cron_at && !isNaN(Date.parse(st.last_cron_at))) parts.push(_aisAgoSpan('last scheduled call ', st.last_cron_at));
+  parts.push(seen + ' of ' + infos.length + ' nominated vessel' + (infos.length === 1 ? '' : 's') + ' seen');
+  let subHtml = (refreshing ? esc(refreshing) + ' · ' : '') + parts.join(' · ');
+  if (operator) {
+    if (st.ok === false && st.error) subHtml += '<br><span class="ais-sub-err">Last update failed: ' + esc(String(st.error).slice(0, 200)) + '</span>';
+    else if (st.error) subHtml += '<br><span class="ais-sub-err">Last update incomplete: ' + esc(String(st.error).slice(0, 200)) + '</span>';
+    else if (_ais.error) subHtml += '<br><span class="ais-sub-err">Could not refresh the list just now — retrying.</span>';
+    const sched = _aisScheduleNote();
+    if (sched) subHtml += '<br><span class="ais-sub-err" data-ais-sched="1">' + esc(sched) + '</span>';
+  }
+  sub.innerHTML = subHtml;
+  if (!infos.length) { body.innerHTML = '<div class="ais-empty">No nominated vessels with a name or IMO to track.</div>'; return; }
+  const rank = { arrived: 3, approaching: 2, underway: 4, stale: 5, notseen: 6 };
+  infos.sort(function(x, y) {
+    const wx = x.a.warn ? (x.a.warn.level === 'red' ? 0 : 1) : 2, wy = y.a.warn ? (y.a.warn.level === 'red' ? 0 : 1) : 2;
+    if (wx !== wy) return wx - wy;
+    if (rank[x.a.status] !== rank[y.a.status]) return rank[x.a.status] - rank[y.a.status];
+    return (x.a.distNm == null ? 1e9 : x.a.distNm) - (y.a.distNm == null ? 1e9 : y.a.distNm);
+  });
+  body.innerHTML = '<div class="ais-list">' + infos.map(function(x) {
+    const a = x.a, v = x.v, p = a.pos;
+    const facts = [];
+    if (a.distNm != null) facts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point)"><b>' + _aisNm(a.distNm) + '</b> to ' + esc(areaShort(a.ref.key)) + '</span>');
+    if (a.status !== 'notseen') facts.push('<span class="ais-fact"><b>' + _aisKn(a.sog) + '</b></span>');
+    const etaTxt = _aisEtaTxt(v);
+    if (a.est || etaTxt) facts.push('<span class="ais-fact">' + (a.est ? 'AIS <b>~' + _aisWhen(a.est) + '</b>' + (etaTxt ? ' · ' : '') : (_aisCourseTxt(a) ? esc(_aisCourseTxt(a)) + (etaTxt ? ' · ' : '') : '')) + (etaTxt ? 'ETA ' + esc(etaTxt) : '') + '</span>');
+    if (a.ageMs != null) facts.push('<span class="ais-fact">' + _aisAgoSpan('seen ', p && p.position_time) + '</span>');
+    else facts.push('<span class="ais-fact">' + (p ? 'identified, no position yet' : 'no AIS position yet') + '</span>');
+    facts.push(_aisLinks(p));
+    return '<div class="ais-row" data-cid="' + esc(v.cid) + '" data-ais-status="' + a.status + '">' +
+      '<div class="ais-row-main"><span class="ais-row-name">' + esc(v.name || ('IMO ' + v.imo)) + '</span><span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>' + (a.matchedByName ? '<span class="ais-note">matched by name</span>' : '') + '</div>' +
+      '<div class="ais-row-facts">' + facts.join('') + '</div>' +
+      (a.warn ? '<div class="ais-warn ' + a.warn.level + '">' + esc(a.warn.text) + '</div>' : '') +
+      '</div>';
+  }).join('') + '</div>';
+}
+
+/* ── Loading ── */
+function _aisIsMissingTable(err) {
+  if (!err) return false;
+  const code = String(err.code || '');
+  return code === 'PGRST205' || code === '42P01' || /does not exist|schema cache|could not find the table/i.test(String(err.message || ''));
+}
+async function _aisLoad(reason) {
+  if (!supabaseClient || typeof supabaseClient.from !== 'function') return;
+  if (_ais.loading) return _ais.loading;
+  if (!_ais.everLoaded && _ais.state === 'idle') _ais.state = 'loading';
+  const run = (async function() {
+    try {
+      const res = await Promise.all([
+        supabaseClient.from('ais_positions').select(AIS_POS_COLUMNS),
+        supabaseClient.from('ais_status').select('*').eq('id', 1).maybeSingle(),
+      ]);
+      const pr = res[0] || {}, sr = res[1] || {};
+      const err = pr.error || sr.error;
+      if (err) {
+        if (_aisIsMissingTable(err)) { _ais.state = 'missing'; _ais.positions = []; _ais.status = null; _ais.error = ''; }
+        else { _ais.error = String(err.message || err); if (!_ais.everLoaded) _ais.state = 'error'; console.warn('FLOW AIS: could not read positions —', _ais.error); }
+      } else {
+        _ais.positions = (Array.isArray(pr.data) ? pr.data : []).filter(function(r) { return r && typeof r === 'object'; });
+        _ais.status = (sr.data && typeof sr.data === 'object') ? sr.data : null;
+        _ais.state = 'ready';
+        _ais.error = '';
+      }
+    } catch (e) {
+      _ais.error = String((e && e.message) || e);
+      if (!_ais.everLoaded) _ais.state = 'error';
+      console.warn('FLOW AIS: could not read positions —', _ais.error);
+    }
+    _ais.loadedAt = Date.now();
+    _ais.loads++;
+  })();
+  _ais.loading = run;
+  try { await run; } finally { _ais.loading = null; }
+  const first = !_ais.everLoaded && _ais.state === 'ready';
+  if (_ais.state === 'ready') _ais.everLoaded = true;
+  // Warnings already true when the app opens aren't "new": no toast for them (like the bell's first pass).
+  if (first) {
+    try {
+      _aisAlerts().forEach(function(a) {
+        _ais.toasted.add(a.key + '|' + a.severity);
+        if (typeof _globalAlertsPrevKeys !== 'undefined' && _globalAlertsPrevKeys) _globalAlertsPrevKeys.add(a.key);
+      });
+    } catch (e) {}
+  }
+  if (_ais.state === 'ready' && _ais.wanted && !_ais.channel && !_ais.chRetry) _aisSubscribe();
+  _aisRenderAll();
+  _aisCheckRefreshDone();
+}
+/* Card lines + the AIS card; the bell, Needs Attention and the hero count
+   only when the set of AIS warnings (nomination + level) changed. Never a
+   full dashboard rebuild (charts, week calendar). */
+function _aisRenderAll() {
+  try { _aisRenderCards(); } catch (e) { console.warn('ABPS: AIS card lines failed', e); }
+  try { renderDashAis(); } catch (e) { console.warn('ABPS: AIS dashboard card failed', e); }
+  _aisSyncAlerts();
+}
+function _aisSyncAlerts() {
+  const sig = _aisAlertSig();
+  if (sig === _ais.alertSig) return;
+  _ais.alertSig = sig;
+  if (typeof _refreshGlobalAlertsBell === 'function') { try { _refreshGlobalAlertsBell(); } catch (e) {} }
+  if (typeof _currentPage !== 'undefined' && _currentPage === 'dashboard') {
+    if (typeof renderActionQueue === 'function') { try { renderActionQueue(); } catch (e) { console.warn('ABPS: AIS action queue failed', e); } }
+    if (typeof _renderDashHero === 'function') { try { _renderDashHero(new Date(), (typeof _dashHeroBase !== 'undefined' ? _dashHeroBase : 0) + _aisQueueCount); } catch (e) {} }
+  }
+}
+
+/* ── Realtime (own channel; only once the tables are known to exist) ── */
+function _aisSubscribe() {
+  if (_ais.channel || !supabaseClient || typeof supabaseClient.channel !== 'function') return;
+  let ch;
+  try {
+    ch = supabaseClient.channel('ais-positions-' + (++_ais.chN));
+    ch.on('postgres_changes', { event: '*', schema: 'public', table: 'ais_positions' }, _aisOnChange)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ais_status' }, _aisOnChange);
+    _ais.channel = ch;
+    ch.subscribe(function(status) {
+      if (ch !== _ais.channel) return;
+      if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+        // The 2-minute poll covers the gap; try again later.
+        _aisTeardown();
+        if (_ais.wanted && !_ais.chRetry) _ais.chRetry = setTimeout(function() { _ais.chRetry = null; if (_ais.wanted && _ais.state === 'ready') _aisSubscribe(); }, AIS_CFG.pollMs);
+      }
+    });
+  } catch (e) {
+    _ais.channel = null;
+    console.warn('FLOW AIS: realtime subscribe failed —', e && e.message);
+  }
+}
+function _aisTeardown() {
+  const ch = _ais.channel;
+  _ais.channel = null;
+  if (ch) { try { const p = supabaseClient.removeChannel(ch); if (p && p.catch) p.catch(function() {}); } catch (e) {} }
+}
+function _aisOnChange() {
+  if (_ais.rtTimer) clearTimeout(_ais.rtTimer);
+  _ais.rtTimer = setTimeout(function() { _ais.rtTimer = null; if (_ais.wanted) _aisLoad('realtime'); }, 600);
+}
+
+/* ── Start / stop (login / logout) ── */
+function _aisStart() {
+  if (_ais.wanted || !supabaseClient || (typeof _flowOfflineLaunch !== 'undefined' && _flowOfflineLaunch)) return;
+  _ais.wanted = true;
+  _aisLoad('login');
+  // Every 30 s: "N min ago" texts in place; every 2 minutes (while visible) a re-read.
+  _ais.timer = setInterval(function() {
+    if (!_ais.wanted) return;
+    try { _aisTickAgo(document); } catch (e) {}
+    if (document.visibilityState === 'hidden') return;
+    if (Date.now() - _ais.loadedAt >= AIS_CFG.pollMs - 1000) _aisLoad('poll');
+  }, 30000);
+}
+function _aisStop() {
+  _ais.wanted = false;
+  if (_ais.timer) { clearInterval(_ais.timer); _ais.timer = null; }
+  if (_ais.chRetry) { clearTimeout(_ais.chRetry); _ais.chRetry = null; }
+  if (_ais.rtTimer) { clearTimeout(_ais.rtTimer); _ais.rtTimer = null; }
+  if (_ais.refresh && _ais.refresh.timer) clearTimeout(_ais.refresh.timer);
+  _ais.refresh = null;
+  _aisTeardown();
+}
+document.addEventListener('visibilitychange', function() {
+  if (document.visibilityState === 'visible' && _ais.wanted && Date.now() - _ais.loadedAt >= AIS_CFG.pollMs) _aisLoad('visible');
+});
+// Name / IMO / anchorage / time-frame edits re-match that card (ETA & laycan go through upd()).
+(function() {
+  const vcEl = document.getElementById('vc');
+  if (!vcEl) return;
+  const timers = {};
+  const onEdit = function(e) {
+    const m = e && e.target && /^v(\d+)-(name|imo|area|etawin|etawin-chk|lc|eta)$/.exec(e.target.id || '');
+    if (!m) return;
+    clearTimeout(timers[m[1]]);
+    timers[m[1]] = setTimeout(function() { _aisRenderCard(m[1]); _aisSyncAlerts(); }, 400);
+  };
+  vcEl.addEventListener('input', onEdit);
+  vcEl.addEventListener('change', onEdit);
+})();
+
+/* ── "Refresh now" (operators) ── */
+async function _aisFnErrorMsg(err) {
+  const ctx = err && err.context;
+  const status = ctx && typeof ctx.status === 'number' ? ctx.status : 0;
+  let body = null;
+  if (ctx && typeof ctx.json === 'function') { try { body = await ctx.json(); } catch (e) { body = null; } }
+  const hasOwnError = !!(body && typeof body === 'object' && body.error);
+  const detail = hasOwnError ? String(body.error).slice(0, 200) : '';
+  if (status === 404) return 'The ais-poll function is not deployed yet — see README → “Live vessel positions (AIS)”.';
+  // The function's own 401/403 always say why ({error}). Without that, Supabase's gateway refused
+  // the login token before the function ran: JWT verification is still ON for ais-poll.
+  if ((status === 401 || status === 403) && !hasOwnError)
+    return 'Supabase refused the request before ais-poll ran — “Verify JWT” is probably still ON for the ais-poll function. Switch it off (README → “Live vessel positions (AIS)”, step 4).';
+  if (status === 401 || status === 403) return detail;
+  if (status) return 'Live position refresh failed: ' + (detail || ('HTTP ' + status));
+  const name = String((err && err.name) || '');
+  if (/FunctionsFetchError|FunctionsRelayError/.test(name) || /failed to send|failed to fetch|network/i.test(String((err && err.message) || '')))
+    return 'Could not reach the ais-poll function — is it deployed? See README → “Live vessel positions (AIS)”.';
+  return 'Live position refresh failed: ' + String((err && err.message) || err || 'unknown error').slice(0, 200);
+}
+function _aisRefreshEnd() {
+  if (_ais.refresh && _ais.refresh.timer) clearTimeout(_ais.refresh.timer);
+  _ais.refresh = null;
+  try { renderDashAis(); } catch (e) {}
+}
+function _aisSummaryToast(st) {
+  if (!st) return;
+  const seen = (Number(st.found) || 0) + ' of ' + (Number(st.tracked) || 0) + ' nominated vessels seen';
+  if (st.ok === false) showToast('Live position update failed: ' + String(st.error || 'unknown error').slice(0, 200), 'error', 9000);
+  else if (st.error) showToast('Live positions partly updated — ' + seen + '. ' + String(st.error).slice(0, 200), 'warning', 8000);
+  else showToast('Live positions updated — ' + seen + '.', 'success', 5000);
+}
+// While waiting for a background run: done when ais_status.last_run_at moves on.
+function _aisCheckRefreshDone() {
+  const r = _ais.refresh;
+  if (!r || !r.waiting) return;
+  const st = _ais.status;
+  if (st && st.last_run_at && st.last_run_at !== r.prevRun && !st.running_since) {
+    _aisRefreshEnd();
+    _aisSummaryToast(st);
+    return;
+  }
+  if (Date.now() > r.until) {
+    _aisRefreshEnd();
+    showToast('Still collecting live positions — the list will update by itself when they arrive.', 'info', 6000);
+  }
+}
+function _aisRefreshWait() {
+  const r = _ais.refresh;
+  if (!r) return;
+  r.waiting = true;
+  r.until = Date.now() + AIS_CFG.refreshTimeoutMs;
+  const tick = function() {
+    if (_ais.refresh !== r) return;
+    _aisLoad('refresh-wait').then(function() { if (_ais.refresh === r) r.timer = setTimeout(tick, AIS_CFG.refreshPollMs); });
+  };
+  r.timer = setTimeout(tick, AIS_CFG.refreshPollMs);
+  renderDashAis();
+}
+async function aisRefreshNow() {
+  if (isTrader() || _ais.refresh) return;
+  if (!supabaseClient || !supabaseClient.functions || typeof supabaseClient.functions.invoke !== 'function') {
+    showToast('Live positions cannot be refreshed from this device right now.', 'error');
+    return;
+  }
+  const r = { prevRun: (_ais.status && _ais.status.last_run_at) || null, waiting: false, until: 0, timer: null };
+  _ais.refresh = r;
+  renderDashAis();
+  let data = null, error = null;
+  try {
+    const res = await supabaseClient.functions.invoke('ais-poll', { body: { source: 'app' } });
+    data = res ? res.data : null; error = res ? res.error : null;
+  } catch (e) { error = e; }
+  if (_ais.refresh !== r) return; // logged out meanwhile
+  if (typeof data === 'string') { try { data = JSON.parse(data); } catch (e) { /* keep as text */ } }
+  if (error) { const msg = await _aisFnErrorMsg(error); _aisRefreshEnd(); showToast(msg, 'error', 9000); return; }
+  if (!data || typeof data !== 'object' || data.ok === false) {
+    _aisRefreshEnd();
+    showToast('Live position refresh failed: ' + String((data && data.error) || 'no answer from the function').slice(0, 200), 'error', 9000);
+    _aisLoad('refresh');
+    return;
+  }
+  if (data.throttled) {
+    _aisRefreshEnd();
+    showToast('Live positions were updated less than 2 minutes ago — showing those.', 'info');
+    _aisLoad('refresh');
+    return;
+  }
+  if (data.deferred || data.busy) {
+    _aisRefreshEnd();
+    showToast('The live-position service is restarting — try Refresh now again in a minute.', 'info', 6000);
+    return;
+  }
+  if (data.started || data.running) {
+    showToast(data.running ? 'A live position update is already running — the list updates when it finishes.' : 'Fetching live positions — this takes about 1½ minutes. The list updates by itself.', 'info', 6000);
+    _aisRefreshWait();
+    return;
+  }
+  // The function waited for the run (no background mode): the answer is the result.
+  _aisRefreshEnd();
+  await _aisLoad('refresh');
+  _aisSummaryToast(data);
+}
+</script>
 
 <script>
 if ('serviceWorker' in navigator) {

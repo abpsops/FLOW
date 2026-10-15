@@ -43,6 +43,8 @@ const SUITES = [
   ['nominations-range', 'suites/nominations/range.test.js', 'quantity ranges: entry, displays, exports, planning max, sync'],
   ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
   ['eta-timeframe', 'suites/nominations/timeframe.test.js', 'ETA / loading time frames (AM, PM…): card, schedule, sync, loading, parser'],
+  ['ais', 'suites/ais/ais.test.js', 'live vessel positions: matching, status, ETA/laycan warnings, card + dashboard, Refresh now, trader, not set up, XSS'],
+  ['ais-edge', 'suites/ais/edge.test.js', 'ais-poll Edge Function: prefilter/parsing, mock aisstream run, auth, throttle, background mode, errors'],
 ];
 
 const args = process.argv.slice(2);

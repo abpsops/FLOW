@@ -30,6 +30,18 @@
      SUBSCRIBED — like a project whose table isn't in the publication);
      db.realtimeEcho = true also delivers to the page that made the write (as
      real Supabase does). db.realtimeLog records every delivery batch.
+   - Live vessel positions (AIS): ais_positions (keyed by mmsi) and ais_status
+     (id 1) exist only with createDb({ ais: true | { positions: [...], status: {...} } });
+     otherwise every query on them fails like a project where
+     supabase_ais_setup.sql was never run (PGRST205). Reads need a role, client
+     writes are refused (RLS). H.aisWrite(db, table, rows) is the Edge
+     Function writing (service role): it upserts and delivers a realtime
+     postgres_changes event for that table to every open page.
+   - supabase.functions.invoke(name, {body}) runs db.functions[name](op, ctx)
+     in Node (async). It returns {status, body} (2xx → {data: body}, else a
+     FunctionsHttpError whose context has .status / .json()) or
+     {fetchError: 'msg'} (FunctionsFetchError). No handler → 404 (function not
+     deployed). ctx.write(table, rows) = H.aisWrite. db.invokeLog lists calls.
 */
 const fs = require('fs');
 const path = require('path');
@@ -96,7 +108,15 @@ function createDb(opts) {
     realtimeEcho: !!opts.realtimeEcho,
     realtimeLog: [],
     pages: [],   // open pages (filled by openApp) — realtime delivery targets
+    aisTables: !!opts.ais,   // supabase_ais_setup.sql "run"
+    functions: Object.assign({}, opts.functions || {}),
+    invokeLog: [],
   };
+  if (opts.ais) {
+    const a = typeof opts.ais === 'object' ? opts.ais : {};
+    db.tables.ais_positions = new Map((a.positions || []).map(r => [String(r.mmsi), clone(r)]));
+    db.tables.ais_status = new Map([[1, Object.assign({ id: 1 }, clone(a.status || {}))]]);
+  }
   if (opts.workspace) db.tables.abps_workspace.set('main', { id: 'main', payload: opts.workspace, version: opts.workspace.version || 1, updated_at: new Date().toISOString() });
   return db;
 }
@@ -160,6 +180,11 @@ function handle(db, op) {
     }
     return { data: null, error: { message: 'unknown rpc ' + op.name } };
   }
+  if (AIS_TABLES.includes(op.table)) {
+    // Mirrors supabase_ais_setup.sql: read for role holders, no client writes.
+    if (!db.aisTables) return { data: null, error: { message: "Could not find the table 'public." + op.table + "' in the schema cache", code: 'PGRST205' } };
+    if (op.action !== 'select') return rls;
+  }
   if (op.table === 'user_roles') {
     if (op.action !== 'select') return rls;
     const r = role ? { role, user_id: op.uid } : null;
@@ -191,6 +216,43 @@ function handle(db, op) {
     return { data: op.returning ? hit.map(clone) : null, error: null };
   }
   return { data: null, error: { message: 'unsupported op' } };
+}
+const AIS_TABLES = ['ais_positions', 'ais_status'];
+const aisKey = (table, r) => table === 'ais_status' ? Number(r.id || 1) : String(r.mmsi);
+// The ais-poll Edge Function writing (service role): upsert + realtime event to every open page.
+function aisWrite(db, table, rows) {
+  if (!AIS_TABLES.includes(table)) throw new Error('aisWrite: not an AIS table: ' + table);
+  if (!db.tables[table]) db.tables[table] = new Map();
+  const t = db.tables[table], ts = new Date().toISOString(), events = [];
+  for (const r of (Array.isArray(rows) ? rows : [rows])) {
+    const k = aisKey(table, r), had = t.has(k);
+    const row = Object.assign({}, had ? t.get(k) : {}, clone(r));
+    t.set(k, row);
+    events.push({ eventType: had ? 'UPDATE' : 'INSERT', schema: 'public', table, commit_timestamp: ts, new: clone(row), old: had ? { [table === 'ais_status' ? 'id' : 'mmsi']: k } : {} });
+  }
+  if (db.realtime && events.length) {
+    db.realtimeLog.push({ at: Date.now(), from: 'service_role', events, to: db.pages.map(p => p.uid) });
+    for (const p of db.pages) {
+      if (p.page.isClosed()) continue;
+      p.page.evaluate(ev => window.__mockRealtimeDeliver && window.__mockRealtimeDeliver(ev), events).catch(() => {});
+    }
+  }
+}
+// supabase.functions.invoke → db.functions[name] (see header).
+async function handleInvoke(db, op) {
+  db.log.push(op);
+  db.invokeLog.push({ at: Date.now(), uid: op.uid, name: op.name, body: clone(op.body) });
+  const fn = db.functions && db.functions[op.name];
+  const httpErr = (status, body) => ({ data: null, error: { name: 'FunctionsHttpError', message: 'Edge Function returned a non-2xx status code', context: { status, body: body == null ? null : body } } });
+  if (!fn) return httpErr(404, { code: 'NOT_FOUND', message: 'Requested function was not found' });
+  let res;
+  try { res = await fn(op, { db, write: (table, rows) => aisWrite(db, table, rows), uid: op.uid, role: db.roles[op.uid] || null }); }
+  catch (e) { return { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function', context: {} } }; }
+  res = res || {};
+  if (res.fetchError) return { data: null, error: { name: 'FunctionsFetchError', message: 'Failed to send a request to the Edge Function', context: {} } };
+  const status = res.status || 200;
+  if (status >= 200 && status < 300) return { data: res.body === undefined ? null : clone(res.body), error: null };
+  return httpErr(status, res.body);
 }
 // Snapshot of abps_workspace row identities, to diff into realtime events.
 function wsSnapshot(db) {
@@ -259,7 +321,11 @@ async function openApp(browser, db, opts) {
   });
   const errors = [];
   let page = null;
-  await ctx.exposeFunction('__mockDb', (s) => JSON.stringify(handleAndBroadcast(db, JSON.parse(s), page)));
+  await ctx.exposeFunction('__mockDb', async (s) => {
+    const op = JSON.parse(s);
+    if (op.action === 'invoke') return JSON.stringify(await handleInvoke(db, op));
+    return JSON.stringify(handleAndBroadcast(db, op, page));
+  });
   const uid = opts.uid || 'user-operator';
   const ls = opts.localStorage || {};
   await ctx.addInitScript(([uid, signedOut, ls]) => {
@@ -313,4 +379,4 @@ async function openApp(browser, db, opts) {
   return { ctx, page, errors };
 }
 
-module.exports = { APP_DIR, CDN_MAP, createDb, handle, handleAndBroadcast, launch, openApp };
+module.exports = { APP_DIR, CDN_MAP, createDb, handle, handleAndBroadcast, handleInvoke, aisWrite, launch, openApp };
