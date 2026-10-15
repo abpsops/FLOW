@@ -558,7 +558,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .sidebar-badge.amber{background:var(--amber)}
 .sidebar-badge.red{background:var(--red)}
 .sidebar-divider{height:1px;background:var(--border);margin:6px 14px}
-/* Sidebar "Danger zone" — bulk-delete actions behind a collapsed disclosure */
+/* Sidebar "Data Management" — bulk-delete actions behind a collapsed disclosure */
 .danger-zone{margin-top:auto;padding-bottom:8px}
 .danger-zone-toggle,.danger-zone-item{
   display:flex;align-items:center;gap:9px;width:calc(100% - 12px);margin:1px 6px;padding:7px 14px;
@@ -1641,7 +1641,7 @@ html[data-skin="harbour"] .sidebar-badge.amber,
 html[data-skin="harbour"] .sidebar-badge.red{background:#F26A4B;color:#FFFFFF;border-radius:999px;padding:2px 7px;min-width:22px;font-size:11px;font-weight:700}
 html[data-skin="harbour"] .sidebar-divider{background:rgba(255,255,255,.07);margin:10px 24px}
 html[data-skin="harbour"] .sidebar-item[style*="color:var(--red)"]{color:#FF9B85!important}
-/* Danger zone — muted until opened, coral-red items on the navy sidebar */
+/* Data Management — muted until opened, coral-red items on the navy sidebar */
 html[data-skin="harbour"] :is(.danger-zone-toggle,.danger-zone-item){font-size:13px;min-height:40px;margin:2px 12px;width:calc(100% - 24px);border-radius:12px;padding:0 14px}
 html[data-skin="harbour"] .danger-zone-toggle{color:#6F88AA;font-weight:700}
 html[data-skin="harbour"] .danger-zone-toggle .sidebar-icon{color:inherit;opacity:.9}
@@ -2759,7 +2759,7 @@ function flowWelcomeGo(pageId) {
       </button>
       <div id="topbar-menu-dropdown" style="display:none;position:absolute;top:calc(100% + 8px);right:0;min-width:210px;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:var(--sh-lg);z-index:9900;overflow:hidden;padding:6px">
         <!-- Full Reset / Wipe Cloud / Clear All Data live in the sidebar's
-             collapsed "Danger zone" (same ids), behind a typed confirmation. -->
+             collapsed "Data Management" (same ids), behind a typed confirmation. -->
         <button id="topbar-logout-btn" onclick="closeTopbarMenu();operatorLogout()" class="topbar-menu-item">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           Log Out
@@ -2871,14 +2871,14 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
     Trash Bin
   </a>
-  <!-- Danger zone — every bulk-delete action, collapsed by default and
+  <!-- Data Management — every bulk-delete action, collapsed by default and
        operator-only (hidden until the role lookup confirms an operator, see
        _applyRoleUIRestrictions). Each one opens a typed confirmation. -->
   <div class="danger-zone" id="danger-zone" style="display:none">
     <div class="sidebar-divider"></div>
     <button type="button" class="danger-zone-toggle" id="danger-zone-toggle" aria-expanded="false" aria-controls="danger-zone-panel" onclick="toggleDangerZone()">
       <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      <span>Danger zone</span>
+      <span>Data Management</span>
       <svg class="danger-zone-chev" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     <div class="danger-zone-panel" id="danger-zone-panel" hidden>
@@ -3886,7 +3886,7 @@ function flowWelcomeGo(pageId) {
       <div class="page-subtitle">Mark each vessel as supplied, enter actuals and save the record</div>
     </div>
     <div class="page-actions">
-      <!-- Clear Checklist moved to the sidebar Danger zone (typed confirmation) -->
+      <!-- Clear Checklist moved to the sidebar Data Management (typed confirmation) -->
       <button class="btn btn-secondary btn-sm" onclick="downloadChecklist()">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
         Download Checklist
@@ -3936,7 +3936,7 @@ function flowWelcomeGo(pageId) {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         Remove Duplicates
       </button>
-      <!-- Clear All Records moved to the sidebar Danger zone (typed confirmation) -->
+      <!-- Clear All Records moved to the sidebar Data Management (typed confirmation) -->
     </div>
   </div>
   <div id="saved-records-panel" style="background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
@@ -6260,7 +6260,7 @@ document.addEventListener('DOMContentLoaded', async () => {
    access to everything, exactly as before. Trader accounts are
    restricted to Dashboard (view only) + Vessel Nominations
    (view + edit) — every other sidebar page and every destructive
-   admin action (the sidebar Danger zone: Full Reset, Wipe Cloud,
+   admin action (the sidebar Data Management: Full Reset, Wipe Cloud,
    Clear All Data, Clear Checklist, Clear Saved Records) is hidden
    from them.
 
@@ -6434,7 +6434,7 @@ function _applyRoleUIRestrictions() {
   });
 
   // Hide sidebar links that don't have nav- ids: Monthly Report (the
-  // destructive actions sit in the Danger zone, hidden above)
+  // destructive actions sit in the Data Management section, hidden above)
   document.querySelectorAll('#sidebar a[onclick^="openMonthlyReport"]').forEach(function(a) {
     a.style.display = 'none';
   });
@@ -21193,7 +21193,7 @@ document.addEventListener('keydown', function(e) {
   else if (e.key === 'Enter' && e.target && e.target.id === 'danger-confirm-input') { e.preventDefault(); if (_dangerConfirmMatches()) _dangerConfirmClose(true); }
 });
 
-// Sidebar "Danger zone" disclosure — collapsed by default on every load.
+// Sidebar "Data Management" disclosure — collapsed by default on every load.
 function toggleDangerZone(force) {
   const btn = document.getElementById('danger-zone-toggle');
   const panel = document.getElementById('danger-zone-panel');
