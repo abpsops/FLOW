@@ -26,7 +26,7 @@ const ok = (name, cond, extra) => { console.log((cond ? 'PASS ' : 'FAIL ') + nam
     _lastSched = [{ sno: 1, name: XSS, eta: new Date(), bargeLabel: XSS, area: XSS, vQ: 10, mQ: 0, nomUid: 'n1' }];
     _loadingRecords = [{ id: "l'1", terminal: XSS, grade: 'VLSFO', qty: 5, startAt: new Date().toISOString(), endAt: new Date(Date.now() + 3600e3).toISOString(), surveyor: XSS, notes: '"><img src=x onerror="window.__xss=99">' }];
     renderWeekCalendar(0);
-    _deliveryLog = {}; _deliveryLog[_dlMonthKey(new Date())] = { timely: [], delayed: [], disputes: [{ vessel: XSS, remarks: XSS, dateStr: 'x' }] };
+    _deliveryLog = {}; _deliveryLog[_dlMonthKey(new Date())] = { timely: [], delayed: [], disputes: [{ vessel: XSS, remarks: XSS, dateStr: 'x', isDispute: true }] };
     renderDeliveryLog();
     ciLoadTemplate('kfk', { files: [new File(['hello'], '<img src=x onerror=window.__xss=7>.txt')] });
   }, XSS);

@@ -321,6 +321,7 @@ async function scenario(browser, name, fn) {
       const rec = Object.values(_checklistRecords).find(x => x.vessel === 'MV DEL');
       document.getElementById('cl-av-' + rec.uid).value = '300';
       rec.notes = 'short 2mt';
+      rec.flagDispute = true; // a dispute is logged only when marked ⚠ Dispute
       await saveChecklistRecord(rec.uid);
       const count = () => Object.values(_deliveryLog).reduce((n, m) => n + m.timely.concat(m.delayed, m.disputes).filter(e => e.checklistUid === rec.uid).length, 0);
       const before = count();
@@ -419,7 +420,7 @@ async function scenario(browser, name, fn) {
       _lastSched.forEach(i => { if (i.bargeLabel === 'B2') i.bargeLabel = evil; });
       _bargeConfig[1].name = evil;
       Object.values(_checklistRecords).forEach(r => { r.notes = evil; r.bdnV = evil; r.bargeLabel = evil; });
-      _deliveryLog = { '2026-10': { timely: [{ vessel: evil, dateStr: evil, barge: evil, checklistUid: 'q' }], delayed: [], disputes: [{ vessel: evil, remarks: evil, checklistUid: 'q' }] } };
+      _deliveryLog = { '2026-10': { timely: [{ vessel: evil, dateStr: evil, barge: evil, checklistUid: 'q' }], delayed: [], disputes: [{ vessel: evil, remarks: evil, checklistUid: 'q', isDispute: true }] } };
       renderBargeTabsAndTL(_lastSched, _bargeConfig);
       renderChecklist(_lastSched);
       renderPAQReminders(_lastSched);
