@@ -116,7 +116,7 @@ const PAGE = () => {
   let rows = await p.evaluate(() => __rows());
   check('I2 two draft rows', rows.length === 2, rows);
   check('I2 row 1 fields', rows[0].name === 'OCEAN PRIDE' && rows[0].imo === '9321483' && rows[0].eta === '22 Oct 2026 06:00' && rows[0].qtyText === '500–600' && rows[0].area === 'FUJ-A', rows[0]);
-  check('I2 row 2 fields', rows[1].name === 'SEA LION' && rows[1].mgoText === '100' && rows[1].area === 'KFK-A' && rows[1].eta === '23 Oct 2026 18:00', rows[1]);
+  check('I2 row 2 fields', rows[1].name === 'SEA LION' && rows[1].mgoText === '100' && rows[1].area === 'KFK-A' && rows[1].eta === '23 Oct 2026 12:00' && rows[1].etaWin === 'PM', rows[1]); // "PM" = time frame 12:00–18:00
   check('I2 guessed field highlighted (AM/PM → time)', (rows[1].low || []).includes('eta') && /Check:/.test(rows[1].msg), rows[1]);
   check('I2 original text visible in a collapsible box', await p.evaluate(() => { const d = document.querySelector('#nimp-results details.nimp-src'); return !!d && !d.open && d.querySelector('pre').textContent.includes('Dear Team'); }));
   check('I2 nothing saved after Read', U.writes(db, 'user-operator').length === w0 && U.row(db).version === v0 && JSON.stringify(await p.evaluate(() => __names())) === JSON.stringify(cards0));

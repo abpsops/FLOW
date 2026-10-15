@@ -54,7 +54,8 @@ ETA 15th PM
 MGO 100 mt
 Agent: Wilhelmsen`,
     [{ name: 'OCEAN STAR', eta: '14 Oct 2026 06:00', qty: 600, qtyMin: 500, mgo: 50, area: 'FUJ-A', agent: '' },
-     { name: 'SEA LION', eta: '15 Oct 2026 18:00', type: 'MGO', mgo: 100, area: 'KFK-A', agent: 'Wilhelmsen Ships Service' }],
+     // "ETA 15th PM" is a time frame (PM = 12:00–18:00): planned from its start, frame kept.
+     { name: 'SEA LION', eta: '15 Oct 2026 12:00', etaWin: 'PM', type: 'MGO', mgo: 100, area: 'KFK-A', agent: 'Wilhelmsen Ships Service' }],
     d => !!d[1].low.eta && !d[0].low.eta],
 
   ['S5 "abt 500/600" range in a sentence', 'Pls nominate abt 500/600 mt vlsfo for MV GREEN HAWK eta 20 Oct 2026 0800 fujairah',
