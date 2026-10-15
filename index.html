@@ -24299,9 +24299,12 @@ function _aisAssess(v, m, now) {
     const brg = _aisBearing(+p.lat, +p.lon, ref.lat, ref.lon);
     const off = Math.abs((((dir - brg) % 360) + 540) % 360 - 180);
     // Closing: course within ±70° AND at least 1 kn of the speed actually toward the point.
-    out.course = (off <= AIS_CFG.courseTolDeg && sog * Math.cos(off * Math.PI / 180) >= AIS_CFG.movingSog) ? 'toward' : 'away';
+    // Pointing roughly at the reference point but closing at under 1 kn is
+    // "slow", not "away" — no estimate either way, but the label must not
+    // tell the operator a ship pointed at the port is leaving it.
+    out.course = off > AIS_CFG.courseTolDeg ? 'away' : (sog * Math.cos(off * Math.PI / 180) >= AIS_CFG.movingSog ? 'toward' : 'slow');
   }
-  if (out.course === 'away') return out; // heading away / not really closing: no estimate, no warning
+  if (out.course === 'away' || out.course === 'slow') return out; // heading away / not really closing: no estimate, no warning
   out.est = new Date(tPos + out.distNm / Math.max(sog, 1) * 3600000);
   const etaEnd = (v && v.etaEnd instanceof Date && !isNaN(v.etaEnd.getTime())) ? v.etaEnd : null;
   const lcTo = (v && v.lcTo instanceof Date && !isNaN(v.lcTo.getTime())) ? v.lcTo : null;
@@ -24379,6 +24382,7 @@ function _aisEtaFact(raw) {
 function _aisCourseTxt(a) {
   const where = areaShort(a.ref.key);
   if (a.course === 'away') return 'heading away from ' + where;
+  if (a.course === 'slow') return 'slow toward ' + where + ' — no estimate';
   if (a.course === 'near') return 'moving within 3 nm of ' + where;
   if (a.course === 'waiting') return 'slow / waiting near ' + where;
   return '';

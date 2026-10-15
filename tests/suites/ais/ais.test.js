@@ -218,6 +218,8 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
         drift29: A({ lcTo: new Date(now + H) }, at(14, { sog: 2.9, cog: 180 })),
         steaming12: A({}, at(12, { sog: 4, cog: 180 })),
         slowFarOff70: A({}, at(40, { sog: 2, cog: 250 })),   // 70° off at 2 kn → only 0.7 kn closing
+        slowAhead: A({}, at(40, { sog: 1.0, cog: 181 })),     // pointed at the port at 1.0 kn → closing a hair under 1 kn
+        slowTxt: (() => { const x = _aisAssess({ area: 'FUJ-A' }, at(40, { sog: 1.0, cog: 181 }), now); return _aisCourseTxt(x); })(),
         nocog: A({}, at(30, { sog: 13, cog: null, heading: null })),
         hdgAway: A({}, at(30, { sog: 13, cog: null, heading: 0 })),
       };
@@ -228,7 +230,9 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     check('A1 heading away (drifting off the port, or leaving after supply): no estimate, no warning — not even after the laycan',
       r7.away.course === 'away' && r7.away.est === null && r7.away.warn === null && r7.leaving.est === null && r7.leaving.warn === null && r7.off80.course === 'away' && r7.hdgAway.course === 'away', r7);
     check('A1 course within ±70° AND ≥ 1 kn closing counts as approaching; unknown course → estimate kept',
-      r7.off60.course === 'toward' && r7.off60.est != null && r7.slowFarOff70.course === 'away' && r7.slowFarOff70.est === null && r7.nocog.course === 'unknown' && r7.nocog.est != null, r7);
+      r7.off60.course === 'toward' && r7.off60.est != null && r7.slowFarOff70.course === 'slow' && r7.slowFarOff70.est === null && r7.nocog.course === 'unknown' && r7.nocog.est != null, r7);
+    check('A1 pointed at the port but closing under 1 kn is "slow", never labelled "heading away"',
+      r7.slowAhead.course === 'slow' && r7.slowAhead.est === null && r7.slowAhead.warn === null && /slow toward FUJ A/.test(r7.slowTxt) && !/away/.test(r7.slowTxt), [r7.slowAhead, r7.slowTxt]);
     check('A1 moving within 3 nm (manoeuvring, or leaving after a late supply): no estimate, no warning — whatever the course',
       r7.near.course === 'near' && r7.near.est === null && r7.near.warn === null && r7.departing.course === 'near' && r7.departing.warn === null && r7.departing.st === 'approaching', [r7.near, r7.departing]);
     check('A1 slow (< 3 kn) within 15 nm = waiting / drifting at the OPL: no estimate, no red warning; 4 kn there → normal estimate',
