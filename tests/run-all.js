@@ -42,6 +42,7 @@ const SUITES = [
   ['nominations-import', 'suites/nominations/import.test.js', 'import panel: paste/drop → review → edit → add, duplicates, trader'],
   ['nominations-range', 'suites/nominations/range.test.js', 'quantity ranges: entry, displays, exports, planning max, sync'],
   ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
+  ['eta-timeframe', 'suites/nominations/timeframe.test.js', 'ETA / loading time frames (AM, PM…): card, schedule, sync, loading, parser'],
 ];
 
 const args = process.argv.slice(2);

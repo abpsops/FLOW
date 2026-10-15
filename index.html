@@ -1083,6 +1083,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .nimp-tbl input[type="checkbox"]{width:15px;height:15px;margin:6px 4px;accent-color:var(--azure);cursor:pointer}
 .nimp-tbl :is(input,select).nimp-low{border-color:var(--amber);background:var(--amber-lt)}
 .nimp-tbl :is(input,select).nimp-miss{border-color:var(--red);background:var(--red-lt)}
+.nimp-tbl select.nimp-win{margin-top:4px}
 .nimp-flag{font-size:10.5px;font-weight:600;display:flex;gap:6px;flex-wrap:wrap}
 .nimp-flag span{padding:2px 7px;border-radius:4px;border:1px solid}
 .nimp-flag .dup{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
@@ -1182,6 +1183,15 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .lc-box.warn{background:var(--amber-lt);border-color:var(--amber-bd);color:var(--amber)}
 .lc-box.late{background:var(--red-lt);border-color:var(--red-bd);color:var(--red)}
 .lc-box.early{background:var(--azure-lt);border-color:var(--azure-bd);color:var(--azure)}
+/* ── ETA / Loading start given as a time frame (AM / PM …) ── */
+.tf-row{display:flex;flex-direction:row;align-items:center;gap:6px 10px;flex-wrap:wrap;margin-top:4px}
+.field label.tf-chk{display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-size:11px;font-weight:600;letter-spacing:0;text-transform:none;color:var(--sub);white-space:nowrap}
+.field .tf-chk input{width:14px;height:14px;min-height:0;padding:0;margin:0;flex:none;accent-color:var(--azure);cursor:pointer;box-shadow:none}
+.field select.tf-sel{flex:1 1 190px;width:auto;min-width:0;max-width:100%;font-size:12px;padding:5px 8px}
+.tf-sel[hidden]{display:none!important}
+.tf-tag{display:inline-block;font-size:9px;font-weight:700;padding:1px 6px;border-radius:4px;background:var(--azure-lt);color:var(--azure);border:1px solid var(--azure-bd);font-family:'DM Mono',monospace;letter-spacing:.03em;white-space:nowrap;vertical-align:middle}
+.tlch .br .tf-tag{padding:2px 7px;font-size:9.5px}
+.ld-tf-row .hint{flex:1 1 100%}
 
 /* ════════════════════════════════════════
    FORMULA STRIP
@@ -1959,6 +1969,9 @@ html[data-skin="harbour"] .topbar-btn-reset{border-radius:12px}
 /* ── 12. INPUTS / SELECTS / FLATPICKR ─────────────────────────────── */
 html[data-skin="harbour"] .field{gap:6px}
 html[data-skin="harbour"] .field label{font-size:12px;letter-spacing:0;text-transform:none;color:#5B6E86;font-weight:700}
+html[data-skin="harbour"] .field label.tf-chk{font-size:12px;font-weight:600;color:#5B6E86}
+html[data-skin="harbour"] .field .tf-chk input{accent-color:#F26A4B;border-radius:4px}
+html[data-skin="harbour"] .tf-tag{background:#E3EEFB;color:#1565C0;border-color:transparent;border-radius:999px}
 html[data-skin="harbour"] :is(.field input,.field select,.field textarea),
 html[data-skin="harbour"] .main :is(input[type="text"],input[type="number"],input[type="email"],input[type="date"],input[type="datetime-local"],input[type="search"],input[type="password"],input:not([type]),select,textarea),
 html[data-skin="harbour"] [id$="-modal"] :is(input[type="text"],input[type="number"],input[type="email"],input[type="password"],input:not([type]),select,textarea){
@@ -3390,6 +3403,12 @@ function flowWelcomeGo(pageId) {
       <div class="field"><label for="ld-start-time">Start Time (24h)</label><input type="text" id="ld-start-time" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_validateTime24Input(this)"></div>
       <div class="field"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
       <div class="field"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
+    </div>
+    <!-- Start given only as a part of the day (AM / PM …): start = frame start, completion = frame end + duration (worst case). -->
+    <div class="field tf-row ld-tf-row" style="margin:-4px 0 12px">
+      <label class="tf-chk" title="The terminal gives only a part of the day for the start"><input type="checkbox" id="ld-start-win-chk" onchange="_ldToggleStartWin()">Time frame only (AM / PM…)</label>
+      <select class="tf-sel" id="ld-start-win" aria-label="Loading start time frame" onchange="_ldStartWinChanged()" hidden></select>
+      <span class="hint inf" id="ld-start-win-hint"></span>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
@@ -4880,7 +4899,7 @@ function _globalSearchRun(qRaw) {
   // 2) Generated schedule
   (typeof _lastSched !== 'undefined' ? _lastSched : []).forEach(function(item) {
     if (item.name && item.name.toLowerCase().includes(q)) {
-      const etaStr = (item.eta instanceof Date && !isNaN(item.eta)) ? fmtShort(item.eta) : '';
+      const etaStr = (item.eta instanceof Date && !isNaN(item.eta)) ? (item.etaWin ? _fmtEtaWinShort(item.eta, item.etaWin) : fmtShort(item.eta)) : '';
       results.push({ type: 'Schedule', label: item.name, sub: etaStr ? ('ETA ' + etaStr) : 'Bunker Schedule', action: function() { _globalSearchGoSchedule(item.sno); } });
     }
   });
@@ -4985,7 +5004,7 @@ function renderActionQueue() {
       items.push({
         urgency: 0, kind: 'DELAYED',
         name: item.name,
-        detail: 'Outside laycan window' + (item.eta instanceof Date && !isNaN(item.eta) ? ' — ETA ' + fmt24(item.eta) : ''),
+        detail: 'Outside laycan window' + (item.eta instanceof Date && !isNaN(item.eta) ? ' — ETA ' + _itemEtaTxt(item) : ''),
         sno: item.sno
       });
     }
@@ -5386,7 +5405,7 @@ function renderDashFuelingStatus() {
   }
 
   el.innerHTML =
-    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart); }, true, false) +
+    col('Still Waiting', 'var(--muted)', '', waiting, 'Nothing waiting', function(item) { return 'Starts ' + fmt24(item.bargeStart) + (item.etaWin && _etaFrame(item.etaWin) ? ' · ETA ' + _etaFrameTxt(item.etaWin) : ''); }, true, false) +
     col('Fueling — In Progress', 'var(--green)', '', inProgress, 'None active right now', function(item) { return 'Ends ' + fmt24(item.etc); }, false, true);
 }
 
@@ -5444,11 +5463,12 @@ function renderDashActivity(records, vessels) {
       const t = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
       const dateLbl = start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      const ldWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
       items.push({
         color,
         title: `Loading Scheduled — ${r.grade}`,
         detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
-        time: dateLbl + ' ' + t,
+        time: dateLbl + ' ' + (ldWin || t),
         onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
       });
     });
@@ -5488,7 +5508,7 @@ function renderDashActivity(records, vessels) {
   Array.from(document.querySelectorAll('#vc .vcard[id^="vessel-"]')).reverse().forEach(card => {
     const cid = card.id.replace('vessel-', '');
     const nm = document.getElementById('v'+cid+'-name')?.value || 'Vessel';
-    const et = document.getElementById('v'+cid+'-eta')?.value || 'TBD';
+    const et = _cardEtaTxt(cid) || 'TBD';
     const vq = document.getElementById('v'+cid+'-vlsfo')?.value || '0';
     items.push({ color:'var(--fuel-v)', title:'Nomination', detail:`${nm} — ${vq} MT VLSFO  ETA ${et}`, time:'—' });
   });
@@ -6681,7 +6701,7 @@ function _buildNominationEmail(v) {
 
   const lines = [];
   lines.push('Vessel Name: ' + (v.name || '—') + (v.imo ? ' (' + v.imo + ')' : ''));
-  if (v.eta) lines.push('ETA: ' + v.eta);
+  if (v.eta) lines.push('ETA: ' + _vesselEtaTxt(v));
   if (v.area) {
     // Reuse the real AREA_OPTIONS list (defined later in the script, where
     // the nomination form's Anchorage/Berth dropdown is built) rather than
@@ -6845,7 +6865,7 @@ async function sendNominationEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
   } finally {
     // _lockSendEmailButton reflects whatever sendNominationEmailIfNeeded
     // actually recorded in _nomEmailLog — if the send failed, the log was
@@ -6940,7 +6960,7 @@ function _buildNominationCancelledEmail(v) {
   lines.push('NOMINATION CANCELLED');
   lines.push('');
   lines.push('Vessel Name: ' + (v.name || '—') + (v.imo ? ' (' + v.imo + ')' : ''));
-  if (v.eta) lines.push('ETA: ' + v.eta);
+  if (v.eta) lines.push('ETA: ' + _vesselEtaTxt(v));
   if (v.area) {
     const areaOpt = (typeof AREA_OPTIONS !== 'undefined') ? AREA_OPTIONS.find(function(o){ return o.value === v.area; }) : null;
     lines.push('Location: ' + (areaOpt ? areaOpt.label : v.area));
@@ -7061,7 +7081,7 @@ async function sendNominationCancelledEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
   } finally {
     const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
     if (sent) {
@@ -7366,7 +7386,20 @@ function _merge3(b, l, r, key, ctx, path) {
 function _mergeKeys(b, l, r, ctx, path) {
   const out = {};
   const has = function(o, k) { return Object.prototype.hasOwnProperty.call(o, k) && o[k] !== undefined; };
-  const keys = Object.keys(l).concat(Object.keys(r).filter(function(k) { return !has(l, k); }));
+  let keys = Object.keys(l).concat(Object.keys(r).filter(function(k) { return !has(l, k); }));
+  // A vessel's ETA and its time frame (etaWin) are ONE value: merged per key
+  // they could combine into a frame neither side set (B's exact 15:00 + A's
+  // "AM"). Take both from the side that changed them; both changed → clash.
+  if (has(l, 'etaWin') || has(r, 'etaWin') || has(b, 'etaWin')) {
+    const pair = function(o) { return [has(o, 'eta') ? o.eta : null, has(o, 'etaWin') ? o.etaWin : null]; };
+    const pb = pair(b), pl = pair(l), pr = pair(r);
+    const lCh = !_sameJSON(pl, pb), rCh = !_sameJSON(pr, pb);
+    let src = l;
+    if (rCh && !lCh) src = r;
+    else if (lCh && rCh && !_sameJSON(pl, pr)) _mergeConflict(ctx, path ? path + '.eta' : 'eta');
+    ['eta', 'etaWin'].forEach(function(k) { if (has(src, k)) out[k] = src[k]; });
+    keys = keys.filter(function(k) { return k !== 'eta' && k !== 'etaWin'; });
+  }
   keys.forEach(function(k) {
     const inL = has(l, k), inR = has(r, k), inB = has(b, k);
     const p = path ? path + '.' + k : k;
@@ -8190,6 +8223,11 @@ function _recalcLoadingEstimate() {
 
   const pumpHrs = computeLoadingDurationHours(qty, grade);
   const totalHrs = preOps + pumpHrs + postOps;
+  // Time-frame start: completion = frame END + the operation (worst case).
+  const win = _ldStartWin();
+  const winHrs = win ? _etaFrameHrs(win) : 0;
+  const hintEl = document.getElementById('ld-start-win-hint');
+  if (hintEl) hintEl.textContent = win ? 'Starts ' + _etaFrameTxt(win) + ' — completion shown for a start at ' + pad(_etaFrame(win).to % 24) + ':00 (latest)' : '';
 
   const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
@@ -8201,8 +8239,8 @@ function _recalcLoadingEstimate() {
     if (totalHrs > 0 && startDateStr) {
       const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
       if (!isNaN(start)) {
-        const end = new Date(start.getTime() + totalHrs * 3600000);
-        compEl.value = end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+        const end = new Date(start.getTime() + (winHrs + totalHrs) * 3600000);
+        compEl.value = (winHrs ? 'Latest ' : '') + end.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
           + ' ' + end.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
       } else {
         compEl.value = '—';
@@ -8251,6 +8289,37 @@ function _localTimeInputStr(d) {
   return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
 }
 
+// ── Loading start given as a time frame (AM / PM …) — see ETA_TIME_FRAMES ──
+function _ldEnsureWinOptions() {
+  const sel = document.getElementById('ld-start-win');
+  if (sel && !sel.options.length) sel.innerHTML = _etaFrameOptionsHTML('AM');
+  return sel;
+}
+// Form → frame code ('' = exact start time).
+function _ldStartWin() {
+  const chk = document.getElementById('ld-start-win-chk'), sel = document.getElementById('ld-start-win');
+  return (chk && chk.checked && sel && _etaFrame(sel.value)) ? sel.value : '';
+}
+// Put the form into frame mode for `code` ('' = exact time).
+function _ldSetStartWin(code) {
+  const chk = document.getElementById('ld-start-win-chk'), sel = _ldEnsureWinOptions(), tm = document.getElementById('ld-start-time');
+  if (!chk || !sel) return;
+  const f = _etaFrame(code);
+  chk.checked = !!f;
+  sel.hidden = !f;
+  if (f) sel.value = f.code;
+  if (tm) { tm.disabled = !!f; if (f) tm.value = pad(f.from) + ':00'; }
+  _recalcLoadingEstimate();
+}
+function _ldToggleStartWin() {
+  const chk = document.getElementById('ld-start-win-chk'), sel = _ldEnsureWinOptions(), tm = document.getElementById('ld-start-time');
+  if (!chk || !sel) return;
+  // Ticking picks the frame that holds the time already typed.
+  const h = tm ? parseInt(String(tm.value).slice(0, 2), 10) : NaN;
+  _ldSetStartWin(chk.checked ? (isNaN(h) ? 'AM' : _etaFrameForHour(h)) : '');
+}
+function _ldStartWinChanged() { const sel = document.getElementById('ld-start-win'); if (sel) _ldSetStartWin(sel.value); }
+
 function _readLoadingForm() {
   const barge = (document.getElementById('ld-barge')?.value || '').trim();
   const terminal = (document.getElementById('ld-terminal')?.value || '').trim();
@@ -8268,15 +8337,18 @@ function _readLoadingForm() {
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
   if (!startDateStr) { alert('Select a loading start date.'); return null; }
 
-  const start = new Date(startDateStr + 'T' + startTimeStr + ':00');
+  const startWin = _ldStartWin();
+  const start = new Date(startDateStr + 'T' + (startWin ? pad(_etaFrame(startWin).from) + ':00' : startTimeStr) + ':00');
   if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
   const pumpHrs = computeLoadingDurationHours(qty, grade);
   const totalHrs = preOps + pumpHrs + postOps;
-  const estimatedEnd = new Date(start.getTime() + totalHrs * 3600000);
+  // Time-frame start (AM / PM …): start = frame start; the barge stays
+  // committed until frame END + the whole operation (worst case).
+  const estimatedEnd = new Date(start.getTime() + ((startWin ? _etaFrameHrs(startWin) : 0) + totalHrs) * 3600000);
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
 
-  return {
+  return Object.assign({
     barge, terminal, grade, qty,
     startAt: start.toISOString(),
     endAt: end.toISOString(),
@@ -8287,7 +8359,7 @@ function _readLoadingForm() {
     endOverridden: !!endOverride,
     surveyor,
     notes,
-  };
+  }, startWin ? { startWin } : {});
 }
 
 function _clearLoadingForm() {
@@ -8374,6 +8446,7 @@ function editLoadingRecord(id) {
   document.getElementById('ld-qty').value = rec.qty || '';
   document.getElementById('ld-start-date').value = _localDateInputStr(start);
   document.getElementById('ld-start-time').value = _localTimeInputStr(start);
+  _ldSetStartWin(rec.startWin || '');
   document.getElementById('ld-pre-ops').value = (rec.preOpsHours != null ? rec.preOpsHours : 2.5);
   document.getElementById('ld-post-ops').value = (rec.postOpsHours != null ? rec.postOpsHours : 3.5);
   document.getElementById('ld-end-date-override').value = rec.endOverridden ? _localDateInputStr(new Date(rec.endAt)) : '';
@@ -8406,6 +8479,7 @@ function cancelLoadingEdit() {
   _clearLoadingForm();
   document.getElementById('ld-pre-ops').value = 2.5;
   document.getElementById('ld-post-ops').value = 3.5;
+  _ldSetStartWin('');
   document.getElementById('loading-submit-btn-label').textContent = 'Add Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = 'none';
   _recalcLoadingEstimate();
@@ -8505,7 +8579,9 @@ function renderLoadingList() {
       const postTag = r.postOpsHours ? ('Post ' + _formatDurationHours(r.postOpsHours)) : '';
       const durLine = r.endOverridden
         ? 'Manual end date'
-        : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag].filter(Boolean).join(' · ');
+        : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag, (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ');
+      // Time-frame start: "16 Oct 2026 AM (06:00–12:00)".
+      const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
       const doneStyle = r.completed ? 'opacity:.55' : '';
       const actionBtns = r.completed
         ? '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
@@ -8532,7 +8608,7 @@ function renderLoadingList() {
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + esc(r.surveyor) + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
-          + '<div>' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
+          + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'
           + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
         + '</div>'
         + '<div style="display:flex;gap:6px">'
@@ -9166,7 +9242,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -10362,7 +10438,7 @@ function renderRemainingSupplyTracker(){
       var vRem=nV>0?(rV>0?'<span style="font-family:DM Mono,monospace;font-weight:700;color:var(--red)">'+rV.toLocaleString()+' MT</span>':'<span style="color:var(--green);font-weight:700">&#10003;</span>'):'&mdash;';
       var mRem=nM>0?(rM>0?'<span style="font-family:DM Mono,monospace;font-weight:700;color:var(--red)">'+rM.toLocaleString()+' MT</span>':'<span style="color:var(--green);font-weight:700">&#10003;</span>'):'&mdash;';
 
-      var dateDisplay = rec.supplyDate ? fmt24(rec.supplyDate instanceof Date ? rec.supplyDate : new Date(rec.supplyDate)) : '&mdash;';
+      var dateDisplay = (rec.supplyDate ? fmt24(rec.supplyDate instanceof Date ? rec.supplyDate : new Date(rec.supplyDate)) : '&mdash;') + (rec.etaWin ? ' ' + _etaFrameTag(rec.etaWin) : '');
 
       rowHtml+='<tr data-rst-uid="'+esc(rec.uid)+'" style="border-bottom:0.5px solid var(--border2)'+(isSel?';background:rgba(107,198,255,.08)':'')+'">'
         +'<td class="rst-select-col" style="padding:9px 10px;text-align:center"><input type="checkbox" onchange="toggleRSTSelection(\''+escJs(rec.uid)+'\', this.checked)" '+(isSel?'checked':'')+' style="width:15px;height:15px;cursor:pointer;accent-color:var(--azure,#3B82F6)" title="Tick to include this vessel in the Selected total and image export"></td>'
@@ -11270,6 +11346,143 @@ function _nomQtyTxt(o, g, n) {
   return r ? _fmtQtyRange(r.min, r.max) : Number(n || 0).toLocaleString();
 }
 
+/* ─── ETA TIME FRAMES (AM / PM …) ───
+   Some nominations give only a part of the day for the ETA ("16 Oct AM").
+   A vessel card (and a Loading) can then be ticked "Time frame only": the
+   date is picked and a frame chosen from ETA_TIME_FRAMES. Stored as
+   vessel.etaWin = 'AM' (Loading: record.startWin) — only when set, so older
+   records are untouched. The stored ETA string stays a normal date + time:
+   the date at the frame's START ("16 Oct 2026 06:00"), so parseDT() and
+   every existing reader keep working. Planning treats the frame as worst
+   case: the barge is ready from the frame START and stays committed until
+   the frame END + the normal supply duration (schedule ETC, timeline,
+   Free Windows, stock projection, Availability Check all read that ETC).
+   A frame ETA is never "no firm ETA", even EAM, which starts at 00:00. */
+const ETA_TIME_FRAMES = [
+  { code: 'EAM',  label: 'Early AM',  from: 0,  to: 6 },
+  { code: 'AM',   label: 'Morning',   from: 6,  to: 12 },
+  { code: 'NOON', label: 'Noon',      from: 11, to: 13 },
+  { code: 'PM',   label: 'Afternoon', from: 12, to: 18 },
+  { code: 'LPM',  label: 'Late PM',   from: 18, to: 24 },
+];
+function _etaFrame(code) {
+  const c = String(code || '').toUpperCase();
+  return ETA_TIME_FRAMES.find(function(f) { return f.code === c; }) || null;
+}
+// Frame length in hours (0 = no frame).
+function _etaFrameHrs(code) { const f = _etaFrame(code); return f ? f.to - f.from : 0; }
+// "06:00–12:00"
+function _etaFrameHours(code) {
+  const f = _etaFrame(code);
+  return f ? pad(f.from) + ':00–' + pad(f.to) + ':00' : '';
+}
+// "AM (06:00–12:00)"
+function _etaFrameTxt(code) { const f = _etaFrame(code); return f ? f.code + ' (' + _etaFrameHours(code) + ')' : ''; }
+// Date d moved to the frame's start / end hour (same calendar day; LPM ends at 24:00 = next 00:00).
+function _etaFrameStart(d, code) {
+  const f = _etaFrame(code);
+  if (!f || !(d instanceof Date) || isNaN(d.getTime())) return d;
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), f.from, 0, 0, 0);
+}
+function _etaFrameEnd(d, code) {
+  const s = _etaFrameStart(d, code);
+  return (s instanceof Date && !isNaN(s.getTime())) ? new Date(s.getTime() + _etaFrameHrs(code) * 3600000) : s;
+}
+// The frame that contains hour h (used when a timed ETA is switched to a frame):
+// EAM / AM / PM / LPM tile the day; NOON (overlapping AM/PM) only when chosen.
+function _etaFrameForHour(h) {
+  const f = ETA_TIME_FRAMES.find(function(x) { return x.code !== 'NOON' && h >= x.from && h < x.to; });
+  return f ? f.code : 'AM';
+}
+// <option>s for a frame <select>, every label with its hours
+// ("AM — Morning 06:00–12:00"; compact: "AM 06:00–12:00").
+function _etaFrameOptionsHTML(sel, compact) {
+  return ETA_TIME_FRAMES.map(function(f) {
+    return '<option value="' + f.code + '"' + (f.code === sel ? ' selected' : '') + (compact ? ' title="' + f.label + '"' : '') + '>' + f.code + (compact ? ' ' : ' — ' + f.label + ' ') + _etaFrameHours(f.code) + '</option>';
+  }).join('');
+}
+// "16 Oct 2026 AM (06:00–12:00)" — or fmt24(d) when there is no frame.
+function _fmtEtaWin(d, code) {
+  if (typeof d === 'string') d = parseDT(d);
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  if (!_etaFrame(code)) return fmt24(d);
+  return pad(d.getDate()) + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear() + ' ' + _etaFrameTxt(code);
+}
+// "16 Oct AM" — compact, for tickets / lists.
+function _fmtEtaWinShort(d, code) {
+  if (typeof d === 'string') d = parseDT(d);
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '—';
+  return d.getDate() + ' ' + MO[d.getMonth()] + ' ' + (_etaFrame(code) ? _etaFrame(code).code : pad(d.getHours()) + ':' + pad(d.getMinutes()));
+}
+// A schedule item's / checklist record's ETA as text.
+function _itemEtaTxt(item) {
+  if (!item) return '—';
+  if (!item.etaWin) return fmt24(item.eta);
+  return _fmtEtaWin(item.eta instanceof Date ? item.eta : (item.eta ? new Date(item.eta) : null), item.etaWin);
+}
+// Fields to store on a vessel record: {etaWin} only for a time-frame ETA ({} otherwise).
+function _cardEtaWinFields(id) { const w = _cardEtaWin(id); return w ? { etaWin: w } : {}; }
+// Latest arrival of a schedule item: frame END for a time-frame ETA, else the ETA.
+function _itemEtaEnd(item) {
+  if (!item || !item.eta) return item ? item.eta : null;
+  const d = item.eta instanceof Date ? item.eta : new Date(item.eta);
+  return item.etaWin && _etaFrame(item.etaWin) ? new Date(d.getTime() + _etaFrameHrs(item.etaWin) * 3600000) : item.eta;
+}
+// Small "AM 06:00–12:00" tag (codes come from ETA_TIME_FRAMES only — safe as markup).
+function _etaFrameTag(code, cls) {
+  const f = _etaFrame(code);
+  return f ? '<span class="tf-tag' + (cls ? ' ' + cls : '') + '" title="ETA time frame — ' + f.label + ' ' + _etaFrameHours(f.code) + '">' + f.code + ' ' + _etaFrameHours(f.code) + '</span>' : '';
+}
+// A Loading's start as text: "16 Oct 2026 AM (06:00–12:00)" for a time-frame start.
+function _ldStartTxt(r) {
+  const d = new Date(r && r.startAt);
+  return (r && r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(d, r.startWin) : fmt24(d);
+}
+// Card → frame code ('' = exact time).
+function _cardEtaWin(id) {
+  const chk = document.getElementById('v' + id + '-etawin-chk'), sel = document.getElementById('v' + id + '-etawin');
+  return (chk && chk.checked && sel && _etaFrame(sel.value)) ? sel.value : '';
+}
+// Card's ETA as people read it ("16 Oct 2026 AM (06:00–12:00)" or the typed value).
+function _cardEtaTxt(id) {
+  const raw = document.getElementById('v' + id + '-eta')?.value || '';
+  const win = _cardEtaWin(id);
+  return (win && parseDT(raw)) ? _fmtEtaWin(parseDT(raw), win) : raw;
+}
+// A saved vessel / def's ETA as text (v.eta string + optional v.etaWin).
+function _vesselEtaTxt(v) {
+  if (!v || !v.eta) return '';
+  return (v.etaWin && _etaFrame(v.etaWin) && parseDT(v.eta)) ? _fmtEtaWin(parseDT(v.eta), v.etaWin) : String(v.eta);
+}
+// ETA picker value "16 Oct 2026 06:00" for date d at the frame start.
+function _etaPickerStr(d) { return pad(d.getDate()) + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); }
+// Card: the "Time frame only" box was ticked / unticked.
+function toggleEtaWin(id) {
+  const chk = document.getElementById('v' + id + '-etawin-chk'), sel = document.getElementById('v' + id + '-etawin');
+  const inp = document.getElementById('v' + id + '-eta');
+  if (!chk || !sel || !inp) return;
+  const on = chk.checked;
+  sel.hidden = !on;
+  const d = parseDT(inp.value);
+  if (on) {
+    if (d) { sel.value = _etaFrameForHour(d.getHours()); inp.value = _etaPickerStr(_etaFrameStart(d, sel.value)); }
+    else if (!_etaFrame(sel.value)) sel.value = 'AM';
+  }
+  inp.placeholder = on ? 'Select date…' : 'Select date & time…';
+  // The picker is rebuilt in the right mode (date only / date & time) next time it opens.
+  if (_etaPickers[id]) { try { _etaPickers[id].destroy(); } catch (e) {} delete _etaPickers[id]; }
+  inp.setAttribute('readonly', 'readonly'); // flatpickr.destroy() removes it
+  upd(id);
+}
+// Card: another frame was chosen → ETA moves to that frame's start.
+function etaWinChanged(id) {
+  const sel = document.getElementById('v' + id + '-etawin'), inp = document.getElementById('v' + id + '-eta');
+  if (!sel || !inp) return;
+  const d = parseDT(inp.value);
+  if (d) inp.value = _etaPickerStr(_etaFrameStart(d, sel.value));
+  upd(id);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    BUNKER QUANTITY — current FY (Dashboard line chart + Analytics bar chart)
    FLOW's fiscal year is the calendar year (the chart runs Jan–Dec), so the
@@ -11667,12 +11880,18 @@ function upd(id) {
   const lcEl = document.getElementById(`v${id}-lc`), etEl = document.getElementById(`v${id}-eta`);
   const hLC = document.getElementById(`v${id}-hlc`), hET = document.getElementById(`v${id}-het`);
   const prev = document.getElementById(`v${id}-prev`), lcbx = document.getElementById(`v${id}-lcbox`);
-  const lc = parseLaycan(lcR), eta = parseDT(etR);
+  const win = _cardEtaWin(id);
+  const lc = parseLaycan(lcR), eta0 = parseDT(etR);
+  // Time-frame ETA: planned from the frame start, worst case arrives at its end.
+  const eta = (eta0 && win) ? _etaFrameStart(eta0, win) : eta0;
+  const etaEnd = (eta && win) ? _etaFrameEnd(eta, win) : eta;
+  const winHrs = win ? _etaFrameHrs(win) : 0;
   if (lc) { hLC.textContent='→ '+fmtLC(lc); hLC.className='hint ok'; lcEl.classList.remove('err'); }
   else if (lcR) { hLC.textContent='Using Actual ETA for scheduling'; hLC.className='hint inf'; lcEl.classList.remove('err'); }
   else { hLC.textContent=''; hLC.className='hint'; lcEl.classList.remove('err'); }
   if (etR&&!eta) { hET.textContent='Cannot parse — try: 24 Mar 2025 08:00'; hET.className='hint er'; etEl.classList.add('err'); }
-  else if (eta) { hET.textContent='→ '+fmt24(eta); hET.className='hint ok'; etEl.classList.remove('err'); }
+  else if (eta) { hET.textContent='→ '+(win ? _fmtEtaWin(eta, win) : fmt24(eta)); hET.className='hint ok'; etEl.classList.remove('err'); }
+  else if (win) { hET.textContent='Pick the date — '+_etaFrameTxt(win); hET.className='hint inf'; etEl.classList.remove('err'); }
   else { hET.textContent=''; hET.className='hint'; etEl.classList.remove('err'); }
   if (eta) {
     // Pump rates of the barge that will do this supply (the assigned one,
@@ -11684,11 +11903,17 @@ function upd(id) {
       const bg = fleet.find(function(b) { return String(b.id) === String(selB); }) || (fleet.length === 1 ? fleet[0] : null);
       if (bg) { vtph = bg.vtph || vtph; mtph = bg.mtph || mtph; }
     } catch(e) {}
-    const etc=calcETC(eta,vq,mq,vtph,mtph); prev.className='etc-prev show'; prev.innerHTML=`<strong>ETA:</strong> ${fmt24(eta)} &nbsp;→&nbsp; <strong>ETC:</strong> ${fmt24(etc)} &nbsp;<span style="color:var(--muted)">(${durStr(_calcParams.hoseHrs+Math.max(vq/vtph,mq/mtph))} total)</span>`;
+    // Frame: worst-case finish = frame END + the normal supply duration.
+    const supHrs = _calcParams.hoseHrs+Math.max(vq/vtph,mq/mtph);
+    const etc=calcETC(etaEnd,vq,mq,vtph,mtph); prev.className='etc-prev show';
+    prev.innerHTML = win
+      ? `<strong>ETA:</strong> ${esc(_fmtEtaWin(eta, win))} &nbsp;→&nbsp; <strong>ETC:</strong> ${fmt24(etc)} <span style="color:var(--muted)">latest</span> &nbsp;<span style="color:var(--muted)">(barge ready from ${pad(eta.getHours())}:00 · ${durStr(winHrs)} frame + ${durStr(supHrs)} supply)</span>`
+      : `<strong>ETA:</strong> ${fmt24(eta)} &nbsp;→&nbsp; <strong>ETC:</strong> ${fmt24(etc)} &nbsp;<span style="color:var(--muted)">(${durStr(supHrs)} total)</span>`;
   }
   else { prev.className='etc-prev'; }
   if (lc&&eta) {
-    if (eta>=lc.from&&eta<=lc.to) { lcbx.className='lc-box ok show'; lcbx.innerHTML=`ETA is <strong>within laycan</strong> (${fmtLC(lc)}).`; }
+    // Frame: early only if even its END is before laycan opens; late if its START is after it closes.
+    if (etaEnd>=lc.from&&eta<=lc.to) { lcbx.className='lc-box ok show'; lcbx.innerHTML=`ETA${win?' frame':''} is <strong>within laycan</strong> (${fmtLC(lc)}).`; }
     // After laycan closes = genuinely late — this is the case the dashboard's
     // "Delayed" / "Requires immediate action" alert is built around, so it
     // gets the urgent red styling, not the milder amber it had before.
@@ -11696,7 +11921,7 @@ function upd(id) {
     // Before laycan opens = arriving early, not a problem — this was
     // previously using the SAME red "late" class as a genuine delay, making
     // an early arrival look just as alarming as one that's actually overdue.
-    else { lcbx.className='lc-box early show'; lcbx.innerHTML=`ETA is <strong>before laycan opens — Before Laycan</strong> (${fmtLC(lc)}).`; }
+    else { lcbx.className='lc-box early show'; lcbx.innerHTML=`ETA${win?' frame':''} is <strong>before laycan opens — Before Laycan</strong> (${fmtLC(lc)}).`; }
   } else { lcbx.className='lc-box'; }
   // auto-save on change (debounced) — also refresh the dashboard so the
   // Operational Activity card picks up the new ETA/quantity right away.
@@ -11755,7 +11980,7 @@ function rmV(id) {
       sendNominationCancelledEmailIfNeeded(Object.assign({
         nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
         agent, manifold, spec, lc, eta, remarks
-      }, _cardQtyRangeFields(id)));
+      }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
     }
   }
 
@@ -11765,7 +11990,7 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details.
-    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id))
+    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -12003,8 +12228,18 @@ function _niParseDate(s, now) {
     return (m >= 0 && m <= 11 && d >= 1 && d <= 31 && _niValidDate(y, m, d)) ? { y: y, m: m, d: d, len: len, low: !!low } : null;
   };
   if ((r = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/))) return done(+r[1], +r[2] - 1, +r[3], r[0].length);
-  if ((r = s.match(new RegExp('^(\\d{1,2})(?:st|nd|rd|th)?[\\s\\-./]*(?:of\\s+)?' + _NI_MON + '\\.?(?:[\\s\\-./,\']*((?:19|20)\\d{2}|\\d{2})(?![\\d:.h]|\\s*(?:hrs?|hours|lt|am|pm)\\b))?', 'i')))) {
+  // A 4-digit year may be followed by a time frame ("16 Oct 2026 AM"); a 2-digit one followed by am/pm is a time.
+  if ((r = s.match(new RegExp('^(\\d{1,2})(?:st|nd|rd|th)?[\\s\\-./]*(?:of\\s+)?' + _NI_MON + '\\.?(?:[\\s\\-./,\']*((?:19|20)\\d{2}(?![\\d:.h]|\\s*(?:hrs?|hours|lt)\\b)|(?:0[1-9]|1[0-2])(?![\\d:.h]|\\s*(?:hrs?|hours|lt|am|pm|a\\.m|p\\.m|noon|midnight)\\b)|(?:00|1[3-9]|[2-9]\\d)(?![\\d:.h]|\\s*(?:hrs?|hours|lt)\\b)))?', 'i')))) {
     const d = +r[1], m = _niMon(r[2]);
+    // "16 Oct 2000 PM" / "1930pm": a 4-digit number before am/pm that can't be
+    // this year (±) is a 24h time, not the year — leave it for _niParseTime.
+    if (r[3] && r[3].length === 4 && /^\s*(?:a\.?m|p\.?m)/i.test(s.slice(r[0].length))) {
+      const ny = (now instanceof Date ? now : new Date()).getFullYear(), yy = +r[3];
+      if (yy < ny - 1 || yy > ny + 5) {
+        const r2 = s.match(new RegExp('^(\\d{1,2})(?:st|nd|rd|th)?[\\s\\-./]*(?:of\\s+)?' + _NI_MON + '\\.?', 'i'));
+        if (r2) return done(_niYear(d, m, undefined, now), m, d, r2[0].length);
+      }
+    }
     return done(_niYear(d, m, r[3], now), m, d, r[0].length);
   }
   if ((r = s.match(new RegExp('^' + _NI_MON + '\\.?[\\s\\-]*(\\d{1,2})(?:st|nd|rd|th)?(?!\\d)(?:,?\\s*((?:19|20)\\d{2})(?!\\d))?', 'i')))) {
@@ -12049,17 +12284,37 @@ function _niParseTime(s) {
     if (r[3]) { const pm = /^p/i.test(r[3]); if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; }
     if (h <= 23 && mi <= 59) return { h: h, mi: mi, len: lead.length + r[0].length };
   }
-  if ((r = t.match(/^([01]\d|2[0-3])([0-5]\d)(?!\d)\s*(?:hrs?|hours|h|lt|local|utc|gmt|z|(?=\s|$|[,;)]))/i))) {
+  if ((r = t.match(/^([01]\d|2[0-3])([0-5]\d)(?!\d)\s*(?:hrs?|hours|h|lt|local|utc|gmt|z|[ap]\.?m\.?(?![a-z])|(?=\s|$|[,;)]))/i))) {
     return { h: +r[1], mi: +r[2], len: lead.length + r[0].length };
   }
+  // "12 noon" / "11 noon" → the NOON frame; "12 midnight" → 00:00 (checked).
+  if ((r = t.match(/^(1[12])\s*(noon|mid-?day)(?![a-z])/i))) {
+    return { h: _etaFrame('NOON').from, mi: 0, len: lead.length + r[0].length, low: true, win: 'NOON' };
+  }
+  if ((r = t.match(/^12\s*midnight(?![a-z])/i))) return { h: 0, mi: 0, len: lead.length + r[0].length, low: true };
   if ((r = t.match(/^(\d{1,2})\s*(am|pm|a\.m\.|p\.m\.)/i))) {
     let h = +r[1]; const pm = /^p/i.test(r[2]);
     if (h >= 1 && h <= 12) { if (h === 12) h = pm ? 12 : 0; else if (pm) h += 12; return { h: h, mi: 0, len: lead.length + r[0].length }; }
   }
-  // "AM" / "PM" / "morning" … — a part of the day, not a time: flagged for checking.
-  if ((r = t.match(/^(a\.?m\.?|p\.?m\.?|morning|forenoon|noon|afternoon|evening|night|midnight)(?![a-z])/i))) {
-    const w = r[1].toLowerCase().replace(/\./g, '');
-    const h = { am: 6, morning: 6, forenoon: 9, noon: 12, pm: 18, afternoon: 14, evening: 18, night: 22, midnight: 0 }[w];
+  // ETA time frames (ETA_TIME_FRAMES): "EAM", "AM", "NOON", "PM", "LPM" and
+  // their spelled-out forms → {h: frame start, win: code}, flagged for checking.
+  if ((r = t.match(/^(e\.?a\.?m\.?|early\s*(?:a\.?m\.?|morning|hours|hrs)|l\.?p\.?m\.?|late\s*(?:p\.?m\.?|afternoon|evening)|evening|noon|mid-?day|a\.?m\.?|morning|forenoon|p\.?m\.?|afternoon)(?![a-z])/i))) {
+    const w = r[1].toLowerCase().replace(/[.\s-]/g, '');
+    const win = /^(eam|early)/.test(w) ? 'EAM' : w === 'lateafternoon' ? 'PM' : /^(lpm|late|evening)/.test(w) ? 'LPM' : /^(noon|midday)/.test(w) ? 'NOON' : /^(am|morning|forenoon)/.test(w) ? 'AM' : 'PM';
+    // "PM 2000 LT", "PM/1800": the stated time wins over the frame (am/pm
+    // meaning applied to a 12-hour hour), still flagged for checking.
+    const rest = t.slice(r[0].length).match(/^[\s,\/@\-–]*(?:(\d{1,2})[:.h](\d{2})|([01]\d|2[0-3])([0-5]\d))(?!\d)(?:\s*(?:hrs?|hours|lt|local|utc|gmt|z)\b)?/i);
+    if (rest) {
+      let h = +(rest[1] || rest[3]); const mi = +(rest[2] || rest[4]);
+      if (h < 12 && (win === 'PM' || win === 'LPM')) h += 12;
+      if (h <= 23 && mi <= 59) return { h: h, mi: mi, len: lead.length + r[0].length + rest[0].length, low: true };
+    }
+    return { h: _etaFrame(win).from, mi: 0, len: lead.length + r[0].length, low: true, win: win };
+  }
+  // "night" / "midnight" — a part of the day, not a time: flagged for checking.
+  if ((r = t.match(/^(night|midnight)(?![a-z])/i))) {
+    const w = r[1].toLowerCase();
+    const h = { night: 22, midnight: 0 }[w];
     return { h: h, mi: 0, len: lead.length + r[0].length, low: true };
   }
   return null;
@@ -12279,7 +12534,7 @@ const _NI_BOILER = /^(dear|hi\b|hello|good\s+(day|morning|afternoon|evening)|gre
 
 function _niParseBlock(text, opts, ctx) {
   const now = opts.now, lines = String(text).split(/\r?\n/);
-  const d = { name: '', imo: '', eta: '', lc: '', type: 'VLSFO', qty: 0, qtyMin: null, qtyMax: null, mgo: 0, mgoMin: null, mgoMax: null,
+  const d = { name: '', imo: '', eta: '', etaWin: '', lc: '', type: 'VLSFO', qty: 0, qtyMin: null, qtyMax: null, mgo: 0, mgoMin: null, mgoMax: null,
               area: '', agent: '', spec: '', remarks: '', low: {}, src: String(text).trim() };
   const used = {};          // line index → consumed by a field
   const notes = [];
@@ -12315,7 +12570,8 @@ function _niParseBlock(text, opts, ctx) {
       if (dt) {
         const tm = dt.time || _niParseTime(rest.slice(dt.len));
         d.eta = _niFmtDT(dt, tm);
-        if (dt.low || (tm && tm.low)) d.low.eta = 'Month or time guessed';
+        if (tm && tm.win) { d.etaWin = tm.win; d.low.eta = (dt.low ? 'Month guessed · ' : '') + 'ETA time frame ' + _etaFrameTxt(tm.win) + ' — planned from its start'; }
+        else if (dt.low || (tm && tm.low)) d.low.eta = 'Month or time guessed';
         else if (!tm) d.low.eta = 'No time given — set as no firm ETA (00:00)';
         used[i] = 1;
       }
@@ -12337,7 +12593,8 @@ function _niParseBlock(text, opts, ctx) {
         if (!dt) continue;
         const tm = dt.time || _niParseTime(rest.slice(dt.len));
         d.eta = _niFmtDT(dt, tm);
-        d.low.eta = 'Date found without an "ETA" label';
+        if (tm && tm.win) d.etaWin = tm.win;
+        d.low.eta = 'Date found without an "ETA" label' + (tm && tm.win ? ' · time frame ' + _etaFrameTxt(tm.win) : '');
       }
     }
   }
@@ -12765,6 +13022,11 @@ function _niCell(d, i, f) {
     const ph = { eta: 'e.g. 14 Oct 2026 06:00', lc: 'e.g. 14-16 Oct 2026', qtyText: 'e.g. 500-600', mgoText: 'e.g. 50', imo: '7 digits' }[k] || '';
     inner = '<input type="text" autocomplete="off"' + (k === 'agent' ? ' list="agent-directory-list"' : '') + ' value="' + esc(d[k] == null ? '' : d[k]) + '" placeholder="' + esc(ph) + '"' + common + '>';
   }
+  // ETA: a time-frame select under the date ("Exact time" or EAM / AM / NOON / PM / LPM).
+  if (k === 'eta') {
+    inner += '<select class="nimp-win" data-i="' + i + '" data-k="etaWin" aria-label="ETA time frame for row ' + (i + 1) + '" onchange="_niEdit(this)">' +
+      '<option value="">Exact time</option>' + _etaFrameOptionsHTML(_etaFrame(d.etaWin) ? _etaFrame(d.etaWin).code : '', true) + '</select>';
+  }
   if (k === 'remarks') return inner;
   return '<td data-label="' + esc(f[1]) + '"' + (k === 'name' ? ' class="nimp-wide"' : '') + '>' + inner + '</td>';
 }
@@ -12805,6 +13067,16 @@ function _niEdit(el) {
   const i = +el.dataset.i, k = el.dataset.k, d = _niDrafts[i];
   if (!d) return;
   d[k] = el.value;
+  // Time frame chosen → the ETA moves to the frame's start; an explicit time typed
+  // into the ETA box that doesn't match the frame's start drops the frame.
+  if (k === 'etaWin' || k === 'eta') {
+    const row = document.getElementById('nimp-row-' + i);
+    const etaEl = row && row.querySelector('[data-k="eta"]'), winEl = row && row.querySelector('[data-k="etaWin"]');
+    const t = parseDT(d.eta || '');
+    if (k === 'etaWin' && _etaFrame(d.etaWin) && t) { d.eta = _etaPickerStr(_etaFrameStart(t, d.etaWin)); if (etaEl) etaEl.value = d.eta; }
+    if (k === 'eta' && _etaFrame(d.etaWin) && t && /\d:\d\d/.test(d.eta) && (t.getHours() !== _etaFrame(d.etaWin).from || t.getMinutes() !== 0)) { d.etaWin = ''; if (winEl) winEl.value = ''; }
+    if (k === 'etaWin' && d.low && d.low.eta && etaEl) { delete d.low.eta; etaEl.classList.remove('nimp-low'); etaEl.removeAttribute('title'); }
+  }
   const lowKey = (_NI_FIELDS.concat([_NI_REMARKS]).find(function(f) { return f[0] === k; }) || [])[2];
   if (lowKey && d.low && d.low[lowKey]) { delete d.low[lowKey]; el.classList.remove('nimp-low'); el.removeAttribute('title'); }
   if (k === 'name') el.classList.toggle('nimp-miss', !String(el.value).trim());
@@ -12830,6 +13102,9 @@ function _niDraftToDef(d) {
   };
   if (v.min != null) { def.qtyMin = v.min; def.qtyMax = v.max; }
   if (m.min != null) { def.mgoMin = m.min; def.mgoMax = m.max; }
+  // Time-frame ETA: keep the frame; the ETA itself sits at the frame's start.
+  const t = def.eta ? parseDT(def.eta) : null;
+  if (t && _etaFrame(d.etaWin)) { def.etaWin = _etaFrame(d.etaWin).code; def.eta = _etaPickerStr(_etaFrameStart(t, def.etaWin)); }
   return def;
 }
 function niAddDrafts(only) {
@@ -12881,6 +13156,8 @@ function addVessel(def = {}) {
   const area = def.area || 'FUJ-A', spec = def.spec || 'ISO 8217:2010';
   const agent = def.agent || '', manifold = def.manifold || 'VESSEL MANIFOLD', paq = def.paq || 'no';
   const imo = def.imo || '', remarks = def.remarks || '';
+  // ETA given only as a part of the day (AM / PM …) — see ETA_TIME_FRAMES.
+  const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
   const rfv = def.rfv || 0, rfm = def.rfm || 0, rfvr = def.rfvr || 750, rfmr = def.rfmr || 275;
 
@@ -12970,8 +13247,12 @@ function addVessel(def = {}) {
     <div class="field">
       <label>Actual ETA <span style="font-weight:400;color:var(--muted)">— date &amp; time</span></label>
       <div class="input-with-cal">
-        <input type="text" id="v${id}-eta" value="${esc(eta)}" placeholder="Select date &amp; time…" oninput="upd(${id})" autocomplete="off" readonly style="cursor:pointer;background:var(--surface)" onclick="openETAPicker(${id})">
+        <input type="text" id="v${id}-eta" value="${esc(eta)}" placeholder="${etaWin ? 'Select date…' : 'Select date &amp; time…'}" oninput="upd(${id})" autocomplete="off" readonly style="cursor:pointer;background:var(--surface)" onclick="openETAPicker(${id})">
         <button type="button" class="cal-btn" onclick="openETAPicker(${id})">🕐</button>
+      </div>
+      <div class="tf-row">
+        <label class="tf-chk" title="The nomination gives only a part of the day for the ETA"><input type="checkbox" id="v${id}-etawin-chk" ${etaWin ? 'checked' : ''} onchange="toggleEtaWin(${id})">Time frame only (AM / PM…)</label>
+        <select class="tf-sel" id="v${id}-etawin" aria-label="ETA time frame" onchange="etaWinChanged(${id})" ${etaWin ? '' : 'hidden'}>${_etaFrameOptionsHTML(etaWin || 'AM')}</select>
       </div>
       <span class="hint" id="v${id}-het"></span>
     </div>
@@ -13072,7 +13353,12 @@ function getVessels() {
     const rfmr = parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275;
     if (!name) return;
     const lc  = lcR ? parseLaycan(lcR) : null;
-    const eta = etR ? parseDT(etR)     : null;
+    const eta0 = etR ? parseDT(etR)    : null;
+    // Time-frame ETA (AM / PM …): planned from the frame START; worst case
+    // the vessel arrives at the frame END (winHrs later).
+    const etaWin = eta0 ? _cardEtaWin(id) : '';
+    const eta = (eta0 && etaWin) ? _etaFrameStart(eta0, etaWin) : eta0;
+    const winHrs = etaWin ? _etaFrameHrs(etaWin) : 0;
     if (etR && !eta) { alert(`"${name}": cannot read Actual ETA "${etR}". Use the calendar picker.`); throw new Error(); }
     if (!eta && !lc) { alert(`"${name}": please enter at least an Actual ETA or Nominated Laycan.`); throw new Error(); }
     const effectiveETA = eta || (lc ? new Date((lc.from.getTime()+lc.to.getTime())/2) : null);
@@ -13082,16 +13368,18 @@ function getVessels() {
     // computed this at all, so an early vessel had no distinct status anywhere
     // downstream (Needs Attention, badges, etc.) even though the inline note
     // under the ETA field already described it as "Before Laycan."
-    const isEarly = !!(lc && eta && eta < lc.from);
-    // ETA at exactly 00:00 = no firm ETA — scheduled last, after all firm-ETA vessels
-    const noFirmETA = !!(eta && eta.getHours() === 0 && eta.getMinutes() === 0);
+    // A time frame is early only when even its END is before the laycan opens.
+    const isEarly = !!(lc && eta && addHrs(eta, winHrs) < lc.from);
+    // ETA at exactly 00:00 = no firm ETA — scheduled last, after all firm-ETA vessels.
+    // Not for a time frame: EAM starts at 00:00 but is a real arrival window.
+    const noFirmETA = !!(eta && !etaWin && eta.getHours() === 0 && eta.getMinutes() === 0);
     const paq     = document.getElementById(`v${id}-paq`)?.value    || 'no';
     const bargeId = document.getElementById(`v${id}-barge`)?.value  || '';
     const nomUid  = c.dataset.nomUid || '';
     const imo     = document.getElementById(`v${id}-imo`)?.value     || '';
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
     out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
-              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks,
+              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks, etaWin, winHrs,
               vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
   return out;
@@ -13100,7 +13388,7 @@ function getVessels() {
 /* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its
    Unavailable blocks (with transit either side, like any other job). Returns
    {start, block} — block = the first one it had to wait for, or null. */
-function _schedStartOutsideBlocks(barge, start, vq, mq) {
+function _schedStartOutsideBlocks(barge, start, vq, mq, winEnd) {
   const blocks = _blocksForBarge(barge.id, barge.name)
     .map(bk => ({ s: new Date(bk.start), e: new Date(bk.end), bk }))
     .filter(x => !isNaN(x.s.getTime()) && !isNaN(x.e.getTime()) && x.e > x.s);
@@ -13108,13 +13396,24 @@ function _schedStartOutsideBlocks(barge, start, vq, mq) {
   const tr = _calcParams.travelHrs || 0;
   let s = start, hit = null;
   for (let guard = 0; guard < 50; guard++) {
-    const e = calcETC(s, vq, mq, barge.vtph, barge.mtph);
+    // Time-frame ETA: the job can't finish before frame end + supply time.
+    const e = calcETC(winEnd && winEnd > s ? winEnd : s, vq, mq, barge.vtph, barge.mtph);
     const b = blocks.find(x => s < addHrs(x.e, tr) && addHrs(e, tr) > x.s);
     if (!b) break;
     if (!hit) hit = b.bk;
     s = addHrs(b.e, tr);
   }
   return { start: s, block: hit };
+}
+
+/* When a vessel's supply ends if it starts at `start` — normally start +
+   hose-up + pumping (calcETC). A time-frame ETA can arrive as late as the
+   frame END, so the barge stays committed until max(start, frame end) +
+   the same supply time (worst case). */
+function _vesselFrameEnd(v) { return (v && v.winHrs && v.effectiveETA) ? addHrs(v.effectiveETA, v.winHrs) : null; }
+function _vesselJobETC(start, v, vtph, mtph) {
+  const we = _vesselFrameEnd(v);
+  return calcETC(we && we > start ? we : start, v.vq, v.mq, vtph, mtph);
 }
 
 /* ─── CALCULATE ─── */
@@ -13190,14 +13489,14 @@ function calculate() {
         const dv = delayed[d];
         if (dv._placed) continue;
         const dvBargeStart = (cursor && addHrs(cursor,_calcParams.travelHrs) > dv.effectiveETA) ? addHrs(cursor,_calcParams.travelHrs) : dv.effectiveETA;
-        const dvETC  = calcETC(dvBargeStart, dv.vq, dv.mq);
+        const dvETC  = _vesselJobETC(dvBargeStart, dv);
         const dvDone = addHrs(dvETC,_calcParams.travelHrs);
         if (dv.effectiveETA <= ov.effectiveETA && dvDone <= ov.effectiveETA) { dv._placed=true; sequence.push(dv); cursor=dvETC; found=true; break; }
       }
     }
     sequence.push(ov);
     const ovStart = (cursor && addHrs(cursor,_calcParams.travelHrs) > ov.effectiveETA) ? addHrs(cursor,_calcParams.travelHrs) : ov.effectiveETA;
-    cursor = calcETC(ovStart, ov.vq, ov.mq);
+    cursor = _vesselJobETC(ovStart, ov);
   }
   delayed.filter(dv => !dv._placed).forEach(dv => sequence.push(dv));
 
@@ -13230,7 +13529,7 @@ function calculate() {
         const free = st.cursor ? addHrs(st.cursor,_calcParams.travelHrs).getTime() : -Infinity;
         let avail = Math.max(free, etaMs);
         // A barge sitting in an Unavailable block isn't free then.
-        if (isFinite(avail)) avail = _schedStartOutsideBlocks(b, new Date(avail), v.vq, v.mq).start.getTime();
+        if (isFinite(avail)) avail = _schedStartOutsideBlocks(b, new Date(avail), v.vq, v.mq, _vesselFrameEnd(v)).start.getTime();
         return { cov: Math.min(covV, covM), avail, rob: (v.vq > 0 ? st.rv : 0) + (v.mq > 0 ? st.rm : 0) };
       };
       barge = barges.reduce((best,b) => {
@@ -13244,10 +13543,10 @@ function calculate() {
     const VCAP = barge.vcap, MCAP = barge.mcap;
     const earliestBarge = bs.cursor ? addHrs(bs.cursor,_calcParams.travelHrs) : null;
     let bargeStart = earliestBarge && earliestBarge > v.effectiveETA ? earliestBarge : v.effectiveETA;
-    let waitedForBarge = !!(earliestBarge && earliestBarge > v.effectiveETA);
+    let waitedForBarge = !!(earliestBarge && earliestBarge > (_vesselFrameEnd(v) || v.effectiveETA));
     // Never plan a supply inside an Unavailable block: wait it out (plus
     // transit) and say so — the job is moved, not silently overlapped.
-    const blk = _schedStartOutsideBlocks(barge, bargeStart, v.vq, v.mq);
+    const blk = _schedStartOutsideBlocks(barge, bargeStart, v.vq, v.mq, _vesselFrameEnd(v));
     if (blk.block) {
       blockMoves.push({ vessel: v.name, barge: barge.name, reason: blk.block.reason || 'blocked', from: bargeStart, to: blk.start });
       bargeStart = blk.start; waitedForBarge = true;
@@ -13259,7 +13558,10 @@ function calculate() {
     // "Partial supply — insufficient ROB"), but it doesn't shrink the actual
     // pumping time the timeline is meant to show; it just means the barge
     // needs a top-up before or during that window.
-    const etc = calcETC(bargeStart, v.vq, v.mq, barge.vtph, barge.mtph);
+    // Time-frame ETA: ETC = worst case (frame end + supply time) — this is
+    // what the timeline, Free Windows, stock projection and Availability
+    // Check all read as the barge's occupancy.
+    const etc = _vesselJobETC(bargeStart, v, barge.vtph, barge.mtph);
     let rva = bs.rv-sv, rma = bs.rm-sm;
     const nxt = sequence[i+1];
     const vLow = rva < barge.vbuf || (nxt && nxt.vq > 0 && (rva-nxt.vq) < barge.vbuf);
@@ -13287,6 +13589,8 @@ function calculate() {
     const rangeF = {};
     if (v.vqMin != null) { rangeF.nomVMin = Math.round(v.vqMin); rangeF.nomVMax = Math.round(v.vq || 0); }
     if (v.mqMin != null) { rangeF.nomMMin = Math.round(v.mqMin); rangeF.nomMMax = Math.round(v.mq || 0); }
+    // Time-frame ETA rides along on the item (only when set): eta = frame start.
+    if (v.etaWin) { rangeF.etaWin = v.etaWin; rangeF.supplyHrs = _calcParams.hoseHrs + Math.max(v.vq / (barge.vtph || 300), v.mq / (barge.mtph || 100)); }
     sched.push(Object.assign({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot}, rangeF));
     bs.rv=rva; bs.rm=rma;
     totV+=sv; totM+=sm;
@@ -13494,7 +13798,7 @@ function buildVoyRows(items) {
     const fo = nomV_>0?esc(_nomQtyTxt(item,'V',nomV_)):'—', mo = nomM_>0?esc(_nomQtyTxt(item,'M',nomM_)):'—';
     const seq  = classifySeq(item, idx, items);
     const plan = seq.label;
-    const lcIn = !!(item.lc&&item.eta&&item.eta>=item.lc.from&&item.eta<=item.lc.to);
+    const lcIn = !!(item.lc&&item.eta&&_itemEtaEnd(item)>=item.lc.from&&item.eta<=item.lc.to);
     const lcStr = item.lc?`<span class="lc-rng ${lcIn?'in':'out'}">${fmtLC(item.lc)}</span>`:'—';
     const clRec = _checklistRecords ? Object.values(_checklistRecords).find(r => r.lockedAt && _recordMatchesScheduleItem(r, item)) : null;
     const completedBadge = clRec ? '<span class="stag" style="background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd);margin-left:4px">Done</span>' : '';
@@ -13511,8 +13815,8 @@ function buildVoyRows(items) {
     const cls = ` style="${rowBg}"`;
     const areaS = areaShort(item.area);
     const etaDisplay = item.noFirmETA
-      ? `<span style="color:var(--purple);font-style:italic">${fmt24(item.eta)} <span style="font-size:9px;font-weight:700">(NO FIRM ETA)</span></span>`
-      : fmt24(item.eta);
+      ? `<span style="color:var(--purple);font-style:italic">${_itemEtaTxt(item)} <span style="font-size:9px;font-weight:700">(NO FIRM ETA)</span></span>`
+      : _itemEtaTxt(item);
     const chkCell = `<td style="text-align:center;padding:6px 4px"><input type="checkbox" class="voy-print-chk" data-sno="${esc(item.sno)}" checked style="width:15px;height:15px;accent-color:var(--azure);cursor:pointer" title="Include in print"></td>`;
     return `<tr${cls}>${chkCell}<td class="sno">${esc(item.sno)}</td><td><strong>${esc(item.name)}</strong></td><td style="font-size:11px;font-weight:700;font-family:DM Mono,monospace">${esc(areaS)}</td><td>${fo}</td><td>${mo}</td><td style="font-size:11px">${esc(item.spec||'—')}</td><td>${lcStr}</td><td>${etaDisplay}</td><td>${fmt24(item.bargeStart)}</td><td>${fmt24(item.etc)}</td><td>${pl}</td><td>${st}</td><td>${paqT}</td><td>${esc(item.agent||'—')}</td><td style="font-size:11px">${esc(item.bargeLabel||'—')}</td><td style="font-size:11px">${esc(item.mani||'—')}</td></tr>`;
   }).join('');
@@ -13574,7 +13878,7 @@ function buildTL(items, containerId, loadingsForBarge) {
       <div class="tlc" style="border-color:var(--amber-bd);background:var(--amber-lt)">
         <div class="tlch"><div class="tlvn">Loading — ${esc(rec.terminal)}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${esc(rec.grade)}</span></div></div>
         <div class="tlm">
-          <div class="tmi"><label>Loading Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
+          <div class="tmi"><label>Loading Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Loading End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
@@ -13607,9 +13911,14 @@ function buildTL(items, containerId, loadingsForBarge) {
     const pT  = item.isPartial?`<div class="pt-tag">Partial supply — insufficient ROB</div>`:'';
     const dlN = item.noFirmETA
       ? `<div class="dl-note" style="background:var(--purple-lt);border-color:var(--purple-bd);color:var(--purple)">ETA is 00:00 — no firm arrival time confirmed. This vessel is scheduled last, after all firm-ETA vessels. Update ETA when confirmed.</div>`
-      : item.isDelayed?`<div class="dl-note">Actual ETA (${fmt24(item.eta)}) is outside nominated laycan (${fmtLC(item.lc)}). Vessel slotted by ETA order.</div>`:item.isEarly?`<div class="dl-note" style="background:var(--teal-lt);border-color:var(--teal-bd);color:var(--teal)">Actual ETA (${fmt24(item.eta)}) is before nominated laycan opens (${fmtLC(item.lc)}).</div>`:'';
+      : item.isDelayed?`<div class="dl-note">Actual ETA (${_itemEtaTxt(item)}) is outside nominated laycan (${fmtLC(item.lc)}). Vessel slotted by ETA order.</div>`:item.isEarly?`<div class="dl-note" style="background:var(--teal-lt);border-color:var(--teal-bd);color:var(--teal)">Actual ETA (${_itemEtaTxt(item)}) is before nominated laycan opens (${fmtLC(item.lc)}).</div>`:'';
 
-    const waitN = item.waitedForBarge?`<div class="travel-notice">Vessel arrived at ${fmt24(item.eta)} but barge was still on previous job. Supply started at ${fmt24(item.bargeStart)} (after previous ETC + 1 hr travel buffer).</div>`:'';
+    const waitN = item.waitedForBarge?`<div class="travel-notice">Vessel arrived at ${_itemEtaTxt(item)} but barge was still on previous job. Supply started at ${fmt24(item.bargeStart)} (after previous ETC + 1 hr travel buffer).</div>`:'';
+    // Time-frame ETA: say how the slot was reserved (frame start → frame end + supply).
+    const tfN = item.etaWin && _etaFrame(item.etaWin) ? `<div class="travel-notice tf-note">ETA given as a time frame — <strong>${_etaFrameTxt(item.etaWin)}</strong>. Barge ready from ${fmt24(item.bargeStart)}; reserved until ${fmt24(item.etc)} (frame end + ${durStr(item.supplyHrs || 0)} supply, latest ETC).</div>` : '';
+    // Hours of the frame actually inside this job (0 when the barge only got there after the frame ended).
+    const tfEnd = (item.etaWin && _etaFrame(item.etaWin)) ? _etaFrameEnd(item.eta instanceof Date ? item.eta : parseDT(item.eta), item.etaWin) : null;
+    const tfIn = (tfEnd instanceof Date && item.bargeStart) ? Math.max(0, Math.min(_etaFrameHrs(item.etaWin), (tfEnd - new Date(item.bargeStart)) / 3600000)) : 0;
     const travN = (!item.waitedForBarge&&item.sno>1)?`<div class="travel-notice" style="color:var(--green);background:var(--green-lt);border-color:var(--green-bd)">Barge free before vessel ETA. Supply starts on vessel arrival.</div>`:'';
     const rfBlock = item.refuelSlot ? `
       <div style="margin-top:12px;padding:10px 14px;background:linear-gradient(90deg,var(--teal-lt),var(--surface));border:1.5px solid var(--fuel-m-bd);border-radius:8px">
@@ -13625,13 +13934,13 @@ function buildTL(items, containerId, loadingsForBarge) {
     d.className = 'tli';
     d.innerHTML = `<div class="tls"><div class="tld" style="background:${dc}"></div><div class="tll"></div></div>
     <div class="tlc ${cc}">
-      <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}</div><div class="br">${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
+      <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}</div><div class="br">${_etaFrameTag(item.etaWin)}${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
       <div class="tlm">
         <div class="tmi"><label>Laycan</label><span>${fmtLC(item.lc)}</span></div>
-        <div class="tmi"><label>Actual ETA</label><span>${fmt24(item.eta)}</span></div>
+        <div class="tmi"><label>Actual ETA</label><span>${_itemEtaTxt(item)}</span></div>
         <div class="tmi"><label>Supply Start</label><span>${fmt24(item.bargeStart)}</span></div>
-        <div class="tmi"><label>ETC</label><span>${fmt24(item.etc)}</span></div>
-        <div class="tmi"><label>Duration</label><span>${durStr(item.totalHrs)}</span></div>
+        <div class="tmi"><label>${item.etaWin ? 'ETC (latest)' : 'ETC'}</label><span>${fmt24(item.etc)}</span></div>
+        <div class="tmi"><label>Duration</label><span>${durStr(item.totalHrs)}${tfIn > 0 ? ' <small style="color:var(--muted)">incl. ' + durStr(tfIn) + ' frame</small>' : ''}</span></div>
         <div class="tmi"><label>Quantity</label><span>${qty}</span></div>
       </div>
       <div style="font-size:11px;color:var(--sub);margin-bottom:8px">📍 ${esc(areaLabel)}</div>
@@ -13640,7 +13949,7 @@ function buildTL(items, containerId, loadingsForBarge) {
         <div class="rbr"><span class="rbl">MGO</span><div class="rbt"><div class="rbf" style="width:${mP}%;background:${mC}"></div></div><span class="rbv" style="color:${mC}">${item.robMA.toLocaleString()} MT</span></div>
       </div>
       ${(item.vLow||item.mLow)?`<div class="cat-tags">${vT}${mT}</div>`:''}
-      ${pT}${dlN}${waitN}${travN}${rfBlock}
+      ${pT}${dlN}${tfN}${waitN}${travN}${rfBlock}
     </div>`;
     tl.appendChild(d);
   });
@@ -13727,7 +14036,7 @@ function _ccRefreshData() {
         <span style="font-size:10.5px;color:#F0A500;letter-spacing:.18em;font-weight:700;flex-shrink:0">UP NEXT</span>
         <span style="font-size:19px;font-weight:700;color:#FFFFFF">${esc(next.name)}</span>
         <span style="font-size:12.5px;color:#CCC">${esc(next.bargeLabel || '')}</span>
-        <span style="font-size:12.5px;color:#CCC">START ${fmt24(next.bargeStart)}</span>
+        <span style="font-size:12.5px;color:#CCC">START ${fmt24(next.bargeStart)}${next.etaWin && _etaFrame(next.etaWin) ? ' · ETA ' + _etaFrameTxt(next.etaWin) : ''}</span>
         <span style="font-size:12.5px;color:#4FD1E8">VLSFO ${vQty ? esc(_nomQtyTxt(next, 'V', vQty)) + ' MT' : '—'}</span>
         <span style="font-size:12.5px;color:#F0A542">LSMGO ${mQty ? esc(_nomQtyTxt(next, 'M', mQty)) + ' MT' : '—'}</span>
         <span style="font-size:11px;font-weight:700;color:${statusColor};margin-left:auto;flex-shrink:0">${statusText}</span>
@@ -13833,7 +14142,7 @@ function _ccRefreshData() {
           return `<div style="padding:6px 10px 6px 8px;border-top:1px solid #222;background:linear-gradient(90deg, ${accent}33, ${accent}0D 65%, transparent);border-left:3px solid ${accent}">
             <div style="display:flex;flex-direction:column;gap:2px;font-size:11.5px;font-family:'Courier New',Courier,monospace;letter-spacing:.03em">
               <span style="color:${accent};font-weight:700;white-space:normal;word-break:break-word">[ LOADING ] ${esc(String(r.terminal || '').toUpperCase())}</span>
-              <span style="color:#EAEAEA;white-space:normal;word-break:break-word">${esc(r.grade)} · ${(Number(r.qty)||0).toLocaleString()} MT · ${fmtWB(entry.t)}</span>
+              <span style="color:#EAEAEA;white-space:normal;word-break:break-word">${esc(r.grade)} · ${(Number(r.qty)||0).toLocaleString()} MT · ${fmtWB(entry.t)}${r.startWin && _etaFrame(r.startWin) ? ' ' + _etaFrame(r.startWin).code : ''}</span>
             </div>
           </div>`;
         }
@@ -13851,7 +14160,7 @@ function _ccRefreshData() {
         return `<div style="padding:6px 0;border-top:1px solid #222">
           <div style="color:#EEE;font-size:11.5px;font-weight:700;white-space:normal;word-break:break-word;line-height:1.35">${esc(item.name)}</div>
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px;font-size:10.5px">
-            <span style="color:#CCC;white-space:nowrap">${fmtWB(item.bargeStart)}</span>
+            <span style="color:#CCC;white-space:nowrap">${fmtWB(item.bargeStart)}${item.etaWin && _etaFrame(item.etaWin) ? ' · ' + _etaFrameTxt(item.etaWin) : ''}</span>
             <span style="color:#4FD1E8;white-space:nowrap">V ${vQty ? esc(_nomQtyTxt(item, 'V', vQty)) : '—'}</span>
             <span style="color:#F0A542;white-space:nowrap">M ${mQty ? esc(_nomQtyTxt(item, 'M', mQty)) : '—'}</span>
             <span style="color:${statusColor};font-weight:700;white-space:nowrap;margin-left:auto">${statusText}</span>
@@ -13967,7 +14276,7 @@ function _ccRefreshData() {
     const weekOps = activeItems.length;
     const totalV = activeItems.reduce((s, i) => s + (i.nomVQ || i.vQ || 0), 0);
     const totalM = activeItems.reduce((s, i) => s + (i.nomMQ || i.mQ || 0), 0);
-    const nextText = next ? `NEXT: ${next.name} ${fmt24(next.bargeStart)} ${next.bargeLabel || ''}` : 'NO UPCOMING VESSELS';
+    const nextText = next ? `NEXT: ${next.name} ${fmt24(next.bargeStart)}${next.etaWin && _etaFrame(next.etaWin) ? ' (ETA ' + _etaFrameTxt(next.etaWin) + ')' : ''} ${next.bargeLabel || ''}` : 'NO UPCOMING VESSELS';
     const line = `${nextText}   •   ACTIVE OPS: ${weekOps}   •   VLSFO ${totalV.toLocaleString()} MT   •   LSMGO ${totalM.toLocaleString()} MT   •   ALERTS: ${alerts.length}`;
     ticker.textContent = line + '          ' + line;
     ticker.style.animation = 'ccTickerScroll 24s linear infinite';
@@ -14753,6 +15062,7 @@ function rlPlanLoading(bargeId, key, hrs) {
   set('ld-qty', rec.qty);
   set('ld-start-date', _localDateInputStr(rec.planStart));
   set('ld-start-time', _localTimeInputStr(rec.planStart));
+  _ldSetStartWin('');   // the planner proposes an exact start time
   set('ld-pre-ops', RL_PRE_OPS_HRS);
   set('ld-post-ops', RL_POST_OPS_HRS);
   // Most recent terminal this barge loaded at, as a starting point.
@@ -15002,7 +15312,7 @@ function _fwInputSignature() {
   var v = {};
   (st.vessels || []).forEach(function(x, i) {
     if (!String(x.name || '').trim()) return; // a blank card isn't a nomination yet
-    v[x.nomUid || ('#' + i)] = _fwHash(_stableStr([x.name, x.type, x.qty, x.mgo, x.eta, x.lc, x.bargeId, x.refuelChk, x.rfv, x.rfm, x.rfvr, x.rfmr]));
+    v[x.nomUid || ('#' + i)] = _fwHash(_stableStr([x.name, x.type, x.qty, x.mgo, x.eta, x.lc, x.bargeId, x.refuelChk, x.rfv, x.rfm, x.rfvr, x.rfmr].concat(x.etaWin ? [x.etaWin] : [])));
   });
   // Barge ROB is left out on purpose: it moves with every saved supply and
   // Free Windows reads live ROB anyway.
@@ -17335,13 +17645,13 @@ function renderPAQReminders(sched) {
   let html = '';
   if (reminders.length) {
     html += `<div class="apanel fired" style="margin-bottom:10px"><div class="apt"><div class="apdot"></div>PAQ REMINDER — ${reminders.length} vessel${reminders.length>1?'s':''} arriving within 3 days</div>`;
-    reminders.forEach((item,i) => { const daysLeft=Math.max(0,((item.eta-now)/86400000)).toFixed(1); html+=`<div class="arow"><div class="snum">${i+1}</div><div><strong>${esc(item.name)}</strong> — ETA ${fmt24(item.eta)} (${daysLeft} days away). PAQ not received. <strong>Send reminder now.</strong></div></div>`; });
+    reminders.forEach((item,i) => { const daysLeft=Math.max(0,((item.eta-now)/86400000)).toFixed(1); html+=`<div class="arow"><div class="snum">${i+1}</div><div><strong>${esc(item.name)}</strong> — ETA ${_itemEtaTxt(item)} (${daysLeft} days away). PAQ not received. <strong>Send reminder now.</strong></div></div>`; });
     html += '</div>';
   }
   const others = pending.filter(item => !reminders.includes(item));
   if (others.length) {
     html += `<div class="apanel" style="background:var(--amber-lt);border-color:var(--amber-bd)"><div class="apt" style="color:var(--amber)"><div class="apdot" style="background:var(--amber)"></div>PAQ PENDING — ${others.length} vessel${others.length>1?'s':''}</div>`;
-    others.forEach((item,i) => { const eta=item.eta?(item.eta<now?`Arrived ${fmt24(item.eta)}`:`ETA ${fmt24(item.eta)}`):'ETA unknown'; html+=`<div class="arow" style="color:var(--amber)"><div class="snum" style="background:var(--amber-lt);color:var(--amber)">${i+1}</div><div><strong>${esc(item.name)}</strong> — ${eta}. Send reminder 2-3 days before arrival.</div></div>`; });
+    others.forEach((item,i) => { const eta=item.eta?(item.eta<now?`Arrived ${_itemEtaTxt(item)}`:`ETA ${_itemEtaTxt(item)}`):'ETA unknown'; html+=`<div class="arow" style="color:var(--amber)"><div class="snum" style="background:var(--amber-lt);color:var(--amber)">${i+1}</div><div><strong>${esc(item.name)}</strong> — ${eta}. Send reminder 2-3 days before arrival.</div></div>`; });
     html += '</div>';
   }
   el.innerHTML = html;
@@ -17475,7 +17785,7 @@ function _buildReminderRow(item, now, type, idx) {
         (item.paq==='yes'?'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd)">PAQ \u2713</span>':'<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd)">PAQ \u26a0</span>') +
       '</div>' +
       '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;font-size:11.5px;color:var(--sub)">' +
-        '<div>\uD83D\uDCC5 ETA: <strong style="color:var(--ink)">' + fmt24(item.eta) + '</strong></div>' +
+        '<div>\uD83D\uDCC5 ETA: <strong style="color:var(--ink)">' + _itemEtaTxt(item) + '</strong></div>' +
         '<div>\u26fd Qty: <strong style="color:var(--ink)">' + qty + '</strong></div>' +
         '<div>\uD83D\uDD50 Supply Start: <strong style="color:var(--ink)">' + fmt24(item.bargeStart) + '</strong></div>' +
       '</div>' +
@@ -17595,6 +17905,8 @@ function _generateBunkerMsg(item, fuelType, seqType, timeWindow, bargeName) {
     dischargeLine = 'DISCHARGE RATE: 300 TPH HSFO';
     qtyLine       = 'QUANTITY: ' + (vQty || '—') + ' MT LSFO';
   }
+  // ETA nominated only as a part of the day: say so in the message.
+  if (item && item.etaWin && _etaFrame(item.etaWin)) qtyLine += '\nVESSEL ETA: ' + _itemEtaTxt(item);
 
   var body;
   if (seqType === 'arrival') {
@@ -17930,6 +18242,8 @@ function _clStampRange(rec, item) {
     if (r) { rec['nom' + g + 'Min'] = r.min; rec['nom' + g + 'Max'] = r.max; }
     else { delete rec['nom' + g + 'Min']; delete rec['nom' + g + 'Max']; }
   });
+  // Time-frame ETA (AM / PM …) rides along for display only.
+  if (item && item.etaWin && _etaFrame(item.etaWin)) rec.etaWin = item.etaWin; else delete rec.etaWin;
 }
 // Actual vs nominated badge. For a ranged nomination anything inside
 // min–max is OK; below min is short by (min − actual); above max is over.
@@ -18078,7 +18392,7 @@ function renderChecklist(sched) {
       return `<tr style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
         <td style="padding:9px 12px;color:var(--muted);font-weight:700;font-family:DM Mono,monospace">${idx + 1}</td>
         <td style="padding:9px 12px;font-weight:600">${esc(rec.vessel)}${lockBadge}</td>
-        <td style="padding:9px 12px;font-family:DM Mono,monospace;font-size:11px;white-space:nowrap">${_sd ? fmt24(_sd) : '—'}</td>
+        <td style="padding:9px 12px;font-family:DM Mono,monospace;font-size:11px;white-space:nowrap">${_sd ? fmt24(_sd) : '—'}${rec.etaWin ? '<div style="margin-top:3px">' + _etaFrameTag(rec.etaWin) + '</div>' : ''}</td>
 
         <td style="padding:9px 12px;text-align:center">
           <div style="font-family:DM Mono,monospace;font-weight:700;color:var(--azure)">${nomVDisplay}</div>
@@ -20189,7 +20503,7 @@ function downloadExcel() {
     [{v:item.sno,t:'n',s:S.num},{v:item.name,t:'s',s:S.boldL},{v:areaLabel,t:'s',s:S.ctr},
      // a ranged nomination exports as text "500–600" (the planning figure is its top)
      {v:_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||'—'),t:nomV&&!_nomRange(item,'V')?'n':'s',s:S.num},{v:_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||'—'),t:nomM&&!_nomRange(item,'M')?'n':'s',s:S.num},
-     {v:item.spec||'—',t:'s',s:S.def},{v:fmtLC(item.lc),t:'s',s:S.ctr},{v:fmt24(item.eta),t:'s',s:S.ctr},
+     {v:item.spec||'—',t:'s',s:S.def},{v:fmtLC(item.lc),t:'s',s:S.ctr},{v:_itemEtaTxt(item),t:'s',s:S.ctr},
      {v:fmt24(item.bargeStart),t:'s',s:S.ctr},{v:fmt24(item.etc),t:'s',s:S.ctr},
      {v:plan,t:'s',s:{font:{sz:10,color:{rgb:'1A6FD4'}},fill:{fgColor:{rgb:'EBF3FD'}},alignment:{horizontal:'center'}}},
      {v:item.isDelayed?'Delayed':'On Laycan',t:'s',s:item.isDelayed?S.dl:S.ok},
@@ -20363,7 +20677,7 @@ function downloadExcelForBarge(bargeId) {
     const areaLabel=AREA_OPTIONS.find(o=>o.value===item.area)?.label||item.area||'';
     const seqXl = classifySeq(item, i, rows);
     const nomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, nomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-    [item.sno,item.name,areaLabel,_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||0),_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||0),item.spec||'',fmtLC(item.lc),fmt24(item.eta),fmt24(item.bargeStart),fmt24(item.etc),seqXl.label,item.isDelayed?'Delayed':'On Laycan',item.paq==='yes'?'Received':'Pending',item.agent||'',item.mani||''].forEach((v,c)=>ws[XLSX.utils.encode_cell({r:3+i,c})]={v,t:typeof v==='number'?'n':'s'});
+    [item.sno,item.name,areaLabel,_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||0),_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||0),item.spec||'',fmtLC(item.lc),_itemEtaTxt(item),fmt24(item.bargeStart),fmt24(item.etc),seqXl.label,item.isDelayed?'Delayed':'On Laycan',item.paq==='yes'?'Received':'Pending',item.agent||'',item.mani||''].forEach((v,c)=>ws[XLSX.utils.encode_cell({r:3+i,c})]={v,t:typeof v==='number'?'n':'s'});
   });
   ws['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:3+rows.length-1,c:14}});
   ws['!cols']=[{wch:6},{wch:20},{wch:14},{wch:10},{wch:10},{wch:14},{wch:18},{wch:22},{wch:22},{wch:22},{wch:20},{wch:14},{wch:10},{wch:12},{wch:22}];
@@ -20439,9 +20753,9 @@ function renderWeekCalendar(offsetDays) {
       const vP    = _cardQty(cid, 'vlsfo'), mP = _cardQty(cid, 'mgo');
       const v     = ty!=='MGO'   ? vP.qty : 0;
       const m     = ty!=='VLSFO' ? mP.qty : 0;
-      const fp    = document.getElementById('v'+cid+'-eta')?._flatpickr;
-      const d     = fp?.selectedDates?.[0] || null;
+      const d     = parseDT(document.getElementById('v'+cid+'-eta')?.value || '');
       const fb    = { name, vQ:v, mQ:m, _etaDate:new Date(d), bargeLabel:'', area:'' };
+      const fbWin = _cardEtaWin(cid); if (fbWin) fb.etaWin = fbWin;
       if (v && vP.min != null) { fb.nomVMin = vP.min; fb.nomVMax = vP.max; }
       if (m && mP.min != null) { fb.nomMMin = mP.min; fb.nomMMax = mP.max; }
       if ((v||m) && d) fallbackItems.push(fb);
@@ -20558,6 +20872,7 @@ function renderWeekCalendar(offsetDays) {
               const gc = isM ? 'var(--fuel-m)' : 'var(--fuel-v)';       // solid grade color — used as the card's fill
               const gcBd = isM ? 'var(--fuel-m-bd)' : 'var(--fuel-v-bd)';
               const start = new Date(r.startAt), end = new Date(r.endAt);
+              const ldWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
               return `<div style="
                 background:${gc};
                 border:1px solid ${gcBd};
@@ -20567,9 +20882,9 @@ function renderWeekCalendar(offsetDays) {
                 box-sizing:border-box;
                 cursor:pointer;
                 transition:filter .12s, transform .12s;
-              " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="${esc(r.terminal)} — ${esc(r.grade)} ${r.qty.toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+esc(r.surveyor):''}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+              " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="${esc(r.terminal)} — ${esc(r.grade)} ${r.qty.toLocaleString()} MT&#10;${ldWin ? 'Start ' + _etaFrame(r.startWin).code + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+esc(r.surveyor):''}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
                 <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
-                  <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${fmt(start)}</span>
+                  <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${ldWin || fmt(start)}</span>
                   <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${esc(r.grade)}</span>
                 </div>
                 <div style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(r.terminal)}</div>
@@ -20586,7 +20901,8 @@ function renderWeekCalendar(offsetDays) {
             const item = entry.data;
             const calNomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:(item.vQ||0), calNomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:(item.mQ||0);
             const gc = gradeColor(calNomV, calNomM);
-            const etaTime = fmt(item._etaDate);
+            // Time-frame ETA: show the frame ("AM 06:00–12:00"), not its start time.
+            const etaTime = (item.etaWin && _etaFrame(item.etaWin)) ? _etaFrame(item.etaWin).code : fmt(item._etaDate);
             const etcDate = item.etc ? (item.etc instanceof Date ? item.etc : new Date(item.etc)) : null;
             let etcDisplay = '';
             if (etcDate && !isNaN(etcDate)) {
@@ -20606,7 +20922,7 @@ function renderWeekCalendar(offsetDays) {
               box-sizing:border-box;
               ${hasSno?'cursor:pointer':'cursor:default'};
               transition:border-color .12s, transform .12s;
-            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
+            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${(item.etaWin && _etaFrame(item.etaWin)) ? etaTime + ' ' + _etaFrameHours(item.etaWin) + ' (time frame)' : etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
               <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                 <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
                 ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:item.isEarly?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--teal);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">BEFORE LAYCAN</span>`:''}
@@ -21118,11 +21434,24 @@ function openLaycanPicker(id) {
 }
 function openETAPicker(id) {
   const inp=document.getElementById(`v${id}-eta`);if(!inp)return;
+  // "Time frame only" ticked: pick the DATE only — the time is the frame's start.
+  const win=_cardEtaWin(id);
+  if(_etaPickers[id]&&_etaPickers[id]._flowWin!==win){try{_etaPickers[id].destroy();}catch(e){} delete _etaPickers[id]; inp.setAttribute('readonly','readonly');}
   if(_etaPickers[id]){_etaPickers[id].open();return;}
-  _etaPickers[id]=flatpickr(inp,{enableTime:true,time_24hr:true,dateFormat:'j M Y H:i',allowInput:false,minuteIncrement:30,disableMobile:true,minDate:'2026-01-01',
+  // flatpickr rewrites the box in its own format when it is created and on
+  // setDate — with the date-only format that would drop the frame's start
+  // time (a silent local edit). Keep the full value and put it back.
+  const keep=inp.value;
+  const restore=function(){if(!keep)return;const w=_cardEtaWin(id),d=parseDT(keep);inp.value=(w&&d)?_etaPickerStr(_etaFrameStart(d,w)):keep;};
+  _etaPickers[id]=flatpickr(inp,{enableTime:!win,time_24hr:true,dateFormat:win?'j M Y':'j M Y H:i',allowInput:false,minuteIncrement:30,disableMobile:true,minDate:'2026-01-01',
     onReady(_,__,fp){fp.open();},
-    onChange(dates){if(dates.length===1){const d=dates[0];inp.value=`${pad(d.getDate())} ${MO[d.getMonth()]} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;upd(id);}}});
-  if(inp.value){const eta=parseDT(inp.value);if(eta){try{_etaPickers[id].setDate(eta);}catch(e){}}}
+    onClose(){const w=_cardEtaWin(id);if(!w)return;const d=parseDT(inp.value);if(d){const v=_etaPickerStr(_etaFrameStart(d,w));if(inp.value!==v)inp.value=v;}},
+    onChange(dates){if(dates.length===1){let d=dates[0];const w=_cardEtaWin(id);if(w)d=_etaFrameStart(d,w);inp.value=_etaPickerStr(d);upd(id);}}});
+  _etaPickers[id]._flowWin=win;
+  restore();
+  if(keep){const eta=parseDT(keep);if(eta){try{_etaPickers[id].setDate(eta,false);}catch(e){}}}
+  restore();
+  inp.setAttribute('readonly','readonly');
   _etaPickers[id].open();
 }
 
@@ -21164,7 +21493,7 @@ function printScheduleOnly() {
     const sameBargePr = _lastSched.filter(x => (x.bargeLabel||'') === (item.bargeLabel||''));
     const seqPr = classifySeq(item, sameBargePr.indexOf(item), sameBargePr);
     const plan = seqPr.label;
-    const lcIn = !!(item.lc&&item.eta&&item.eta>=item.lc.from&&item.eta<=item.lc.to);
+    const lcIn = !!(item.lc&&item.eta&&_itemEtaEnd(item)>=item.lc.from&&item.eta<=item.lc.to);
     const lcStr = item.lc ? fmtLC(item.lc) : '—';
     const stat = item.noFirmETA ? 'No Firm ETA' : item.isDelayed ? 'Delayed' : 'On Laycan';
     const paqStr = item.paq==='yes' ? 'Rcvd' : ' Pending';
@@ -21182,7 +21511,7 @@ function printScheduleOnly() {
       <td style="text-align:right;font-family:monospace">${mo}</td>
       <td>${esc(item.spec||'—')}</td>
       <td style="color:${lcColor};font-family:monospace">${esc(lcStr)}</td>
-      <td style="font-family:monospace">${fmt24(item.eta)}</td>
+      <td style="font-family:monospace">${_itemEtaTxt(item)}</td>
       <td style="font-family:monospace">${fmt24(item.bargeStart)}</td>
       <td style="font-family:monospace">${fmt24(item.etc)}</td>
       <td style="font-size:6.5pt;color:var(--fuel-v)">${esc(plan)}</td>
@@ -22472,7 +22801,7 @@ function ciOpenForVessel(vid) {
 
   // id = the vessel card number: ciGenerate/ciOpenPreview re-read the live
   // inputs `v${id}-…` through it, which never happened while it was unset.
-  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, vlsfoTxt: _qtyShow(vqP), lsmgoTxt: _qtyShow(mqP), area, location, laycan, lcRaw, tplKey };
+  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, vlsfoTxt: _qtyShow(vqP), lsmgoTxt: _qtyShow(mqP), area, location, laycan, lcRaw, tplKey, eta: _cardEtaTxt(vid) };
 
   document.getElementById('ci-modal-title').textContent   = 'Calling Instructions — ' + vessel;
   document.getElementById('ci-prev-vessel').textContent   = vessel || '(no name)';
@@ -22512,7 +22841,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Rules: ONLY replace vessel name, fuel lines, location, laycan — nothing else changes
 // ══════════════════════════════════════════════════════════════
 // CI REPLACEMENT ENGINE — Placeholder-based + pattern fallback
-// Supports: {{VESSEL_NAME}} {{VLSFO_QTY}} {{MGO_QTY}} {{LAYCAN}} {{LOCATION}}
+// Supports: {{VESSEL_NAME}} {{VLSFO_QTY}} {{MGO_QTY}} {{LAYCAN}} {{LOCATION}} {{ETA}}
 // Also detects pattern-based replacements for templates without placeholders
 // ══════════════════════════════════════════════════════════════
 
@@ -22538,8 +22867,9 @@ function ciApplyTemplate(tplText,ctx){
   var v=Number(vlsfoQty)||0,m=Number(lsmgoQty)||0;
   if(v===0&&m===0) throw new Error('Both fuel quantities are 0.');
   var fl=ciBuildFuelLines(type,v,m,ctx.vlsfoTxt,ctx.lsmgoTxt),vs=v>0?(ctx.vlsfoTxt||v.toLocaleString())+' MT':'',ms=m>0?(ctx.lsmgoTxt||m.toLocaleString())+' MT':'';
-  if(tplText.indexOf('{{VESSEL_NAME}}')>=0||tplText.indexOf('{{FUEL_LINES}}')>=0||tplText.indexOf('{{VLSFO_QTY}}')>=0||tplText.indexOf('{{LAYCAN}}')>=0){
-    return tplText.split('{{VESSEL_NAME}}').join(vessel).split('{{FUEL_LINES}}').join(fl).split('{{VLSFO_QTY}}').join(vs).split('{{MGO_QTY}}').join(ms).split('{{LSMGO_QTY}}').join(ms).split('{{LAYCAN}}').join(laycan).split('{{LOCATION}}').join(location);
+  if(tplText.indexOf('{{VESSEL_NAME}}')>=0||tplText.indexOf('{{FUEL_LINES}}')>=0||tplText.indexOf('{{VLSFO_QTY}}')>=0||tplText.indexOf('{{LAYCAN}}')>=0||tplText.indexOf('{{ETA}}')>=0){
+    // {{ETA}}: the card's ETA as text — "16 Oct 2026 AM (06:00–12:00)" for a time frame.
+    return tplText.split('{{VESSEL_NAME}}').join(vessel).split('{{FUEL_LINES}}').join(fl).split('{{VLSFO_QTY}}').join(vs).split('{{MGO_QTY}}').join(ms).split('{{LSMGO_QTY}}').join(ms).split('{{LAYCAN}}').join(laycan).split('{{LOCATION}}').join(location).split('{{ETA}}').join(ctx.eta||'');
   }
   var out=tplText;
   out=out.replace(/(To\s*:\s*The Master\s*:\s*).+/gi,function(_,p){return p+vessel;});
@@ -22881,7 +23211,7 @@ function ciDocxReplaceParagraphText(xml, ctx, warnings) {
   const mgoNum   = (type !== 'VLSFO') ? Number(lsmgoQty) : 0;
   var fl2=ciBuildFuelLines(type,vlsfoNum,mgoNum,ctx.vlsfoTxt,ctx.lsmgoTxt);
   const vS = ctx.vlsfoTxt || vlsfoNum.toLocaleString(), mS = ctx.lsmgoTxt || mgoNum.toLocaleString();
-  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vS+' MT':'','{{MGO_QTY}}':mgoNum>0?mS+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mS+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||''};
+  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vS+' MT':'','{{MGO_QTY}}':mgoNum>0?mS+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mS+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||'','{{ETA}}':ctx.eta||''};
 
   // Validate all placeholders exist in raw XML text
   const docTextAll = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/gi)]
@@ -22889,7 +23219,7 @@ function ciDocxReplaceParagraphText(xml, ctx, warnings) {
     .join('');
 
   // Same trigger as ciApplyTemplate(): any of these means "placeholder template".
-  const usePlaceholders = ['{{VESSEL_NAME}}','{{FUEL_LINES}}','{{VLSFO_QTY}}','{{LAYCAN}}'].some(ph => docTextAll.includes(ph));
+  const usePlaceholders = ['{{VESSEL_NAME}}','{{FUEL_LINES}}','{{VLSFO_QTY}}','{{LAYCAN}}','{{ETA}}'].some(ph => docTextAll.includes(ph));
 
   // Reconstruct placeholder text across split runs
   // Each paragraph: concatenate all <w:t> content, replace, write back
