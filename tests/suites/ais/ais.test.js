@@ -248,7 +248,12 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
         drift29: A({ lcTo: new Date(now + H) }, at(14, { sog: 2.9, cog: 180 })),
         steaming12: A({}, at(12, { sog: 4, cog: 180 })),
         slowFarOff70: A({}, at(40, { sog: 2, cog: 250 })),   // 70° off at 2 kn → only 0.7 kn closing
-        slowAhead: A({}, at(40, { sog: 1.0, cog: 181 })),     // pointed at the port at 1.0 kn → closing a hair under 1 kn
+        slowAhead: A({}, at(40, { sog: 1.0, cog: 181 })),
+        farAway: (() => { const x = _aisAssess({ area: 'FUJ-A', lcTo: new Date(now - H) }, at(400, { sog: 12, cog: 0 }), now); return { est: x.est, estSpeed: x.estSpeed ? x.estSpeed.getTime() : null, warn: x.warn, fix: _aisPosTime(at(400).pos) }; })(),
+        nearAway: (() => { const x = _aisAssess({ area: 'FUJ-A' }, at(40, { sog: 12, cog: 0 }), now); return { estSpeed: x.estSpeed || null }; })(),
+        posTxt: _aisPosFact({ lat: 24.5, lon: 58.3, sog: 10, position_time: new Date(now).toISOString() }),
+        posBad: _aisPosFact({ lat: '<img src=x onerror=alert(1)>', lon: 58.3 }),
+        posFar: _aisPosFact({ lat: -12.25, lon: -40.5, position_time: new Date(now).toISOString() }),     // pointed at the port at 1.0 kn → closing a hair under 1 kn
         slowTxt: (() => { const x = _aisAssess({ area: 'FUJ-A' }, at(40, { sog: 1.0, cog: 181 }), now); return _aisCourseTxt(x); })(),
         nocog: A({}, at(30, { sog: 13, cog: null, heading: null })),
         hdgAway: A({}, at(30, { sog: 13, cog: null, heading: 0 })),
@@ -261,6 +266,10 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       r7.away.course === 'away' && r7.away.est === null && r7.away.warn === null && r7.leaving.est === null && r7.leaving.warn === null && r7.off80.course === 'away' && r7.hdgAway.course === 'away', r7);
     check('A1 course within ±70° AND ≥ 1 kn closing counts as approaching; unknown course → estimate kept',
       r7.off60.course === 'toward' && r7.off60.est != null && r7.slowFarOff70.course === 'slow' && r7.slowFarOff70.est === null && r7.nocog.course === 'unknown' && r7.nocog.est != null, r7);
+    check('A1 far away (> 150 nm) with a course not yet toward the port: a plain "at current speed" time, never a warning; not given near the port',
+      r7.farAway.est === null && r7.farAway.warn === null && r7.farAway.estSpeed != null && Math.abs(r7.farAway.estSpeed - (r7.farAway.fix + 400 / 12 * HR)) < 120000 && r7.nearAway.estSpeed === null, r7.farAway);
+    check('A1 current position shown with a rough sea area and an OpenStreetMap link; junk coordinates give nothing',
+      /📍 Gulf of Oman · <a href="https:\/\/www\.openstreetmap\.org\/\?mlat=24\.5000&amp;mlon=58\.3000|📍 Gulf of Oman · <a href="https:\/\/www\.openstreetmap\.org\/\?mlat=24\.5000&mlon=58\.3000/.test(r7.posTxt) && />24\.50°N 58\.30°E</.test(r7.posTxt) && r7.posBad === '' && />12\.25°S 40\.50°W</.test(r7.posFar) && !/📍 [A-Z]/.test(r7.posFar), [r7.posTxt, r7.posBad, r7.posFar]);
     check('A1 pointed at the port but closing under 1 kn is "slow", never labelled "heading away"',
       r7.slowAhead.course === 'slow' && r7.slowAhead.est === null && r7.slowAhead.warn === null && /slow toward FUJ A/.test(r7.slowTxt) && !/away/.test(r7.slowTxt), [r7.slowAhead, r7.slowTxt]);
     check('A1 moving within 3 nm (manoeuvring, or leaving after a late supply): no estimate, no warning — whatever the course',
@@ -293,7 +302,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       const r = {};
       ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'].forEach(n => {
         const el = __line(n);
-        r[n] = { show: el.classList.contains('show'), text: el.textContent.replace(/\s+/g, ' ').trim(), chip: (el.querySelector('.ais-chip') || {}).textContent, links: [...el.querySelectorAll('a')].map(a => ({ href: a.getAttribute('href'), t: a.target, rel: a.rel, text: a.textContent })), warn: el.querySelector('.ais-warn') ? { cls: el.querySelector('.ais-warn').className, text: el.querySelector('.ais-warn').textContent } : null };
+        r[n] = { show: el.classList.contains('show'), text: el.textContent.replace(/\s+/g, ' ').trim(), chip: (el.querySelector('.ais-chip') || {}).textContent, links: [...el.querySelectorAll('.ais-links a')].map(a => ({ href: a.getAttribute('href'), t: a.target, rel: a.rel, text: a.textContent })), warn: el.querySelector('.ais-warn') ? { cls: el.querySelector('.ais-warn').className, text: el.querySelector('.ais-warn').textContent } : null };
       });
       const n1 = __line('n1'), prev = document.getElementById('v' + __cid('n1') + '-prev');
       r.order = prev && prev.nextElementSibling === n1;
@@ -302,7 +311,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     check('A2 the line sits right under the ETA strip', L.order === true);
     check('A2 every nomination with a name / IMO gets a "Live position (AIS)" line', ['n1', 'n2', 'n3', 'n4', 'n5', 'n6'].every(n => L[n].show && /^Live position \(AIS\)/.test(L[n].text)), L);
     check('A2 Approaching line: chip, distance to FUJ A, speed, AIS arrival, AIS destination + AIS ETA (UTC broadcast shown in local time), last seen',
-      L.n1.chip === 'Approaching' && /40 nm to FUJ A/.test(L.n1.text) && /10\.0 kn/.test(L.n1.text) && /AIS arrival ~\d+ \w{3} \d\d:\d\d/.test(L.n1.text) && /Dest\. FUJAIRAH OPL/.test(L.n1.text) && L.n1.text.includes('AIS ETA ' + s.aisEtaLocal) && /seen 8 min ago/.test(L.n1.text), L.n1.text);
+      L.n1.chip === 'Approaching' && /40 nm left to FUJ A/.test(L.n1.text) && /10\.0 kn/.test(L.n1.text) && /AIS arrival ~\d+ \w{3} \d\d:\d\d/.test(L.n1.text) && /Dest\. FUJAIRAH OPL/.test(L.n1.text) && L.n1.text.includes('AIS ETA ' + s.aisEtaLocal) && /seen 8 min ago/.test(L.n1.text), L.n1.text);
     check('A2 map links: MarineTraffic by MMSI ("Open map") + VesselFinder by IMO, new tab, rel=noopener',
       JSON.stringify(L.n1.links.map(l => l.href)) === JSON.stringify(['https://www.marinetraffic.com/en/ais/details/ships/mmsi:636012345', 'https://www.vesselfinder.com/vessels/details/9873022']) &&
       L.n1.links[0].text === 'Open map' && L.n1.links.every(l => l.t === '_blank' && l.rel === 'noopener'), L.n1.links);
@@ -330,7 +339,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       return { t1, t2, t3: __line('n1').textContent };
     });
     check('A2 editing IMO / anchorage re-matches the line (name match → flagged; distance to KFK B)',
-      /matched by name/.test(ed.t1) && /to KFK B/.test(ed.t2) && /40 nm to FUJ A/.test(ed.t3), ed);
+      /matched by name/.test(ed.t1) && /left to KFK B/.test(ed.t2) && /40 nm left to FUJ A/.test(ed.t3), ed);
     // the MMSI box re-matches too: GHOST TRADER (card IMO not on AIS) is found by the MMSI typed next to it
     const mb = await page.evaluate(async () => {
       const id = __cid('n4'), el = document.getElementById('v' + id + '-mmsi');
@@ -342,7 +351,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       return { t1, chip1, t2: __line('n4').textContent };
     });
     check('A2 typing an MMSI re-matches the line by MMSI (IMO not on AIS); cleared → "Not seen" for the IMO again',
-      mb.chip1 === 'Approaching' && /20 nm to FUJ A/.test(mb.t1) && !/matched by name/.test(mb.t1) && /No AIS position yet for IMO 9111111/.test(mb.t2), mb);
+      mb.chip1 === 'Approaching' && /20 nm left to FUJ A/.test(mb.t1) && !/matched by name/.test(mb.t1) && /No AIS position yet for IMO 9111111/.test(mb.t2), mb);
 
     // both looks, token colours, layout
     const looks = [];
@@ -415,7 +424,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     if (SHOTS) { await page.evaluate(() => document.querySelectorAll('#toast-stack .toast').forEach(t => t.remove())); await shot(page.locator('#dash-ais'), 'ais-dashboard-operator.png'); }
     const op = d.rows[1].text;
     check('A3 row: status, distance & reference point, speed, AIS arrival vs ETA, last seen, map link',
-      /Approaching/.test(op) && /40 nm to FUJ A/.test(op) && /10\.0 kn/.test(op) && /AIS ~\d+ \w{3} \d\d:\d\d · ETA \d+ \w{3} \d\d:\d\d/.test(op) && /seen 8 min ago/.test(op) && /Open map/.test(op), op);
+      /Approaching/.test(op) && /40 nm left to FUJ A/.test(op) && /10\.0 kn/.test(op) && /AIS ~\d+ \w{3} \d\d:\d\d · ETA \d+ \w{3} \d\d:\d\d/.test(op) && /seen 8 min ago/.test(op) && /Open map/.test(op), op);
     const fr = d.rows.find(r => r.name === 'FRAME RUNNER');
     check('A3 time-frame ETA shown as its frame ("' + s.frameCode + '")', fr && new RegExp('ETA \\d+ \\w{3} ' + s.frameCode).test(fr.text), fr && fr.text);
 
@@ -440,7 +449,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     const w0 = writesBy(db, 'user-operator');
     const loads0 = await page.evaluate(() => _ais.loads);
     H.aisWrite(db, 'ais_positions', Object.assign({}, s.positions[0], dest('FUJ-A', 110, 50), { position_time: iso(Date.now() - 1 * MIN), updated_at: iso(Date.now()) }));
-    const dt = await until(page, () => /50 nm to FUJ A/.test(__line('n1').textContent), null, 4000);
+    const dt = await until(page, () => /50 nm left to FUJ A/.test(__line('n1').textContent), null, 4000);
     check('A3 Realtime: a new position appears without waiting for the poll (' + dt + ' ms)', dt >= 0 && await page.evaluate(() => _ais.channel && /^ais-positions-/.test(_ais.channel.name)), dt);
     check('A3 same warning, new numbers → same key, no new toast', !(await page.evaluate(() => __toasts().some(t => /AIS:/.test(t)))) && await page.evaluate(() => computeGlobalAlerts().filter(a => a.key === 'ais|n1').length === 1));
     // FRAME RUNNER now far away → a NEW warning → exactly one toast for it
@@ -547,7 +556,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       db.invokeLog.length === 1 && db.invokeLog[0].name === 'ais-poll' && db.invokeLog[0].uid === 'user-operator' && during.disabled && during.text === 'Refreshing…' && /^Refreshing…/.test(during.sub), [db.invokeLog, during]);
     await page.evaluate(() => document.getElementById('ais-refresh-btn').click());
     check('A4 a second click while running does nothing', db.invokeLog.length === 1);
-    check('A4 202 started → "Fetching live positions…" toast', await page.evaluate(() => __toasts().some(t => /^Fetching live positions — this takes about 1½ minutes/.test(t))));
+    check('A4 202 started → "Fetching live positions…" toast', await page.evaluate(() => __toasts().some(t => /^Fetching live positions — this takes about 1 minute/.test(t))));
     const dt = await until(page, () => __toasts().some(t => /^Live positions updated — 6 of 6 nominated vessels seen\.$/.test(t)), null, 6000);
     const after = await btnState();
     check('A4 picks up the result when ais_status.last_run_at changes (' + dt + ' ms), button back', dt >= 0 && !after.disabled && after.text === 'Refresh now', after);
@@ -689,13 +698,13 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       const bad = sel => [...document.querySelectorAll(sel)].filter(el => el.closest('#dash-ais, .ais-line, #global-alerts-list, #dash-action-queue, #toast-stack')).length;
       return {
         xss: window.__xss, imgs: bad('img[src="x"]'), svgs: bad('svg[onload]'), bs: bad('b[onmouseover]'),
-        lineText: line.textContent, dashText: dash.textContent, links: [...line.querySelectorAll('a')].length,
+        lineText: line.textContent, dashText: dash.textContent, links: [...line.querySelectorAll('.ais-links a')].length, posLinks: [...line.querySelectorAll('a[href^="https://www.openstreetmap.org/"]')].length,
         alert: computeGlobalAlerts().filter(a => /^ais\|/.test(a.key)).map(a => a.sub), toasts: __toasts(),
       };
     });
     check('A7 nothing executed, no injected elements', r.xss === undefined && r.imgs === 0 && r.svgs === 0 && r.bs === 0, r);
     check('A7 hostile name / destination / AIS ETA shown as text', r.lineText.includes('Dest. "><svg onload="window.__xss=2"></svg>') && r.lineText.includes('AIS ETA <b onmouseover="window.__xss=5">10-16</b>') && r.dashText.includes('<img src=x onerror="window.__xss=1">'), r.lineText);
-    check('A7 malformed MMSI / IMO → no map links at all', r.links === 0, r.links);
+    check('A7 malformed MMSI / IMO → no vessel map links (the position link is built from validated numbers only)', r.links === 0, r);
     check('A7 hostile error text from the function / status shown as text', r.dashText.includes('Last update failed: <img src=x onerror="window.__xss=6">') && r.toasts.some(t => t.includes('<img src=x onerror="window.__xss=7">')), [r.dashText, r.toasts]);
     check('A7 the alert carries the raw name as text (bell escapes it)', r.alert.length === 1 && r.alert[0].startsWith('<img src=x'), r.alert);
   });
@@ -731,7 +740,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     const dts = await until(page, () => __line('n3').querySelector('.ais-ago').textContent === 'seen 1 min ago', null, 4000);
     check('A8 a new fix with the same position/speed resets "seen …" on the card line (' + dts + ' ms)', dts >= 0, await page.evaluate(() => __line('n3').textContent));
     H.aisWrite(db, 'ais_positions', Object.assign({}, s.positions[0], dest('FUJ-A', 110, 45), { position_time: iso(Date.now() - MIN), updated_at: iso(Date.now()) }));
-    const dt = await until(page, () => /45 nm to FUJ A/.test(__line('n1').textContent) && /45 nm/.test(document.getElementById('dash-ais').textContent), null, 4000);
+    const dt = await until(page, () => /45 nm left to FUJ A/.test(__line('n1').textContent) && /45 nm/.test(document.getElementById('dash-ais').textContent), null, 4000);
     const aqSame = await until(page, () => { const r = document.querySelector('#dash-action-queue [data-alert-key="ais|n1"] .aq-detail'), w = __line('n1').querySelector('.ais-warn'); return !!(r && w && r.textContent === w.textContent); }, null, 4000);
     check('A8 Needs Attention shows the new estimate / hours after a new fix (same level)', aqSame >= 0, await page.evaluate(() => [((document.querySelector('#dash-action-queue [data-alert-key="ais|n1"] .aq-detail') || {}).textContent), (__line('n1').querySelector('.ais-warn') || {}).textContent]));
     H.aisWrite(db, 'ais_positions', Object.assign({}, s.positions[0], dest('FUJ-A', 110, 10), { position_time: iso(Date.now() - MIN), updated_at: iso(Date.now()) }));

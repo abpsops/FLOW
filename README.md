@@ -119,7 +119,7 @@ yet" on the dashboard and traders see nothing.
    (it needs both `pg_cron` and `pg_net` enabled under Database → Extensions).
 6. **Check it works — both ways in:**
    - *By hand:* open FLOW as an operator → Dashboard → **Vessel Positions
-     (AIS)** → **Refresh now**. After about 1½ minutes you get "Live positions
+     (AIS)** → **Refresh now**. After about 1 minute you get "Live positions
      updated — X of Y nominated vessels seen" and the list fills; each
      nomination card shows a "Live position (AIS)" line.
    - *The schedule:* this is a separate path, so check it too. **Don't press
@@ -131,7 +131,7 @@ yet" on the dashboard and traders see nothing.
      this works right after the by-hand check. (Or in the SQL Editor:
      `select last_cron_at, last_run_at, ok, found, error from ais_status;` —
      `last_cron_at` must move every 10 minutes; `last_run_at` follows about
-     1½ minutes later whenever a run actually happened.) If it doesn't move:
+     1 minute later whenever a run actually happened.) If it doesn't move:
      Edge Functions → ais-poll → **Invocations** shows each call's status —
      **202** = a run started; **200** = skipped because a run was still going
      or had just finished (normal right after Refresh now); **401** = the
@@ -145,6 +145,15 @@ yet" on the dashboard and traders see nothing.
 
 ### What you see
 
+- **Where the vessel is now:** each line shows the last AIS position
+  (📍 rough sea area + coordinates, linking to OpenStreetMap), the **nm left**
+  to the nomination's anchorage (straight line — the sea route can be longer),
+  the speed and the expected arrival: **AIS arrival ~…** when the ship is
+  heading for the port, or **at current speed ~…** when it is more than
+  150 nm out and its course doesn't point at the port yet (no warnings are
+  raised from that one). Each run takes about 1 minute; with MMSIs known
+  most of it is spent searching worldwide, so ships far from Fujairah are
+  found too (wherever aisstream.io has coverage).
 - **Matching:** each nomination card has an **IMO** box and an **MMSI** box
   ("IMO Number / MMSI \*" — at least one is wanted). The MMSI is tried first
   (the ship is then found anywhere in the world on the next run), then the

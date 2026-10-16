@@ -232,9 +232,19 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
       JSON.stringify(b.BoundingBoxes) === '[[[-90,-180],[90,180]]]' && b.FiltersShipMMSI.length === 50 && b.FiltersShipMMSI.every(x => typeof x === 'string') && b.FiltersShipMMSI[0] === '200000000', b.FiltersShipMMSI.length);
     // time budget (worker age): phase B is cut first, then phase A
     const D = AIS.DEFAULTS, P = (left) => AIS.planPhases(D, left);
-    const fresh = P(140000 - 8000), age70 = P(140000 - 8000 - 70000), age50 = P(140000 - 8000 - 50000);
-    check('E2 phases planned against the worker\'s age: fresh 65+25 s; 50 s old → phase B shortened to 17 s; 70 s old → phase A only',
-      fresh.a === 65000 && fresh.b === 25000 && age50.a === 65000 && age50.b === 17000 && age70.a === 62000 && age70.b === 0, { fresh, age50, age70 });
+    const fresh = P(140000 - 8000), age80 = P(140000 - 8000 - 80000), age100 = P(140000 - 8000 - 100000);
+    check('E2 phases planned against the worker\'s age: fresh 40+15 s (~1 min run); 80 s old → phase B shortened to 12 s; 100 s old → phase A only (32 s)',
+      fresh.a === 40000 && fresh.b === 15000 && age80.a === 40000 && age80.b === 12000 && age100.a === 32000 && age100.b === 0, { fresh, age80, age100 });
+    // adaptive split: no MMSIs → all regional; all known → short regional + worldwide; mixed → 15 s regional
+    {
+      const T = D.phaseAms + D.phaseBms;
+      const none = AIS.adaptPhases(D, AIS.buildContext([{ key: 'imo:9000001', imo: '9000001', name: 'X' }], []));
+      const all = AIS.adaptPhases(D, AIS.buildContext([{ key: 'mmsi:636012345', mmsi: '636012345', name: 'Y' }], []));
+      const mix = AIS.adaptPhases(D, AIS.buildContext([{ key: 'mmsi:636012345', mmsi: '636012345', name: 'Y' }, { key: 'imo:9000001', imo: '9000001', name: 'X' }], []));
+      const off = AIS.adaptPhases(Object.assign({}, D, { adaptivePhases: false }), AIS.buildContext([], []));
+      check('E2 adaptive split keeps a ~1 min run: none known (normal split; learned MMSIs still get phase B) → ' + none.phaseAms + '+' + none.phaseBms + ', all known → ' + all.phaseAms + '+' + all.phaseBms + ', mixed → ' + mix.phaseAms + '+' + mix.phaseBms,
+        T === 55000 && none.phaseAms === D.phaseAms && none.phaseBms === D.phaseBms && all.phaseAms === 5000 && all.phaseBms === 50000 && mix.phaseAms === 15000 && mix.phaseBms === 40000 && off.phaseAms === D.phaseAms, { none, all, mix });
+    }
     // prefilter
     const ctx = AIS.buildContext(tr, [{ mmsi: MMSI.echo, imo: '9000005', name: 'ECHO SCHED' }]);
     const now = Date.now();
@@ -309,7 +319,8 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
   let script = () => {};
   const srv = await startWsServer(conn => script(conn));
   const ENV = { SUPABASE_URL: 'https://proj.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'service-key', AISSTREAM_API_KEY: 'test-key', AIS_CRON_SECRET: 'cron-secret-123' };
-  const baseCfg = { url: srv.url, phaseAms: 1500, phaseBms: 800, openTimeoutMs: 3000, minPhaseBms: 200, reconnectMinMs: 300 };
+  // adaptivePhases off: these end-to-end runs are scripted against fixed phase lengths (the split itself is unit-tested in E2)
+  const baseCfg = { url: srv.url, phaseAms: 1500, phaseBms: 800, openTimeoutMs: 3000, minPhaseBms: 200, reconnectMinMs: 300, adaptivePhases: false };
   const call = (fake, headers, extra) => {
     extra = extra || {};
     const req = new Request('http://localhost/functions/v1/ais-poll', { method: extra.method || 'POST', headers: headers || {}, body: (extra.method || 'POST') === 'POST' ? '{}' : undefined });

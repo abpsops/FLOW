@@ -8,12 +8,12 @@
    FLOW app only ever READS those two tables — the aisstream API key
    never reaches the browser.
 
-   HOW ONE RUN WORKS (~90 s, one WebSocket connection)
-     Phase A (~65 s): a box over the Gulf of Oman / Strait of Hormuz
+   HOW ONE RUN WORKS (~1 min, one WebSocket connection)
+     Phase A (up to ~55 s; ~5–15 s once MMSIs are known): a box over the Gulf of Oman / Strait of Hormuz
        approaches, no MMSI filter. Learns IMO → MMSI from ShipStaticData
        and catches positions of tracked ships near Fujairah/Khor Fakkan.
        What was collected is saved at the end of phase A (checkpoint).
-     Phase B (~25 s): the subscription is replaced by a worldwide box +
+     Phase B (the rest of ~55 s): the subscription is replaced by a worldwide box +
        FiltersShipMMSI (the known MMSIs not yet seen, max 50 — the MMSIs
        typed on the nomination cards first) to catch tracked ships that
        are still far away.
@@ -66,7 +66,7 @@
      AISSTREAM_API_KEY  your aisstream.io key
      AIS_CRON_SECRET    any long random string, also put in the cron job
      SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided automatically.
-     Optional tuning: AIS_PHASE_A_SECONDS (65), AIS_PHASE_B_SECONDS (25),
+     Optional tuning: AIS_PHASE_A_SECONDS (40), AIS_PHASE_B_SECONDS (15),
      AIS_REGION_BOX ("22,54,27.5,60.5" = latMin,lonMin,latMax,lonMax).
 
    TESTS: everything between the AIS-PURE-START / AIS-PURE-END markers
@@ -85,8 +85,8 @@ const DEFAULTS = {
   url: 'wss://stream.aisstream.io/v0/stream',
   // [[latMin, lonMin], [latMax, lonMax]] — Gulf of Oman + Strait of Hormuz approaches
   regionBox: [[22.0, 54.0], [27.5, 60.5]],
-  phaseAms: 65000,
-  phaseBms: 25000,
+  phaseAms: 40000,       // ~1 minute per run in total (phase A + B + connect/save)
+  phaseBms: 15000,
   openTimeoutMs: 10000,
   throttleMs: 120000,     // a successful run less than 2 min ago → return the cached status
   lockStaleMs: 180000,    // a run "in progress" for more than 3 min is considered dead
@@ -94,6 +94,9 @@ const DEFAULTS = {
   reserveMs: 8000,        // kept free at the end for the final database writes
   minRunMs: 15000,        // less collecting time than this left on the worker → don't start (next tick will)
   minPhaseBms: 3000,      // a phase B shorter than this (after shortening) is skipped
+  adaptivePhases: true,   // split the run by what we know: MMSIs known → mostly worldwide (phase B)
+  allKnownPhaseAms: 5000, // every tracked vessel has an MMSI → only a short regional pass
+  mixedPhaseAms: 15000,   // some MMSIs known → 15 s regional (to learn the rest), the rest worldwide
   maxReconnects: 1,       // aisstream dropped us mid-run → reconnect once if there is time
   reconnectMinMs: 8000,
   maxMmsiFilter: 50,      // aisstream limit for FiltersShipMMSI
@@ -237,6 +240,19 @@ function pickPhaseBMmsis(ctx, obs, max) {
     else (ctx.trackedMmsi.has(mmsi) ? typed : learned).push(mmsi);
   }
   return typed.concat(learned, b).slice(0, max || DEFAULTS.maxMmsiFilter);
+}
+/* Split the run (phase A regional + phase B worldwide, same total) by what is
+   known. Worldwide-by-MMSI finds a ship wherever aisstream hears it, so it gets
+   most of the time as soon as MMSIs are known; the regional pass is only needed
+   to learn MMSIs from IMO / name broadcasts near Fujairah. */
+function adaptPhases(cfg, ctx) {
+  if (!cfg || cfg.adaptivePhases === false) return cfg;
+  const total = (cfg.phaseAms || 0) + (cfg.phaseBms || 0);
+  const known = pickPhaseBMmsis(ctx, new Map(), cfg.maxMmsiFilter).length;
+  const tracked = ctx && ctx.keys ? ctx.keys.size : 0;
+  if (!known) return cfg; // nothing known yet: normal split — MMSIs learned in phase A still get the worldwide phase
+  const a = Math.min(total, known >= tracked ? cfg.allKnownPhaseAms : cfg.mixedPhaseAms);
+  return Object.assign({}, cfg, { phaseAms: a, phaseBms: total - a });
 }
 /* How long phases A and B may run when collecting can last `leftMs` more:
    phase B is cut first, then phase A. */
@@ -459,6 +475,7 @@ function collect(o) {
   const deadline = typeof cfg.deadline === 'number' ? cfg.deadline : Infinity;
   const decoder = new TextDecoder();
   const obs = new Map(), buffer = new Map();
+  const pc = adaptPhases(cfg, ctx); // this run's split between the regional and worldwide phases
   const stats = { messages: 0, parsed: 0, buffered: 0, learned: 0, phase: 'connecting', subscriptions: [], phaseBMmsi: 0, connections: 0, reconnects: 0, warnings: [], plannedA: null, plannedB: null };
   return new Promise((resolve) => {
     let ws = null, done = false, error = null, interrupted = false, phaseBList = null, plan = null;
@@ -542,7 +559,7 @@ function collect(o) {
       if (typeof o.onCheckpoint === 'function' && obs.size) { try { track(Promise.resolve(o.onCheckpoint(obs))); } catch (_) { /* best effort */ } }
       const list = pickPhaseBMmsis(ctx, obs, cfg.maxMmsiFilter);
       const b = Math.min(plan.b, deadline - nowFn());
-      if (!list.length || !(b > 0) || b < Math.min(cfg.phaseBms, cfg.minPhaseBms)) { finish(); return; }
+      if (!list.length || !(b > 0) || b < Math.min(pc.phaseBms, cfg.minPhaseBms)) { finish(); return; }
       stats.phase = 'B';
       stats.phaseBMmsi = list.length;
       phaseBList = list;
@@ -577,7 +594,7 @@ function collect(o) {
         if (done || sock !== ws) return;
         if (stats.phase === 'connecting') {
           stats.phase = 'A';
-          plan = planPhases(cfg, deadline - nowFn());
+          plan = planPhases(pc, deadline - nowFn());
           stats.plannedA = plan.a; stats.plannedB = plan.b;
           later(startPhaseB, plan.a);
         }
@@ -795,7 +812,7 @@ const AIS = {
   normName, nameKey, normId, classifyId, vesselIds, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
   scanDigits, scanString, prefilter, parseAisTime, parsePosition, parseStatic, formatAisEta,
   observe, mergeRow, pruneList, messageText, countFound, collect, runPoll, interruptRuns, safeEqual, authorize, claimRun, markCronCall,
-  parseBox, makeConfig, handleRequest,
+  parseBox, makeConfig, handleRequest, adaptPhases
 };
 // @@AIS-PURE-END@@
 
