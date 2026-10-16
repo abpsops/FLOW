@@ -24593,6 +24593,11 @@ html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-idbad{border-co
 .ais-row-name{font-weight:700;color:var(--text);font-size:12.5px;min-width:0;overflow-wrap:anywhere}
 .ais-row-main{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;flex:1 1 220px;min-width:0}
 .ais-row-facts{display:flex;align-items:center;gap:4px 12px;flex-wrap:wrap;flex:2 1 320px;min-width:0}
+.ais-heard{margin-top:10px;border:1px solid var(--border2);border-radius:8px;padding:6px 10px;font-size:11.5px;color:var(--sub)}
+.ais-heard>summary{cursor:pointer;font-weight:600;color:var(--ink)}
+.ais-heard-hint{margin:6px 0;padding:6px 8px;border-radius:6px;background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd)}
+.ais-heard-row{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;padding:4px 0;border-top:1px solid var(--border2)}
+.ais-heard-searched{margin-top:6px;padding-top:6px;border-top:1px solid var(--border2);line-height:1.5}
 .ais-empty{font-size:12px;color:var(--muted);text-align:center;padding:18px 10px;overflow-wrap:anywhere}
 .ais-empty b{color:var(--sub)}
 #ais-refresh-btn[disabled]{opacity:.65;cursor:default}
@@ -25078,6 +25083,36 @@ function _aisScheduleNote(now) {
   if (!isNaN(r) && now - r > late) return 'Updates seem to have stopped — last run ' + _aisAgo(now - r) + '. Check the cron job (README steps 5–6).';
   return '';
 }
+/* Coverage check (operators): what aisstream actually delivered in the last run,
+   and which vessels / numbers the run looked for. All AIS text is untrusted → esc(). */
+function _aisHeardHtml(st) {
+  if (!st || (st.heard_count == null && !Array.isArray(st.heard) && !Array.isArray(st.searched))) return '';
+  const heard = Array.isArray(st.heard) ? st.heard : [];
+  const searched = Array.isArray(st.searched) ? st.searched : [];
+  const n = Number(st.heard_count) || 0;
+  const rows = heard.map(function(h) {
+    const mmsi = /^\d{9}$/.test(String(h && h.mmsi || '')) ? String(h.mmsi) : '';
+    const pos = (h && isFinite(h.lat) && isFinite(h.lon)) ? _aisPosFact({ lat: h.lat, lon: h.lon, position_time: h.time || new Date().toISOString() }) : '';
+    const t = h && h.time ? Date.parse(h.time) : NaN;
+    return '<div class="ais-heard-row"><span class="ais-row-name">' + esc((h && h.name) || '(no name yet)') + '</span>' +
+      (mmsi ? '<span class="ais-fact">MMSI ' + mmsi + '</span>' : '') + pos +
+      (h && h.sog != null && isFinite(h.sog) ? '<span class="ais-fact">' + _aisKn(+h.sog) + '</span>' : '') +
+      (isFinite(t) ? '<span class="ais-fact">' + esc(_aisAgo(Date.now() - t)) + '</span>' : '') +
+      (mmsi ? '<span class="ais-links"><a href="https://www.marinetraffic.com/en/ais/details/ships/mmsi:' + mmsi + '" target="_blank" rel="noopener">Open map</a></span>' : '') + '</div>';
+  }).join('');
+  const sTxt = searched.map(function(x) {
+    const ids = [x && /^\d{9}$/.test(String(x.mmsi || '')) ? 'MMSI ' + x.mmsi : '', x && /^\d{7}$/.test(String(x.imo || '')) ? 'IMO ' + x.imo : ''].filter(Boolean).join(' / ');
+    return esc((x && x.name) || '?') + ' (' + (ids ? esc(ids) : 'by name only') + ')';
+  }).join(' · ');
+  const byName = searched.filter(function(x) { return x && !x.mmsi && !x.imo; }).length;
+  const hint = n < 20
+    ? '<div class="ais-heard-hint">aisstream.io delivered only <b>' + n + '</b> different ship' + (n === 1 ? '' : 's') + ' in the last run — its free receivers barely cover this area, so most vessels will show “Not seen”.</div>'
+    : '';
+  return '<details class="ais-heard"' + (n < 20 ? ' open' : '') + '><summary>Coverage check — aisstream heard <b>' + n + '</b> different ship' + (n === 1 ? '' : 's') + ' in the last run' + (heard.length && heard.length < n ? ' (first ' + heard.length + ' shown)' : '') + '</summary>' +
+    hint + (rows || '<div class="ais-empty">No ships were delivered in the last run.</div>') +
+    (searched.length ? '<div class="ais-heard-searched"><b>Searched for:</b> ' + sTxt + (byName ? ' — <i>' + byName + ' by name only: add an MMSI so it can be found worldwide</i>' : '') + '</div>' : '') +
+    '</details>';
+}
 function renderDashAis() {
   const card = document.getElementById('dash-ais');
   const body = document.getElementById('dash-ais-body');
@@ -25157,7 +25192,7 @@ function renderDashAis() {
       '<div class="ais-row-facts">' + facts.join('') + '</div>' +
       (a.warn ? '<div class="ais-warn ' + a.warn.level + '">' + esc(a.warn.text) + '</div>' : '') +
       '</div>';
-  }).join('') + '</div>';
+  }).join('') + '</div>' + (operator ? _aisHeardHtml(st) : '');
 }
 
 /* ── Loading ── */

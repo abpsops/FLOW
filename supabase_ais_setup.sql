@@ -85,6 +85,10 @@ alter table public.ais_status add column if not exists running_since timestamptz
 -- Added later: re-running this file adds it to an existing install (the function
 -- and the app also work without it — they just can't tell scheduled runs apart).
 alter table public.ais_status add column if not exists last_cron_at timestamptz;
+-- Coverage check: what aisstream delivered in the last run, and what was searched for.
+alter table public.ais_status add column if not exists heard_count integer;  -- different ships heard in the last run
+alter table public.ais_status add column if not exists heard jsonb;          -- details of the first 25 ships heard
+alter table public.ais_status add column if not exists searched jsonb;       -- nominated vessels the run looked for (name / IMO / MMSI)
 
 insert into public.ais_status (id) values (1) on conflict (id) do nothing;
 

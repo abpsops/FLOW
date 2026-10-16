@@ -253,7 +253,9 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
         nearAway: (() => { const x = _aisAssess({ area: 'FUJ-A' }, at(40, { sog: 12, cog: 0 }), now); return { estSpeed: x.estSpeed || null }; })(),
         posTxt: _aisPosFact({ lat: 24.5, lon: 58.3, sog: 10, position_time: new Date(now).toISOString() }),
         posBad: _aisPosFact({ lat: '<img src=x onerror=alert(1)>', lon: 58.3 }),
-        posFar: _aisPosFact({ lat: -12.25, lon: -40.5, position_time: new Date(now).toISOString() }),     // pointed at the port at 1.0 kn → closing a hair under 1 kn
+        posFar: _aisPosFact({ lat: -12.25, lon: -40.5, position_time: new Date(now).toISOString() }),
+        heardHtml: _aisHeardHtml({ heard_count: 2, heard: [{ mmsi: '636012345', name: '<img src=x onerror=alert(1)>', lat: 25.2, lon: 56.4, sog: 0.1, time: new Date(now - 120000).toISOString() }, { mmsi: 'bad<', name: 'X' }], searched: [{ name: 'OCEAN NOBILITY', imo: null, mmsi: null }, { name: 'CMA CGM DAKAR', imo: '9473018', mmsi: '228386800' }] }),
+        heardNone: _aisHeardHtml({}),     // pointed at the port at 1.0 kn → closing a hair under 1 kn
         slowTxt: (() => { const x = _aisAssess({ area: 'FUJ-A' }, at(40, { sog: 1.0, cog: 181 }), now); return _aisCourseTxt(x); })(),
         nocog: A({}, at(30, { sog: 13, cog: null, heading: null })),
         hdgAway: A({}, at(30, { sog: 13, cog: null, heading: 0 })),
@@ -270,6 +272,9 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       r7.farAway.est === null && r7.farAway.warn === null && r7.farAway.estSpeed != null && Math.abs(r7.farAway.estSpeed - (r7.farAway.fix + 400 / 12 * HR)) < 120000 && r7.nearAway.estSpeed === null, r7.farAway);
     check('A1 current position shown with a rough sea area and an OpenStreetMap link; junk coordinates give nothing',
       /📍 Gulf of Oman · <a href="https:\/\/www\.openstreetmap\.org\/\?mlat=24\.5000&amp;mlon=58\.3000|📍 Gulf of Oman · <a href="https:\/\/www\.openstreetmap\.org\/\?mlat=24\.5000&mlon=58\.3000/.test(r7.posTxt) && />24\.50°N 58\.30°E</.test(r7.posTxt) && r7.posBad === '' && />12\.25°S 40\.50°W</.test(r7.posFar) && !/📍 [A-Z]/.test(r7.posFar), [r7.posTxt, r7.posBad, r7.posFar]);
+    check('A1 coverage check: heard ships listed (escaped names, validated MMSIs), low-coverage hint, searched list with "by name only" advice; nothing when the columns are absent',
+      /Coverage check — aisstream heard <b>2<\/b> different ships/.test(r7.heardHtml) && /&lt;img src=x/.test(r7.heardHtml) && !/<img src=x/.test(r7.heardHtml) && /MMSI 636012345/.test(r7.heardHtml) && !/MMSI bad/.test(r7.heardHtml) &&
+      /barely cover this area/.test(r7.heardHtml) && /OCEAN NOBILITY \(by name only\)/.test(r7.heardHtml) && /CMA CGM DAKAR \(MMSI 228386800 \/ IMO 9473018\)/.test(r7.heardHtml) && /add an MMSI/.test(r7.heardHtml) && r7.heardNone === '', r7.heardHtml);
     check('A1 pointed at the port but closing under 1 kn is "slow", never labelled "heading away"',
       r7.slowAhead.course === 'slow' && r7.slowAhead.est === null && r7.slowAhead.warn === null && /slow toward FUJ A/.test(r7.slowTxt) && !/away/.test(r7.slowTxt), [r7.slowAhead, r7.slowTxt]);
     check('A1 moving within 3 nm (manoeuvring, or leaving after a late supply): no estimate, no warning — whatever the course',
