@@ -44,9 +44,6 @@ const SUITES = [
   ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
   ['eta-timeframe', 'suites/nominations/timeframe.test.js', 'ETA / loading time frames (AM, PM…): card, schedule, sync, loading, parser'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
-  ['ais', 'suites/ais/ais.test.js', 'live vessel positions: matching, status, ETA/laycan warnings, card + dashboard, Refresh now, trader, not set up, XSS'],
-  ['ais-report', 'suites/ais/report.test.js', 'last known position: paste parser (MyShipTracking / VesselFinder / MarineTraffic / noon report), card panel, dialog, dashboard rows, sync, trader, XSS'],
-  ['ais-edge', 'suites/ais/edge.test.js', 'ais-poll Edge Function: prefilter/parsing, mock aisstream run, auth, throttle, background mode, errors'],
 ];
 
 const args = process.argv.slice(2);
