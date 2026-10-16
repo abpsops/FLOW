@@ -6782,8 +6782,8 @@ function _vesselQtyTxt(v, g) {
 // " (IMO 9321483 / MMSI 636012345)" after the vessel name — only the identifiers that are filled in.
 function _vidEmailIds(v) {
   const s = _vidSplitDef(v && v.imo, v && v.mmsi), out = [];
-  if (String(s.imo).trim()) out.push('IMO ' + String(s.imo).trim());
-  if (String(s.mmsi).trim()) out.push('MMSI ' + String(s.mmsi).trim());
+  if (String(s.imo).trim()) out.push('IMO ' + _vidNorm(s.imo));
+  if (String(s.mmsi).trim()) out.push('MMSI ' + _vidNorm(s.mmsi));
   return out.length ? ' (' + out.join(' / ') + ')' : '';
 }
 function _buildNominationEmail(v) {
@@ -9335,7 +9335,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; mmsi — only when filled
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -12506,11 +12506,19 @@ function _imoValid(s) {
    Needs Attention, bell, Generate Schedule / e-mails), nothing is blocked.
      IMO  = 7 digits, the last one a check digit (_imoValid)
      MMSI = 9 digits, first digit 2–7 (a ship station)
-   "IMO 9321483", "MMSI: 636 012 345" are accepted and normalised to digits.
-   Before the MMSI box existed a 9-digit MMSI was typed into the IMO box:
-   such a card shows it in the MMSI box (_vidSplitDef in addVessel). The
-   move reaches the cloud with the card's next edit — a pull adopts the
-   re-rendered cards as its merge base (_adoptBase), so loading never writes. */
+   "IMO 9321483", "IMO No. 9321483", "MMSI: 636 012 345" are accepted and
+   normalised to digits — _vidNorm is THE grammar: the AIS matcher
+   (_aisClassifyId) uses it, and the Edge Function's normId() is a copy.
+   Saved values the boxes show differently: before the MMSI box existed a
+   9-digit MMSI was typed into the IMO box — such a card shows it in the
+   MMSI box (IMO box empty); "IMO No. 9321483" shows as 9321483
+   (_vidSplitDef in addVessel). The SAVED pair is not rewritten for that:
+   until the user edits that card's IMO / MMSI boxes, every save writes the
+   pair back exactly as it was (_vidOrig / _cardIdStore). So the legacy
+   MMSI stays in vessel.imo, where an older app build (no MMSI box) and the
+   older Edge Function still read it, old vessels stay byte-identical, and
+   loading or any other edit writes nothing new. Once the boxes are edited
+   the record holds what they show (imo '' + mmsi for a moved MMSI). */
 function _vidNorm(raw) {
   const s = String(raw == null ? '' : raw).trim().replace(/^(?:IMO|MMSI)(?![A-Za-z])\s*(?:no\.?|nr\.?|number|#)?\s*[:.#=\-–]?\s*/i, '');
   const d = s.replace(/[\s.\-]/g, '');
@@ -12534,12 +12542,23 @@ function _vidInfo(imoRaw, mmsiRaw) {
   const imo = _vidCheck(imoRaw, 'imo'), mmsi = _vidCheck(mmsiRaw, 'mmsi');
   return { imo: imo, mmsi: mmsi, ok: imo.kind === 'ok' || mmsi.kind === 'ok' };
 }
-// A saved vessel / def → what its two boxes show. Legacy: 9 digits in the IMO box = the MMSI.
+// A saved vessel / def → what its two boxes show: a value that reads as one
+// number as its digits ("IMO No. 9321483" → 9321483); legacy: 9 digits in the
+// IMO box = the MMSI (shown in the MMSI box, unless that holds another number).
 function _vidSplitDef(imo, mmsi) {
   imo = imo == null ? '' : String(imo); mmsi = mmsi == null ? '' : String(mmsi);
-  const d = _vidNorm(imo);
-  if (/^\d{9}$/.test(d) && (!mmsi.trim() || _vidNorm(mmsi) === d)) return { imo: '', mmsi: mmsi.trim() ? mmsi : d };
-  return { imo: imo, mmsi: mmsi };
+  const di = _vidNorm(imo), dm = _vidNorm(mmsi);
+  const si = /^\d+$/.test(di) ? di : imo, sm = /^\d+$/.test(dm) ? dm : mmsi;
+  if (/^\d{9}$/.test(di) && (!dm || dm === di)) return { imo: '', mmsi: di };
+  return { imo: si, mmsi: sm };
+}
+// Card id → the saved {imo, mmsi} it was built from and what its boxes showed,
+// when those differ (see the header above). Set by addVessel.
+const _vidOrig = {};
+function _vidRemember(id, def, shown) {
+  const imo = def && def.imo != null ? String(def.imo) : '', mmsi = def && def.mmsi != null ? String(def.mmsi) : '';
+  if (shown.imo !== imo || shown.mmsi !== mmsi) _vidOrig[id] = { imo: imo, mmsi: mmsi, shownImo: shown.imo, shownMmsi: shown.mmsi };
+  else delete _vidOrig[id];
 }
 // A saved vessel object ({imo, mmsi}) has at least one valid identifier.
 function _vidVesselOk(v) { const s = _vidSplitDef(v && v.imo, v && v.mmsi); return _vidInfo(s.imo, s.mmsi).ok; }
@@ -12548,8 +12567,19 @@ function _cardIds(id) {
   const i = document.getElementById('v' + id + '-imo'), m = document.getElementById('v' + id + '-mmsi');
   return { imo: i ? String(i.value || '') : '', mmsi: m ? String(m.value || '') : '' };
 }
-// Fields to store on a vessel record: {mmsi} only when the MMSI box is filled ({} otherwise).
-function _cardIdFields(id) { const m = _cardIds(id).mmsi.trim(); return m ? { mmsi: m } : {}; }
+// Card → the {imo, mmsi} to save: what the boxes hold — or, while they still
+// show exactly what addVessel made of the saved pair, that saved pair unchanged.
+function _cardIdStore(id) {
+  const box = _cardIds(id), o = _vidOrig[id];
+  if (o && box.imo === o.shownImo && box.mmsi === o.shownMmsi) return { imo: o.imo, mmsi: o.mmsi };
+  return { imo: box.imo, mmsi: box.mmsi.trim() };
+}
+// Fields for a vessel record: imo, plus mmsi only when there is one (no key otherwise).
+function _cardIdFields(id) {
+  const st = _cardIdStore(id), out = { imo: st.imo };
+  if (String(st.mmsi).trim()) out.mmsi = st.mmsi;
+  return out;
+}
 
 // No year written: this year, unless that's well in the past (a January ETA read in December).
 function _niYear(day, mon, yrStr, now) {
@@ -12863,6 +12893,11 @@ function _niNameFromLine(line, anywhere) {
   }
   return null;
 }
+// "IMO / MMSI: 9321483 / 636012345", "MMSI/IMO No.: 636012345, 9321483", "MMSI: 9321483 / 636012345":
+// an IMO and/or MMSI label, then two 7- or 9-digit numbers split by / , ; & + "and" "or".
+const _NI_ID_NUM = '(\\d{3}[ .\\-]?\\d{3}[ .\\-]?\\d{3}|\\d{3}[ .\\-]?\\d{4})(?![\\d])';
+const _NI_ID_PAIR = new RegExp('\\b(?:IMO|MMSI)(?![A-Za-z])\\s*(?:no\\.?|nr\\.?|number|#)?(?:\\s*(?:\\/|&|\\+|,|and|or)\\s*(?:IMO|MMSI)(?![A-Za-z])\\s*(?:nos?\\.?|nr\\.?|numbers?|#)?)?\\s*[:\\-–=.]?\\s*' +
+  _NI_ID_NUM + '\\s*(?:\\/|,|;|&|\\+|\\band\\b|\\bor\\b)\\s*' + _NI_ID_NUM, 'i');
 // ALL-CAPS line that's just a name (no prefix) — the last resort, flagged.
 const _NI_NOT_NAME = /\b(NOMINATION|NOMINATIONS|BUNKER|BUNKERS|DEAR|REGARDS|THANKS|FUJAIRAH|KHOR|FAKKAN|ANCHORAGE|BERTH|VLSFO|LSFO|LSMGO|MGO|ETA|LAYCAN|AGENT|AGENTS|ATTN|URGENT|IMPORTANT|NOTE|REMARKS|SUBJECT|CONFIRMED|CANCELLED|AMENDED|REVISED|UPDATE|DETAILS|QUANTITY|SPEC|ISO|LOCATION|TO|CC|FROM|BEST|OPS|OPERATIONS|TEAM|ALL|PLS|PLEASE|KINDLY|GOOD|DAY|MORNING|HI|HELLO)\b/;
 function _niCapsName(lines) {
@@ -12892,13 +12927,28 @@ function _niParseBlock(text, opts, ctx) {
   for (let i = 0; i < lines.length && !nm; i++) { nm = _niNameFromLine(lines[i], true); if (nm) { nm.line = i; } }
   if (!nm) nm = _niCapsName(lines);
   if (nm) { d.name = nm.name; if (nm.low) d.low.name = 'Guessed from an all-caps line'; used[nm.line] = 1; }
+  // ── IMO + MMSI given together: "IMO / MMSI: 9321483 / 636012345", "MMSI/IMO 636012345, 9321483",
+  //    or two numbers after one label (an "IMO/MMSI" table column becomes "MMSI: …"). Each number
+  //    goes by its length — 7 digits = IMO, 9 digits = MMSI; a second IMO / MMSI is flagged.
+  let r = text.match(_NI_ID_PAIR);
+  if (r) {
+    const extra = [];
+    [r[1], r[2]].forEach(function(raw) {
+      const n = raw.replace(/[\s.\-]/g, '');
+      if (n.length === 7 && !d.imo) { d.imo = n; if (!_imoValid(n)) d.low.imo = 'IMO check digit does not match'; }
+      else if (n.length === 9 && !d.mmsi) { d.mmsi = n; if (!_mmsiValid(n)) d.low.mmsi = 'MMSI must be 9 digits starting 2–7'; }
+      else extra.push(n);
+    });
+    extra.forEach(function(n) { const k = n.length === 7 ? 'imo' : 'mmsi'; d.low[k] = 'Two ' + (k === 'imo' ? 'IMO numbers' : 'MMSIs') + ' given — ' + n + ' not used, check which is right'; });
+  }
   // ── MMSI ("MMSI: 636012345", "MMSI No. 636012345", "MMSI 636 012 345")
-  let r = text.match(/\bMMSI\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{3}[ ]?\d{3}[ ]?\d{3}|\d{5,12})(?![\d])/i);
+  r = d.mmsi ? null : text.match(/\bMMSI\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{3}[ ]?\d{3}[ ]?\d{3}|\d{5,12})(?![\d])/i);
   if (r) { d.mmsi = r[1].replace(/\s/g, ''); if (!_mmsiValid(d.mmsi)) d.low.mmsi = 'MMSI must be 9 digits starting 2–7'; }
   // ── IMO ("IMO 9321483", "IMO No: 9321483", "IMO: 9321483")
-  r = text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{7})\b/i);
-  const r9 = r ? null : text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{9})\b/i);
-  if (r) { d.imo = r[1]; if (!_imoValid(r[1])) d.low.imo = 'IMO check digit does not match'; }
+  r = d.imo ? null : text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{7})\b/i);
+  const r9 = (r || d.imo) ? null : text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{9})\b/i);
+  if (d.imo) { /* from an IMO / MMSI pair above */ }
+  else if (r) { d.imo = r[1]; if (!_imoValid(r[1])) d.low.imo = 'IMO check digit does not match'; }
   else if (r9 && !d.mmsi) { d.mmsi = r9[1]; d.low.mmsi = '9 digits given as "IMO" — taken as the MMSI' + (_mmsiValid(r9[1]) ? '' : ' (must start 2–7)'); }
   else {
     const all = String(text).match(/(?:^|[^\d\/.\-+])(\d{7})(?![\d\/.\-])/g) || [];
@@ -12907,8 +12957,8 @@ function _niParseBlock(text, opts, ctx) {
   }
   // 7 digits given as "MMSI" (e.g. one "IMO / MMSI" column): the IMO number — as on the card.
   if (/^\d{7}$/.test(d.mmsi) && (!d.imo || d.imo === d.mmsi)) {
-    d.imo = d.mmsi; d.mmsi = ''; delete d.low.mmsi;
-    if (_imoValid(d.imo)) delete d.low.imo; else d.low.imo = 'IMO check digit does not match';
+    if (!d.imo) { d.imo = d.mmsi; if (_imoValid(d.imo)) delete d.low.imo; else d.low.imo = 'IMO check digit does not match'; }
+    d.mmsi = ''; delete d.low.mmsi;
   }
   lines.forEach(function(l, i) { if (/\b(?:IMO|MMSI)\b/i.test(l) && i !== nm?.line) used[i] = used[i] || 2; });
   // ── ETA / laycan (labelled)
@@ -13547,8 +13597,10 @@ function addVessel(def = {}) {
   const area = def.area || 'FUJ-A', spec = def.spec || 'ISO 8217:2010';
   const agent = def.agent || '', manifold = def.manifold || 'VESSEL MANIFOLD', paq = def.paq || 'no';
   const remarks = def.remarks || '';
-  // IMO / MMSI boxes (a legacy 9-digit MMSI saved in the IMO box shows in the MMSI box).
+  // IMO / MMSI boxes (a legacy 9-digit MMSI saved in the IMO box shows in the MMSI box;
+  // the saved pair itself is kept until these boxes are edited — _vidRemember / _cardIdStore).
   const ids = _vidSplitDef(def.imo, def.mmsi);
+  _vidRemember(id, def, ids);
   // ETA given only as a part of the day (AM / PM …) — see ETA_TIME_FRAMES.
   const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
@@ -24624,8 +24676,11 @@ function _aisNormName(s) {
 }
 // Names are compared on AIS's 20 characters ("MARAN GAS ALEXANDROUPOLIS" is broadcast "MARAN GAS ALEXANDROU").
 function _aisNameKey(s) { return _aisNormName(s).slice(0, AIS_NAME_LEN).trim(); }
+// One identifier box → {kind: 'imo' | 'mmsi', value} (7 / 9 digits) or null. Same
+// grammar as the card (_vidNorm: "IMO No. 9321483", "MMSI: 636 012 345") and as
+// the Edge Function's classifyId(), so a box the card calls valid is matched by it.
 function _aisClassifyId(raw) {
-  const s = String(raw == null ? '' : raw).toUpperCase().replace(/(MMSI|IMO)[\s:.#-]*/g, '').replace(/[\s.\-]/g, '');
+  const s = _vidNorm(raw);
   if (/^\d{7}$/.test(s)) return { kind: 'imo', value: s };
   if (/^\d{9}$/.test(s)) return { kind: 'mmsi', value: s };
   return null;

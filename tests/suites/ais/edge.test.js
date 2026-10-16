@@ -174,6 +174,19 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
     check('E2 classifyId: 7 digits = IMO, 9 digits = MMSI, prefixes/spaces ok, anything else null',
       JSON.stringify([C('9873022'), C('IMO 9873022'), C('IMO9873022'), C('MMSI: 538 001 234'), C('53800123'), C('abc'), C('')]) ===
       JSON.stringify([{ kind: 'imo', value: '9873022' }, { kind: 'imo', value: '9873022' }, { kind: 'imo', value: '9873022' }, { kind: 'mmsi', value: '538001234' }, null, null, null]));
+    // One grammar: the app's _vidNorm / _aisClassifyId (from index.html) and the function's classifyId agree on every sample.
+    {
+      const html = fs.readFileSync(path.join(appDir, 'index.html'), 'utf8');
+      const fnSrc = name => { const m = html.match(new RegExp('function ' + name + '\\(raw\\) \\{[\\s\\S]*?\\n\\}')); return m ? m[0] : ''; };
+      const app = new Function(fnSrc('_vidNorm') + '\n' + fnSrc('_aisClassifyId') + '\nreturn { norm: _vidNorm, cls: _aisClassifyId };')();
+      const S = ['9873022', 'IMO 9873022', 'IMO9873022', 'imo 9873022 ', 'IMO No. 9873022', 'IMO No.: 9873022', 'IMO NO 9873022', 'IMO Nr. 9873022', 'IMO number 9873022', 'IMO=9873022', 'IMO \u2013 9873022', 'IMO#9873022', 'IMO: 987 3022',
+        'MMSI: 538 001 234', 'MMSI No: 538001234', 'MMSI #538001234', 'MMSI-538-001-234', '538.001.234', '53800123', 'abc', '', 'Imogen 9873022', 'IMO 9873022 / MMSI 538001234', null, undefined];
+      const diff = S.filter(x => JSON.stringify(app.cls(x)) !== JSON.stringify(AIS.classifyId(x)) || app.norm(x) !== AIS.normId(x));
+      check('E2 classifyId / normId = the app\'s _aisClassifyId / _vidNorm on every sample ("IMO No. …", "Nr", "number", "=", "–", "MMSI No: …")',
+        fnSrc('_vidNorm') && fnSrc('_aisClassifyId') && diff.length === 0 && AIS.classifyId('IMO No. 9873022').value === '9873022' && AIS.classifyId('MMSI No: 538001234').kind === 'mmsi' && AIS.classifyId('Imogen 9873022') === null, diff.map(x => [x, app.cls(x), AIS.classifyId(x)]));
+      const lv = AIS.trackedFromPayload({ state: { vessels: [{ nomUid: 'l1', name: 'LABEL ONE', imo: 'IMO No. 9321483' }, { nomUid: 'l2', name: 'LABEL TWO', imo: '', mmsi: 'MMSI No: 636012345' }], lastSched: [] } });
+      check('E2 a labelled box ("IMO No. 9321483", "MMSI No: 636012345") is tracked by its number, not by name', lv.map(t => t.key).join(',') === 'imo:9321483,mmsi:636012345', lv);
+    }
     // The nomination card's own MMSI box (vessel.mmsi) — added next to the IMO box.
     const V = AIS.vesselIds;
     check('E2 vesselIds: MMSI box first (7 digits there = IMO), IMO box 7 digits = IMO, 9 digits in the IMO box = legacy MMSI only when the MMSI box is empty',

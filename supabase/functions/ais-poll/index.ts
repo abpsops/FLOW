@@ -125,10 +125,20 @@ function normName(s) {
    characters ("MARAN GAS ALEXANDROUPOLIS" is broadcast as "MARAN GAS
    ALEXANDROU"). The app's _aisNameKey is identical. */
 function nameKey(s) { return normName(s).slice(0, AIS_NAME_LEN).trim(); }
+/* One identifier box → its number: a leading "IMO" / "MMSI" label ("IMO No.",
+   "IMO Nr", "IMO number", "MMSI #", then ":" "-" "=" …) is dropped, then
+   spaces / dots / dashes inside the number. A copy of the app's _vidNorm —
+   the nomination card calls a box valid by exactly this grammar, so keep
+   the two the same (tests/suites/ais/edge.test.js compares them). */
+function normId(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(/^(?:IMO|MMSI)(?![A-Za-z])\s*(?:no\.?|nr\.?|number|#)?\s*[:.#=\-\u2013]?\s*/i, '');
+  const d = s.replace(/[\s.\-]/g, '');
+  return /^\d+$/.test(d) ? d : s;
+}
 /* One identifier box: 7 digits = IMO number, 9 digits = MMSI. "IMO 9873022",
-   "MMSI: 538 001 234" are accepted. Anything else → null. */
+   "IMO No. 9873022", "MMSI: 538 001 234" are accepted. Anything else → null. */
 function classifyId(raw) {
-  const s = String(raw == null ? '' : raw).toUpperCase().replace(/(MMSI|IMO)[\s:.#-]*/g, '').replace(/[\s.\-]/g, '');
+  const s = normId(raw);
   if (/^\d{7}$/.test(s)) return { kind: 'imo', value: s };
   if (/^\d{9}$/.test(s)) return { kind: 'mmsi', value: s };
   return null;
@@ -782,7 +792,7 @@ async function handleRequest(req, deps) {
 
 const AIS = {
   DEFAULTS, WORLD_BOX, CORS, POSITION_TYPES, PHASE_A_TYPES, PHASE_B_TYPES, ROW_COLUMNS, AIS_NAME_LEN, ACTIVE_RUNS,
-  normName, nameKey, classifyId, vesselIds, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
+  normName, nameKey, normId, classifyId, vesselIds, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
   scanDigits, scanString, prefilter, parseAisTime, parsePosition, parseStatic, formatAisEta,
   observe, mergeRow, pruneList, messageText, countFound, collect, runPoll, interruptRuns, safeEqual, authorize, claimRun, markCronCall,
   parseBox, makeConfig, handleRequest,

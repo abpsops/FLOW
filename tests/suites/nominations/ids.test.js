@@ -117,6 +117,8 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     check('V1 messages: check digit / 7 digits / 9 digits is an MMSI / MMSI rule', JSON.stringify(r.msgs) === JSON.stringify(['Not a valid IMO (check digit)', 'Not a valid IMO (7 digits)', 'Not a valid IMO — 9 digits is an MMSI', 'MMSI must be 9 digits starting 2–7', 'MMSI must be 9 digits starting 2–7', 'ok', 'empty']), r.msgs);
     check('V1 complete = IMO OR MMSI valid (an invalid one beside a valid one still counts as complete)', JSON.stringify(r.ok) === JSON.stringify([true, true, true, true, true, false, false, false, true]), r.ok);
     check('V1 legacy: 9 digits in the IMO box → MMSI box (never over a different MMSI)', JSON.stringify(r.split) === JSON.stringify([{ imo: '', mmsi: '538009876' }, { imo: '', mmsi: '538009876' }, { imo: '', mmsi: '538009876' }, { imo: '538009876', mmsi: '636012345' }, { imo: '9321483', mmsi: '636012345' }, { imo: '', mmsi: '' }, { imo: '', mmsi: '' }]), r.split);
+    const sp2 = await page.evaluate(() => [_vidSplitDef('IMO No. 9321483', ''), _vidSplitDef(' 9321483 ', ' 636 012 345 '), _vidSplitDef('see notes', 'MMSI 63601')]);
+    check('V1 the boxes show a saved value that reads as one number as its digits; anything else as saved', JSON.stringify(sp2) === JSON.stringify([{ imo: '9321483', mmsi: '' }, { imo: '9321483', mmsi: '636012345' }, { imo: 'see notes', mmsi: '63601' }]), sp2);
     check('V1 saved vessels: legacy 9-digit IMO counts as a valid MMSI', JSON.stringify(r.vesselOk) === '[true,false,true,true]', r.vesselOk);
   });
 
@@ -426,14 +428,28 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     const b1 = await B.page.evaluate(() => ({ imo: __getV('n2', 'imo'), mmsi: __getV('n2', 'mmsi'), n1: captureCurrentState().vessels.find(v => v.nomUid === 'n1') }));
     check('V7 a second operator opening the workspace: migrated on screen, no write; untouched vessels byte-identical (no mmsi key)',
       b1.imo === '' && b1.mmsi === '538009876' && U.writes(db, 'user-operator2').length === 0 && JSON.stringify(b1.n1) === JSON.stringify(before.find(v => v.nomUid === 'n1')), b1);
-    // the move is saved with the card's next edit
+    // an edit of that card that leaves its ID boxes alone saves the legacy pair exactly as it was
     await B.page.evaluate(() => { __setV('n2', 'agent', 'NEW AGENT'); return saveSharedState(); });
     let n2 = U.row(db).payload.state.vessels.find(v => v.nomUid === 'n2');
-    check('V7 next edit saves the move: imo "" + mmsi', U.writes(db, 'user-operator2').length === 1 && n2.imo === '' && n2.mmsi === '538009876' && n2.agent === 'NEW AGENT', n2);
+    check('V7 an edit that leaves the ID boxes alone keeps the saved pair: imo "538009876", no mmsi key (older builds keep reading it)',
+      U.writes(db, 'user-operator2').length === 1 && n2.imo === '538009876' && !('mmsi' in n2) && n2.agent === 'NEW AGENT' && JSON.stringify(Object.assign({}, n2, { agent: before.find(v => v.nomUid === 'n2').agent })) === JSON.stringify(before.find(v => v.nomUid === 'n2')), n2);
     await A.page.evaluate(() => _pollOnce(true));
     await sleep(500);
     await A.page.evaluate(() => saveSharedState());
-    check('V7 the other operator converges with no extra write', U.writes(db, 'user-operator').length === wA0 && await A.page.evaluate(() => __getV('n2', 'agent') === 'NEW AGENT' && __getV('n2', 'mmsi') === '538009876'));
+    check('V7 the other operator converges with no extra write', U.writes(db, 'user-operator').length === wA0 && await A.page.evaluate(() => __getV('n2', 'agent') === 'NEW AGENT' && __getV('n2', 'imo') === '' && __getV('n2', 'mmsi') === '538009876'));
+    // A tab still on the build before the MMSI box saves next: it writes vessel.imo as saved and drops
+    // every mmsi key (emulated at the data level — what that build's captureCurrentState produces).
+    {
+      const r0 = U.row(db), p = clone(r0.payload), ver2 = Date.now();
+      p.state.vessels = p.state.vessels.map(v => { const o = Object.assign({}, v); delete o.mmsi; if (o.nomUid === 'n1') o.remarks = 'old tab edit'; return o; });
+      p.version = ver2; p.state.version = ver2; r0.payload = p; r0.version = ver2;
+    }
+    await A.page.evaluate(() => _pollOnce(true));
+    await sleep(500);
+    await A.page.evaluate(() => saveSharedState());
+    const ob = await A.page.evaluate(() => ({ box: [__getV('n2', 'imo'), __getV('n2', 'mmsi')], rem: __getV('n1', 'remarks'), badge: document.getElementById('v' + __cardFor('n2') + '-idbadge').textContent }));
+    check('V7 an older build saving after that cannot lose the legacy MMSI: still in vessel.imo, still shown in the MMSI box, no extra write',
+      U.row(db).payload.state.vessels.find(v => v.nomUid === 'n2').imo === '538009876' && JSON.stringify(ob.box) === '["","538009876"]' && ob.badge === 'MMSI ✓' && ob.rem === 'old tab edit' && U.writes(db, 'user-operator').length === wA0, ob);
     // A types an MMSI on ALPHA; B (not pulled yet) types an IMO on ALPHA → both kept by the three-way merge
     await A.page.evaluate(() => { __set(__cardFor('n1'), 'mmsi', '636012345', true); return saveSharedState(); });
     await B.page.evaluate(() => { __set(__cardFor('n1'), 'imo', '9321483', true); return saveSharedState(); });
@@ -477,6 +493,47 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     check('V7 after everything: pulls cause no further writes, B is clean', U.writes(db, 'user-operator').length === wA && U.writes(db, 'user-operator2').length === wB && clean);
   });
 
+  /* ── 7b. The saved pair is written back unchanged until the card's ID boxes are edited ── */
+  await scenario(browser, 'V7b saved pair kept', async (openT) => {
+    const { page } = await openT(H.createDb());
+    await page.evaluate(() => __open('nominations'));
+    const r = await page.evaluate(() => {
+      const box = id => [document.getElementById('v' + id + '-imo').value, document.getElementById('v' + id + '-mmsi').value];
+      const pair = v => ({ imo: v.imo, mmsi: v.mmsi, has: 'mmsi' in v });
+      const a = __vessel({ name: 'LEGACY MMSI', imo: '538009876' });
+      const b = __vessel({ name: 'LABELLED IMO', imo: 'IMO No. 9321483' });
+      const c = __vessel({ name: 'SPACED MMSI', imo: '', mmsi: '636 012 345' });
+      const d = __vessel({ name: 'BOTH LEGACY', imo: '538009876', mmsi: '538009876' });
+      const out = {
+        a: { box: box(a), cap: pair(__cap(a)), badge: __st(a).badge, mail: _vidEmailIds(__cap(a)) },
+        b: { box: box(b), cap: pair(__cap(b)), badge: __st(b).badge, mail: _vidEmailIds(__cap(b)), ais: _aisVesselIds(_aisCardVessel(b)) },
+        c: { box: box(c), cap: pair(__cap(c)) },
+        d: { box: box(d), cap: pair(__cap(d)) },
+      };
+      // trash + restore of an untouched legacy card
+      window.confirm = () => false;
+      rmV(+a);
+      const def = _trashBin[_trashBin.length - 1].def;
+      restoreFromTrash(_trashBin.length - 1);
+      const a2 = [...document.querySelectorAll('.vcard[id^="vessel-"]')].find(x => document.getElementById('v' + x.id.replace('vessel-', '') + '-name').value === 'LEGACY MMSI').id.replace('vessel-', '');
+      out.trash = { def: pair(def), box: box(a2), cap: pair(__cap(a2)) };
+      // the user edits the ID boxes → the record holds what they show
+      __set(a2, 'imo', '9321483', true); out.e1 = pair(__cap(a2));
+      __set(a2, 'imo', '', true); out.e2 = pair(__cap(a2));            // back to exactly what was shown → the saved pair again
+      __set(a2, 'mmsi', '636012345', true); out.e3 = pair(__cap(a2));
+      __set(b, 'imo', '9321483', true); out.e4 = pair(__cap(b));        // same digits typed: unchanged on screen, still the saved text
+      return out;
+    });
+    check('V7b legacy 9-digit IMO: shown in the MMSI box, saved back as imo "538009876" with no mmsi key; badge / e-mail use the MMSI',
+      JSON.stringify(r.a.box) === '["","538009876"]' && r.a.cap.imo === '538009876' && !r.a.cap.has && r.a.badge === 'MMSI ✓' && r.a.mail === ' (MMSI 538009876)', r.a);
+    check('V7b "IMO No. 9321483": shown as 9321483 (badge IMO ✓, AIS matches it by IMO), saved back as typed until edited',
+      JSON.stringify(r.b.box) === '["9321483",""]' && r.b.cap.imo === 'IMO No. 9321483' && !r.b.cap.has && r.b.badge === 'IMO ✓' && r.b.mail === ' (IMO 9321483)' && r.b.ais.imo === '9321483', r.b);
+    check('V7b "636 012 345" in the MMSI box shown as digits, saved back as it was; imo + equal mmsi kept as both', JSON.stringify(r.c.box) === '["","636012345"]' && r.c.cap.mmsi === '636 012 345' && JSON.stringify(r.d.box) === '["","538009876"]' && r.d.cap.imo === '538009876' && r.d.cap.mmsi === '538009876', [r.c, r.d]);
+    check('V7b trash + restore of an untouched legacy card keeps the saved pair', r.trash.def.imo === '538009876' && !r.trash.def.has && JSON.stringify(r.trash.box) === '["","538009876"]' && r.trash.cap.imo === '538009876' && !r.trash.cap.has, r.trash);
+    check('V7b editing the ID boxes saves what they show (IMO added → imo + mmsi; MMSI changed → imo "" + new mmsi)',
+      r.e1.imo === '9321483' && r.e1.mmsi === '538009876' && r.e2.imo === '538009876' && !r.e2.has && r.e3.imo === '' && r.e3.mmsi === '636012345' && r.e4.imo === 'IMO No. 9321483', [r.e1, r.e2, r.e3, r.e4]);
+  });
+
   /* ── 8. Import: parser, review table (MMSI column), add to the card ── */
   await scenario(browser, 'V8 import', async (openT) => {
     const db = H.createDb({ workspace: U.seedPayload() });
@@ -494,6 +551,12 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
         g: one('MV PLAIN ETA 25 Oct 2026 0800 VLSFO 200 MT'),
         h: one('OCEAN PRIDE IMO 9321483\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
         i: one('MMSI 636012345\nOCEAN PRIDE MMSI 636012345\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
+        p1: one('Vessel: OCEAN PRIDE\nIMO / MMSI: 9321483 / 636012345\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
+        p2: one('Vessel: OCEAN PRIDE\nIMO/MMSI No.: 636012345/9321483\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
+        p3: one('Vessel: OCEAN PRIDE\nMMSI / IMO: 636 012 345, 9321483\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
+        p4: one('Vessel: OCEAN PRIDE\nIMO/MMSI: 9321483 / 9074729\nETA 22 Oct 2026 0600\nVLSFO 500 MT'),
+        p5: one('Vessel: OCEAN PRIDE\nIMO: 9321483 / MMSI: 636012345\nETA 22 Oct 2026 0600\nVLSFO 500 MT, 2 x 250'),
+        ptbl: _parseNominationText('Vessel\tIMO/MMSI\tETA\tVLSFO\nMV PAIR ONE\t9321483 / 636012345\t22 Oct 2026 0600\t500\nMV PAIR TWO\t636012345/9074729\t23 Oct 2026 0600\t300', { now }).map(d => [d.name, d.imo, d.mmsi, d.qty]),
         combo: _parseNominationText('Vessel\tIMO / MMSI\tETA\tVLSFO\nMV COMBO ONE\t9321483\t22 Oct 2026 0600\t500\nMV COMBO TWO\t636012345\t23 Oct 2026 0600\t300\nMV COMBO THREE\t9321484\t24 Oct 2026 0600\t200', { now }).map(d => [d.name, d.imo, d.mmsi, !!d.low.imo, !!d.low.mmsi]),
         tbl: _parseNominationText('Vessel\tIMO\tMMSI\tETA\tVLSFO\nMV TAB ONE\t9321483\t636012345\t22 Oct 2026 0600\t500\nMV TAB TWO\t\t538009876\t23 Oct 2026 0600\t300', { now }).map(d => [d.name, d.imo, d.mmsi, d.qty]),
       };
@@ -503,6 +566,10 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     check('V8 parser: invalid MMSI kept and flagged; 9 digits after "IMO" taken as the MMSI (flagged)', P.d.mmsi === '123456789' && /9 digits starting 2–7/.test(P.d.low.mmsi) && P.e.imo === '' && P.e.mmsi === '636012345' && /taken as the MMSI/.test(P.e.low.mmsi), [P.d, P.e]);
     check('V8 parser: "(IMO 9321483, MMSI 636 012 345)" after the name; no IDs → empty', P.f.name === 'OCEAN PRIDE' && P.f.imo === '9321483' && P.f.mmsi === '636012345' && P.g.imo === '' && P.g.mmsi === '', [P.f, P.g]);
     check('V8 parser: an all-caps name line with "IMO …" / "MMSI …" after it keeps the name (an "MMSI …" line is never the name)', P.h.name === 'OCEAN PRIDE' && P.h.imo === '9321483' && P.i.name === 'OCEAN PRIDE' && P.i.mmsi === '636012345' && !/MMSI/.test(P.i.remarks), [P.h, P.i]);
+    check('V8 parser: "IMO / MMSI: 9321483 / 636012345" (either order, "No.", comma) → each number by its length, nothing flagged',
+      [P.p1, P.p2, P.p3].every(x => x.imo === '9321483' && x.mmsi === '636012345' && !x.low.imo && !x.low.mmsi && x.qty === 500) && P.p5.imo === '9321483' && P.p5.mmsi === '636012345', [P.p1, P.p2, P.p3, P.p5]);
+    check('V8 parser: two IMO numbers after "IMO/MMSI" → the first is used, the other is flagged on the IMO cell', P.p4.imo === '9321483' && P.p4.mmsi === '' && /Two IMO numbers given — 9074729 not used/.test(P.p4.low.imo || ''), P.p4);
+    check('V8 parser: an "IMO/MMSI" column holding both numbers', JSON.stringify(P.ptbl) === JSON.stringify([['PAIR ONE', '9321483', '636012345', 500], ['PAIR TWO', '9074729', '636012345', 300]]), P.ptbl);
     check('V8 parser: one "IMO / MMSI" column — 7 digits land in IMO (check digit flagged), 9 digits in MMSI', JSON.stringify(P.combo) === JSON.stringify([['COMBO ONE', '9321483', '', false, false], ['COMBO TWO', '', '636012345', false, false], ['COMBO THREE', '9321484', '', true, false]]), P.combo);
     check('V8 parser: table with an MMSI column', JSON.stringify(P.tbl) === JSON.stringify([['TAB ONE', '9321483', '636012345', 500], ['TAB TWO', '', '538009876', 300]]), P.tbl);
 

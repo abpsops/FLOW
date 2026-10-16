@@ -156,6 +156,10 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
         legacyLoses: f({ name: 'X', imo: '538009876', mmsi: '636012345' }),
         noName: f({ name: 'GHOST TRADER', imo: '', mmsi: '244000099' }),
         sevenInMmsi: f({ name: 'X', imo: '', mmsi: '9873022' }),
+        // the card's label grammar (_vidNorm): a box the card calls valid is matched by its number
+        labelled: ['IMO No. 9873022', 'IMO Nr. 9873022', 'IMO number 9873022', 'IMO No.: 9873022', 'IMO=9873022', 'IMO \u2013 9873022', 'imo9873022', 'MMSI No: 538 009 876', 'MMSI # 538009876'].map(x => { const c = _aisClassifyId(x); return c && c.kind + ':' + c.value; }),
+        labelledOk: ['IMO No. 9873022', 'MMSI No: 538 009 876'].map((x, i) => _vidCheck(x, i ? 'mmsi' : 'imo').kind),
+        labelledMatch: [f({ name: 'X', imo: 'IMO No. 9873022' }), f({ name: 'X', imo: '', mmsi: 'MMSI No: 538009876' })],
         ids: [_aisIdTxt({ imo: '9111111', mmsi: '244000007' }), _aisIdTxt({ imo: '538009876' }), _aisIdTxt({ imo: '', mmsi: '' })],
       };
     });
@@ -164,6 +168,8 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       mm.mmsiField === '538009876:mmsi' && mm.both === '636012345:mmsi' && mm.mmsiFirst === '636012345:mmsi' && mm.fallback === '636012345:imo' && mm.sevenInMmsi === '636012345:imo', mm);
     check('A1 legacy 9 digits in the IMO box → MMSI (the MMSI box wins when both are set); an MMSI-only nomination is never matched by name',
       mm.legacy === '538009876:mmsi' && mm.legacyLoses === '636012345:mmsi' && mm.noName === null, mm);
+    check('A1 same label grammar as the card: "IMO No. …", "Nr", "number", "=", "–", "MMSI No: …" are classified and matched by their number',
+      mm.labelled.join(',') === 'imo:9873022,imo:9873022,imo:9873022,imo:9873022,imo:9873022,imo:9873022,imo:9873022,mmsi:538009876,mmsi:538009876' && mm.labelledOk.join(',') === 'ok,ok' && mm.labelledMatch.join(',') === '636012345:imo,538009876:mmsi', mm);
     check('A1 identifier text for the card line / dashboard row', JSON.stringify(mm.ids) === JSON.stringify(['MMSI 244000007 / IMO 9111111', 'MMSI 538009876', '']), mm.ids);
 
     const a = await page.evaluate(() => {
