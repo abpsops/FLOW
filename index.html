@@ -980,7 +980,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .rl-events summary{cursor:pointer;font-weight:700;color:var(--sub)}
 .rl-events ol{margin:6px 0 0 18px;padding:0;line-height:1.6}
 @media (max-width:600px){.rl-chart{height:130px}.rl-card{padding:12px}}
-.ga-link:hover,.ga-link:focus-visible{background:var(--surface2);outline:none}
+.ga-link:hover,.ga-link:focus-visible,.ga-open:hover,.ga-open:focus-visible{background:var(--surface2);outline:none}
 
 /* ════════════════════════════════════════
    TOAST NOTIFICATIONS
@@ -1071,7 +1071,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .nimp-legend{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--muted)}
 .nimp-legend i{width:10px;height:10px;border-radius:3px;background:var(--amber-lt);border:1px solid var(--amber);display:inline-block}
 .nimp-tblwrap{overflow-x:auto;border:1px solid var(--border);border-radius:var(--radius-sm)}
-.nimp-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:900px;table-layout:fixed}
+.nimp-tbl{width:100%;border-collapse:collapse;font-size:12px;min-width:980px;table-layout:fixed}
 .nimp-tbl th{font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);text-align:left;padding:7px 5px;border-bottom:1px solid var(--border);background:var(--surface2);white-space:nowrap;font-weight:700}
 .nimp-tbl td{padding:5px 4px;border-bottom:1px solid var(--border2);vertical-align:top}
 .nimp-tbl tr.nimp-msg td{padding:0 4px 8px;border-bottom:1px solid var(--border)}
@@ -3227,7 +3227,7 @@ function flowWelcomeGo(pageId) {
     <div class="nimp-body">
       <div class="nimp-zone" id="nimp-zone" tabindex="0" role="group" aria-label="Nomination paste and drop area. Paste or type text, or paste, drop or choose an image. Press Enter to choose an image.">
         <label for="nimp-text" class="nimp-sub" style="display:block;margin-bottom:5px">Nomination text — or paste / drop a screenshot here</label>
-        <textarea id="nimp-text" spellcheck="false" placeholder="e.g.&#10;MV OCEAN PRIDE  IMO 9321483&#10;ETA 14/10/2026 0600LT  Fujairah anch&#10;VLSFO 500-600 MT / LSMGO 50 MT&#10;Agent: GAC"></textarea>
+        <textarea id="nimp-text" spellcheck="false" placeholder="e.g.&#10;MV OCEAN PRIDE  IMO 9321483  MMSI 636012345&#10;ETA 14/10/2026 0600LT  Fujairah anch&#10;VLSFO 500-600 MT / LSMGO 50 MT&#10;Agent: GAC"></textarea>
         <div class="nimp-img" id="nimp-img" hidden>
           <img id="nimp-thumb" alt="Screenshot to read">
           <span id="nimp-img-name"></span>
@@ -4902,12 +4902,18 @@ function _globalSearchRun(qRaw) {
 
   // 1) Live nomination cards — read straight from the DOM inputs so this
   // always reflects exactly what's on screen, including unsaved edits.
+  // A query of 3+ digits also finds a nomination by its IMO / MMSI.
+  const qDigits = /^[\d\s.\-]+$/.test(q) ? q.replace(/\D/g, '') : '';
   document.querySelectorAll('.vcard').forEach(function(card) {
     const nameInput = card.querySelector('input[id$="-name"]');
     const name = nameInput ? nameInput.value.trim() : '';
+    const cardId = card.id.replace('vessel-', '');
     if (name && name.toLowerCase().includes(q)) {
-      const cardId = card.id.replace('vessel-', '');
       results.push({ type: 'Nomination', label: name, sub: 'Vessel Nominations', action: function() { _globalSearchGoNomination(cardId); } });
+    } else if (qDigits.length >= 3 && /^vessel-/.test(card.id)) {
+      const ids = _cardIds(cardId), imo = _vidNorm(ids.imo), mmsi = _vidNorm(ids.mmsi);
+      const hit = (imo && imo.includes(qDigits)) ? 'IMO ' + imo : ((mmsi && mmsi.includes(qDigits)) ? 'MMSI ' + mmsi : '');
+      if (hit) results.push({ type: 'Nomination', label: name || '(unnamed vessel)', sub: hit + ' · Vessel Nominations', action: function() { _globalSearchGoNomination(cardId); } });
     }
   });
 
@@ -5008,6 +5014,7 @@ function _parseLocalDate(s) {
    from, not just something you read. ── */
 let _rlQueueCount = 0; // reload items in Needs Attention — the hero line counts them too
 let _aisQueueCount = 0; // AIS arrival warnings in Needs Attention — counted in the hero line too
+let _idQueueCount = 0;  // nominations without a valid IMO / MMSI in Needs Attention — counted in the hero line too
 let _dashHeroBase = 0;  // hero 'need your attention' count without the AIS part (the AIS module re-renders the hero alone)
 function renderActionQueue() {
   const el = document.getElementById('dash-action-queue');
@@ -5049,6 +5056,17 @@ function renderActionQueue() {
     } catch (e) { console.warn('ABPS: AIS queue items failed', e); }
   }
 
+  // Upcoming nominations without a valid IMO or MMSI (live tracking can't find them) — one per nomination.
+  _idQueueCount = 0;
+  if (typeof _vidMissing === 'function') {
+    try {
+      _vidMissing().forEach(function(x) {
+        _idQueueCount++;
+        items.push({ urgency: 0.8, kind: 'ID', name: x.name, detail: x.detail, cid: x.cid, key: x.key });
+      });
+    } catch (e) { console.warn('ABPS: IMO/MMSI queue items failed', e); }
+  }
+
   vcCards.forEach(card => {
     const cid = card.id.replace('vessel-', '');
     const paqEl = document.getElementById('v' + cid + '-paq');
@@ -5078,7 +5096,8 @@ function renderActionQueue() {
     DELAYED: { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   },
     PAQ:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' },
     RELOAD:  { color: 'var(--red)',   bg: 'var(--red-lt)',   border: 'var(--red)'   },
-    AIS:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' }
+    AIS:     { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' },
+    ID:      { color: 'var(--amber)', bg: 'var(--amber-lt)', border: 'var(--amber)' }
   };
 
   const shown = items.slice(0, 8);
@@ -5094,6 +5113,8 @@ function renderActionQueue() {
       actionHtml = `<button class="aq-btn aq-btn-primary" onclick="rlGoToForecast('${escJs(it.go)}')">View reload plan</button>`;
     } else if (it.kind === 'AIS') {
       actionHtml = `<button class="aq-btn" onclick="_globalSearchGoNomination('${escJs(it.cid)}')">Open</button>`;
+    } else if (it.kind === 'ID') {
+      actionHtml = `<button class="aq-btn aq-btn-primary" onclick="_vidGoTo('${escJs(it.cid)}')">Add IMO / MMSI</button>`;
     }
     return `<div class="aq-row"${it.key ? ` data-alert-key="${esc(it.key)}"` : ''}>
       <span class="aq-tag" style="color:${s.color};background:${s.bg};border-color:${s.border}">${it.kind}</span>
@@ -5284,7 +5305,7 @@ function refreshDashboard() {
   _dashSafe('ais',      () => { if (typeof renderDashAis === 'function') renderDashAis(); });
   _dashSafe('watchlist',() => renderTrackRecordWatchlist());
   _dashSafe('activity', () => renderDashActivity(savedRecs, []));
-  _dashHeroBase = totalAlerts + _rlQueueCount;
+  _dashHeroBase = totalAlerts + _rlQueueCount + _idQueueCount;
   _dashSafe('hero',     () => _renderDashHero(now, _dashHeroBase + _aisQueueCount));
 }
 /* Harbour Light hero banner text (the banner itself is CSS-hidden in
@@ -6370,6 +6391,11 @@ function computeGlobalAlerts() {
   if (typeof _aisAlerts === 'function') {
     try { _aisAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: AIS alerts failed', e); }
   }
+  // Upcoming nominations without a valid IMO or MMSI — one per nomination
+  // ('ids|<nomUid>'). Listed, never toasted (see _refreshGlobalAlertsBell).
+  if (typeof _vidAlerts === 'function') {
+    try { _vidAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: IMO/MMSI alerts failed', e); }
+  }
   return alerts;
 }
 
@@ -6399,6 +6425,11 @@ function _refreshGlobalAlertsBell() {
     list.innerHTML = alerts.length
       ? alerts.map(function(a) {
           const color = a.severity === 'error' ? 'var(--red)' : 'var(--amber)';
+          // Missing IMO / MMSI opens the nomination card.
+          if (a.kind === 'ids' && a.cid != null) return `<div class="ga-item ga-open" role="button" tabindex="0" data-alert-key="${esc(a.key)}" onclick="_vidGoTo('${escJs(a.cid)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_vidGoTo('${escJs(a.cid)}')}" style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px;cursor:pointer">
+            <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
+            <div style="color:var(--sub);font-size:11px;margin-top:1px">${esc(a.sub)}</div>
+          </div>`;
           // Reload alerts open the barge's forecast.
           if (a.go != null) return `<div class="ga-item ga-link" role="button" tabindex="0" data-alert-key="${esc(a.key)}" onclick="rlGoToForecast('${escJs(a.go)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();rlGoToForecast('${escJs(a.go)}')}" style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px;cursor:pointer">
             <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
@@ -6417,6 +6448,10 @@ function _refreshGlobalAlertsBell() {
   // there when you open the app is a "new" surprise.
   if (_globalAlertsPrevKeys) {
     alerts.forEach(function(a) {
+      // A missing IMO / MMSI is listed (bell, Needs Attention) but never toasted:
+      // a new card has none until it's typed in, and the Generate Schedule /
+      // e-mail warnings already say it once when it matters.
+      if (a.kind === 'ids') return;
       // AIS warnings toast once per nomination AND level per session: amber → red
       // (same key) toasts again, a borderline ETA flapping on and off does not.
       if (a.kind === 'ais' && typeof _aisToastOnce === 'function') {
@@ -6744,11 +6779,18 @@ function _vesselQtyTxt(v, g) {
   const mn = v[g + 'Min'], mx = v[g + 'Max'];
   return (mn != null && mx != null && +mn < +mx) ? (+mn) + '–' + (+mx) : String(v[g] || 0);
 }
+// " (IMO 9321483 / MMSI 636012345)" after the vessel name — only the identifiers that are filled in.
+function _vidEmailIds(v) {
+  const s = _vidSplitDef(v && v.imo, v && v.mmsi), out = [];
+  if (String(s.imo).trim()) out.push('IMO ' + String(s.imo).trim());
+  if (String(s.mmsi).trim()) out.push('MMSI ' + String(s.mmsi).trim());
+  return out.length ? ' (' + out.join(' / ') + ')' : '';
+}
 function _buildNominationEmail(v) {
   const subject = 'New Bunker Nomination – ' + (v.name || 'Unnamed Vessel');
 
   const lines = [];
-  lines.push('Vessel Name: ' + (v.name || '—') + (v.imo ? ' (' + v.imo + ')' : ''));
+  lines.push('Vessel Name: ' + (v.name || '—') + _vidEmailIds(v));
   if (v.eta) lines.push('ETA: ' + _vesselEtaTxt(v));
   if (v.area) {
     // Reuse the real AREA_OPTIONS list (defined later in the script, where
@@ -6890,6 +6932,8 @@ async function sendNominationEmailForCard(id) {
     return; // already sent — button should already be locked, this is just a safety net
   }
   // (sendNominationEmailIfNeeded re-reads the shared log itself before sending.)
+  // No valid IMO / MMSI: say so, but send anyway (never blocks).
+  _vidWarnCard(id, 'the nomination e-mail is sent without it.');
 
   const ty = document.getElementById(`v${id}-type`)?.value;
   const origLabel = btn ? btn.innerHTML : '';
@@ -6913,7 +6957,7 @@ async function sendNominationEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
   } finally {
     // _lockSendEmailButton reflects whatever sendNominationEmailIfNeeded
     // actually recorded in _nomEmailLog — if the send failed, the log was
@@ -7007,7 +7051,7 @@ function _buildNominationCancelledEmail(v) {
   const lines = [];
   lines.push('NOMINATION CANCELLED');
   lines.push('');
-  lines.push('Vessel Name: ' + (v.name || '—') + (v.imo ? ' (' + v.imo + ')' : ''));
+  lines.push('Vessel Name: ' + (v.name || '—') + _vidEmailIds(v));
   if (v.eta) lines.push('ETA: ' + _vesselEtaTxt(v));
   if (v.area) {
     const areaOpt = (typeof AREA_OPTIONS !== 'undefined') ? AREA_OPTIONS.find(function(o){ return o.value === v.area; }) : null;
@@ -7129,7 +7173,7 @@ async function sendNominationCancelledEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
   } finally {
     const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
     if (sent) {
@@ -9291,7 +9335,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; mmsi — only when filled
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -12031,7 +12075,7 @@ function rmV(id) {
       sendNominationCancelledEmailIfNeeded(Object.assign({
         nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
         agent, manifold, spec, lc, eta, remarks
-      }, _cardQtyRangeFields(id), _cardEtaWinFields(id)));
+      }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
     }
   }
 
@@ -12039,9 +12083,9 @@ function rmV(id) {
   const trashEntry = {
     id: id,
     trashedAt: Date.now(),
-    // nomUid/imo/remarks included so a restored vessel keeps its identity
+    // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details.
-    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id))
+    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -12228,13 +12272,212 @@ function renumberVessels() {
   });
 }
 
+/* ─── VESSEL IDENTIFIERS on the nomination card (rules: see _vidNorm) ───
+   _vidRender(id): box states (red = invalid, amber = neither box holds a
+   valid ID), the message under the pair, the header badge ("IMO ✓",
+   "MMSI ✓", "IMO ✓ MMSI ✓" or "ID missing") and the Look up links.
+   Typing: 9 digits in the IMO box move to the MMSI box at once (an IMO is
+   never 9 digits); 7 digits in the MMSI box move to the IMO box when the
+   box is left (every MMSI is typed through 7 digits). A move never
+   overwrites a different number already in the other box. Every value
+   shown is esc()'d; Look up URLs are built only from validated digits or
+   encodeURIComponent(name) and set as attributes, never as markup. */
+const _vidNotes = {}; // card id → "Moved … to MMSI" note, shown until either box is edited again
+function _vidLookUrls(name, info) {
+  if (info.imo.kind === 'ok') return { by: 'IMO ' + info.imo.val, vf: 'https://www.vesselfinder.com/vessels/details/' + info.imo.val, mt: 'https://www.marinetraffic.com/en/ais/details/ships/imo:' + info.imo.val };
+  if (info.mmsi.kind === 'ok') return { by: 'MMSI ' + info.mmsi.val, vf: 'https://www.vesselfinder.com/vessels/details/' + info.mmsi.val, mt: 'https://www.marinetraffic.com/en/ais/details/ships/mmsi:' + info.mmsi.val };
+  const n = String(name || '').trim().replace(/\s+/g, ' ').replace(/^(?:M\s*[\/.]\s*[VT]\.?|M[VT]\.?)\s+/i, '').slice(0, 60);
+  if (!n) return null;
+  const q = encodeURIComponent(n);
+  return { by: 'name', vf: 'https://www.vesselfinder.com/vessels?name=' + q, mt: 'https://www.marinetraffic.com/en/ais/index/search/all/keyword:' + q };
+}
+function _vidRender(id) {
+  const imoEl = document.getElementById('v' + id + '-imo'), mmsiEl = document.getElementById('v' + id + '-mmsi');
+  if (!imoEl || !mmsiEl) return;
+  const info = _vidInfo(imoEl.value, mmsiEl.value);
+  // A box being typed into isn't "wrong" yet while its digits are still on
+  // the way: the MMSI box below 9 digits; the IMO box below 7, or at 8 (on
+  // the way to an MMSI, which then moves across). 7 digits in the IMO box
+  // are checked at once (check digit), 9+ / letters in either box too.
+  const typing = function(el, c, which) {
+    if (document.activeElement !== el || c.kind !== 'bad' || !/^\d+$/.test(c.val)) return false;
+    return which === 'imo' ? (c.val.length < 7 || c.val.length === 8) : c.val.length < 9;
+  };
+  const tI = typing(imoEl, info.imo, 'imo'), tM = typing(mmsiEl, info.mmsi, 'mmsi');
+  const badI = info.imo.kind === 'bad' && !tI, badM = info.mmsi.kind === 'bad' && !tM;
+  const miss = !info.ok && !badI && !badM && !tI && !tM;
+  const cls = function(el, c, on) { if (el.classList.contains(c) !== !!on) el.classList.toggle(c, !!on); };
+  [[imoEl, info.imo, badI], [mmsiEl, info.mmsi, badM]].forEach(function(x) {
+    cls(x[0], 'vid-bad', x[2]); cls(x[0], 'vid-ok', x[1].kind === 'ok'); cls(x[0], 'vid-miss', miss);
+    const inv = x[2] ? 'true' : 'false';
+    if (x[0].getAttribute('aria-invalid') !== inv) x[0].setAttribute('aria-invalid', inv);
+  });
+  // Message line
+  const parts = [];
+  if (_vidNotes[id]) parts.push('<span class="vid-note">' + esc(_vidNotes[id]) + '</span>');
+  if (badI) parts.push('<span class="vid-er" data-vid="imo">' + esc(info.imo.msg) + '</span>');
+  if (badM) parts.push('<span class="vid-er" data-vid="mmsi">' + esc(info.mmsi.msg) + '</span>');
+  if (!badI && !badM) {
+    if (tI || tM) parts.push('<span class="vid-hint">' + (tI ? 'IMO: 7 digits' : 'MMSI: 9 digits, starting 2–7') + '</span>');
+    else if (!info.ok) parts.push('<span class="vid-warn" data-vid="missing">Add an IMO or MMSI so FLOW can track the vessel</span>');
+    else if (!_vidNotes[id]) parts.push('<span class="vid-hint">At least one — needed for live position tracking</span>');
+  }
+  const msgEl = document.getElementById('v' + id + '-idmsg');
+  const html = parts.join('');
+  if (msgEl && msgEl._vidSig !== html) { msgEl._vidSig = html; msgEl.innerHTML = html; }
+  // Header badge
+  const badge = document.getElementById('v' + id + '-idbadge');
+  if (badge) {
+    const ok = [];
+    if (info.imo.kind === 'ok') ok.push('IMO ✓');
+    if (info.mmsi.kind === 'ok') ok.push('MMSI ✓');
+    const txt = ok.length ? ok.join(' ') : 'ID missing', bc = 'vid-badge ' + (ok.length ? 'ok' : 'miss');
+    const title = ok.length ? 'Live position tracking by ' + (info.mmsi.kind === 'ok' ? 'MMSI ' + info.mmsi.val : 'IMO ' + info.imo.val) : 'No valid IMO or MMSI — live position tracking cannot find this vessel';
+    if (badge.textContent !== txt) badge.textContent = txt;
+    if (badge.className !== bc) badge.className = bc;
+    if (badge.title !== title) badge.title = title;
+  }
+  // Look up links (new tab): by IMO / MMSI when valid, else by the vessel name.
+  const look = document.getElementById('v' + id + '-idlook');
+  if (look) {
+    const u = _vidLookUrls((document.getElementById('v' + id + '-name') || {}).value, info);
+    if (look.hidden !== !u) look.hidden = !u;
+    if (u) {
+      [['vf', 'VesselFinder'], ['mt', 'MarineTraffic']].forEach(function(x) {
+        const a = document.getElementById('v' + id + '-look-' + x[0]);
+        if (!a) return;
+        if (a.getAttribute('href') !== u[x[0]]) a.setAttribute('href', u[x[0]]);
+        const lbl = 'Look up ' + (u.by === 'name' ? 'this vessel name' : u.by) + ' on ' + x[1] + ' (opens a new tab)';
+        if (a.getAttribute('aria-label') !== lbl) a.setAttribute('aria-label', lbl);
+      });
+    }
+  }
+}
+// Move the number in box `from` to the other box (see above). → true when moved.
+function _vidMove(id, from) {
+  const to = from === 'imo' ? 'mmsi' : 'imo';
+  const src = document.getElementById('v' + id + '-' + from), dst = document.getElementById('v' + id + '-' + to);
+  if (!src || !dst) return false;
+  const d = _vidNorm(src.value), cur = _vidNorm(dst.value);
+  if (!/^\d+$/.test(d) || (cur && cur !== d)) return false;
+  const hadFocus = document.activeElement === src;
+  dst.value = d; src.value = '';
+  _vidNotes[id] = from === 'imo' ? 'Moved ' + d + ' to MMSI — 9 digits is an MMSI, not an IMO number' : 'Moved ' + d + ' to IMO — 7 digits is an IMO number, not an MMSI';
+  if (hadFocus) { try { dst.focus(); dst.setSelectionRange(d.length, d.length); } catch (e) {} }
+  return true;
+}
+function vidInput(id, which) {
+  delete _vidNotes[id];
+  if (which === 'imo') {
+    const el = document.getElementById('v' + id + '-imo');
+    if (el && /^\d{9}$/.test(_vidNorm(el.value))) _vidMove(id, 'imo');
+  }
+  _vidRender(id);
+  clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 1500);
+  _vidSyncAlertsSoon();
+}
+// Box left / changed: normalise ("IMO 9321483" → "9321483") and move a misplaced number.
+function vidCommit(id, which) {
+  const el = document.getElementById('v' + id + '-' + which), other = document.getElementById('v' + id + '-' + (which === 'imo' ? 'mmsi' : 'imo'));
+  if (!el || !other) return;
+  const before = el.value + '|' + other.value;
+  const d = _vidNorm(el.value);
+  if (/^\d+$/.test(d) && d !== el.value) el.value = d;
+  if (which === 'imo' && /^\d{9}$/.test(d)) _vidMove(id, 'imo');
+  else if (which === 'mmsi' && /^\d{7}$/.test(d)) _vidMove(id, 'mmsi');
+  _vidRender(id);
+  if (el.value + '|' + other.value !== before) {
+    clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 1500);
+    _vidSyncAlertsSoon();
+  }
+}
+
+/* Nominations without a usable identifier — one per nomination, keyed
+   'ids|<nomUid>': named, not yet supplied, not long past. They feed Needs
+   Attention, the bell (never a toast) and the Generate Schedule warning. */
+function _vidMissing(now) {
+  now = now == null ? Date.now() : now;
+  const out = [];
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
+    const cid = card.id.replace('vessel-', '');
+    const g = function(f) { const el = document.getElementById('v' + cid + '-' + f); return el ? String(el.value || '') : ''; };
+    const name = g('name').trim().replace(/\s+/g, ' ');
+    if (!name) return;
+    const ids = _cardIds(cid), info = _vidInfo(ids.imo, ids.mmsi);
+    if (info.ok) return;
+    const nomUid = card.dataset.nomUid || '';
+    const eta = g('eta') ? parseDT(g('eta')) : null;
+    let lc = null;
+    try { lc = g('lc') ? parseLaycan(g('lc')) : null; } catch (e) { lc = null; }
+    const last = Math.max(eta instanceof Date && !isNaN(eta.getTime()) ? eta.getTime() : 0, lc && lc.to instanceof Date && !isNaN(lc.to.getTime()) ? lc.to.getTime() : 0);
+    if (last && last < now - 2 * 86400000) return; // long past — not an upcoming nomination any more
+    try { if (typeof _isScheduleItemCompleted === 'function' && _isScheduleItemCompleted({ nomUid: nomUid || null, name: name, eta: eta })) return; } catch (e) {}
+    const bad = [['IMO', info.imo], ['MMSI', info.mmsi]].filter(function(x) { return x[1].kind === 'bad'; });
+    out.push({
+      cid: cid, nomUid: nomUid, name: name, bad: bad.length > 0, key: 'ids|' + (nomUid || name.toUpperCase()),
+      detail: bad.length
+        ? bad.map(function(x) { return x[0] + ' ' + x[1].val.slice(0, 20) + ': ' + x[1].msg; }).join(' · ') + ' — add a valid IMO or MMSI for live tracking'
+        : 'No IMO or MMSI — live position tracking cannot find this vessel'
+    });
+  });
+  return out;
+}
+function _vidAlerts() {
+  return _vidMissing().map(function(x) {
+    return { key: x.key, label: x.bad ? 'Check IMO / MMSI' : 'IMO / MMSI missing', sub: x.name + ' — ' + x.detail, severity: 'warning', kind: 'ids', cid: x.cid, vesselName: x.name, text: x.detail };
+  });
+}
+// Needs Attention / bell → the card, with the cursor in the box to fill.
+function _vidGoTo(cid) {
+  showPage('nominations');
+  setTimeout(function() {
+    const card = document.getElementById('vessel-' + cid);
+    if (!card) return;
+    if (typeof _globalSearchHighlight === 'function') _globalSearchHighlight(card);
+    const ids = _cardIds(cid);
+    const el = document.getElementById('v' + cid + '-' + (_vidCheck(ids.mmsi, 'mmsi').kind === 'bad' && !String(ids.imo).trim() ? 'mmsi' : 'imo'));
+    if (el) { try { el.focus({ preventScroll: true }); } catch (e) {} }
+  }, 80);
+}
+// Bell follows ID edits (after its first pass — startAutoSync decides what was already there at login).
+let _vidAlertTimer = null, _vidAlertSig = null;
+function _vidSyncAlertsSoon() {
+  clearTimeout(_vidAlertTimer);
+  _vidAlertTimer = setTimeout(function() {
+    _vidAlertTimer = null;
+    let sig = '';
+    try { sig = _vidMissing().map(function(x) { return x.key + ':' + x.detail; }).join('|'); } catch (e) { return; }
+    if (sig === _vidAlertSig) return;
+    _vidAlertSig = sig;
+    if (typeof _globalAlertsPrevKeys !== 'undefined' && _globalAlertsPrevKeys && typeof _refreshGlobalAlertsBell === 'function') {
+      try { _refreshGlobalAlertsBell(); } catch (e) {}
+    }
+  }, 500);
+}
+// Send Nomination Email / Generate Email: a non-blocking warning for a card without a usable ID.
+function _vidWarnCard(id, what) {
+  const ids = _cardIds(id);
+  if (_vidInfo(ids.imo, ids.mmsi).ok) return false;
+  const name = ((document.getElementById('v' + id + '-name') || {}).value || '').trim() || 'This vessel';
+  if (typeof showToast === 'function') showToast(name + ' has no valid IMO or MMSI — ' + what + ' Add one on the card so FLOW can track the vessel.', 'warning', 7000);
+  return true;
+}
+// Generate Schedule: ONE summary warning (never blocks).
+function _vidWarnSchedule() {
+  const miss = _vidMissing();
+  if (!miss.length || typeof showToast !== 'function') return 0;
+  const names = miss.slice(0, 3).map(function(x) { return x.name; }).join(', ') + (miss.length > 3 ? ' +' + (miss.length - 3) + ' more' : '');
+  showToast(miss.length + (miss.length === 1 ? ' nomination has' : ' nominations have') + ' no valid IMO or MMSI (' + names + ') — the schedule is generated, but live position tracking cannot find ' + (miss.length === 1 ? 'it' : 'them') + '.', 'warning', 8000);
+  return miss.length;
+}
+
 /* ─── IMPORT NOMINATION: rule-based text parser ───
    _parseNominationText(text, opts) → array of draft nominations, one per
    vessel found. Pure and deterministic (same text + same opts.now → same
    drafts); nothing leaves the device. opts: now (Date — "today" for dates
    written without a year/month), areas ([{value,label}] — the Anchorage
    dropdown), agents ([names] — the Agent Directory), specs ([values]).
-   Each draft: name, imo, eta ('14 Oct 2026 06:00' — the ETA picker's
+   Each draft: name, imo, mmsi, eta ('14 Oct 2026 06:00' — the ETA picker's
    format; 00:00 = no firm time), lc ('14-16 Oct 2026'), type, qty/qtyMin/
    qtyMax, mgo/mgoMin/mgoMax (a range plans at its max, like the card),
    area, agent, spec, remarks, low {field: reason} for anything guessed,
@@ -12253,6 +12496,60 @@ function _imoValid(s) {
   for (let i = 0; i < 6; i++) sum += (+s[i]) * (7 - i);
   return sum % 10 === +s[6];
 }
+
+/* ─── VESSEL IDENTIFIERS: IMO number + MMSI ───
+   A nomination card has two boxes: IMO (vessel.imo — always stored, as
+   before) and MMSI (vessel.mmsi — stored ONLY when set, so older vessels
+   stay byte-identical). At least ONE valid identifier is wanted, because
+   live position tracking (AIS) finds a ship reliably only by its MMSI /
+   IMO — but it is never enforced: a missing or invalid ID warns (card,
+   Needs Attention, bell, Generate Schedule / e-mails), nothing is blocked.
+     IMO  = 7 digits, the last one a check digit (_imoValid)
+     MMSI = 9 digits, first digit 2–7 (a ship station)
+   "IMO 9321483", "MMSI: 636 012 345" are accepted and normalised to digits.
+   Before the MMSI box existed a 9-digit MMSI was typed into the IMO box:
+   such a card shows it in the MMSI box (_vidSplitDef in addVessel). The
+   move reaches the cloud with the card's next edit — a pull adopts the
+   re-rendered cards as its merge base (_adoptBase), so loading never writes. */
+function _vidNorm(raw) {
+  const s = String(raw == null ? '' : raw).trim().replace(/^(?:IMO|MMSI)(?![A-Za-z])\s*(?:no\.?|nr\.?|number|#)?\s*[:.#=\-–]?\s*/i, '');
+  const d = s.replace(/[\s.\-]/g, '');
+  return /^\d+$/.test(d) ? d : s;
+}
+function _mmsiValid(s) { return /^[2-7]\d{8}$/.test(String(s == null ? '' : s)); }
+// One box → {raw, val, kind: 'empty' | 'ok' | 'bad', msg}. val = normalised (digits when it reads as digits).
+function _vidCheck(raw, which) {
+  const val = _vidNorm(raw);
+  if (!val) return { raw: String(raw || ''), val: '', kind: 'empty', msg: '' };
+  const digits = /^\d+$/.test(val);
+  if (which === 'imo') {
+    if (_imoValid(val)) return { raw: String(raw), val: val, kind: 'ok', msg: '' };
+    return { raw: String(raw), val: val, kind: 'bad', msg: digits && val.length === 7 ? 'Not a valid IMO (check digit)' : (digits && val.length === 9 ? 'Not a valid IMO — 9 digits is an MMSI' : 'Not a valid IMO (7 digits)') };
+  }
+  if (_mmsiValid(val)) return { raw: String(raw), val: val, kind: 'ok', msg: '' };
+  return { raw: String(raw), val: val, kind: 'bad', msg: 'MMSI must be 9 digits starting 2–7' };
+}
+// Both boxes → {imo, mmsi, ok}: ok = at least one valid identifier.
+function _vidInfo(imoRaw, mmsiRaw) {
+  const imo = _vidCheck(imoRaw, 'imo'), mmsi = _vidCheck(mmsiRaw, 'mmsi');
+  return { imo: imo, mmsi: mmsi, ok: imo.kind === 'ok' || mmsi.kind === 'ok' };
+}
+// A saved vessel / def → what its two boxes show. Legacy: 9 digits in the IMO box = the MMSI.
+function _vidSplitDef(imo, mmsi) {
+  imo = imo == null ? '' : String(imo); mmsi = mmsi == null ? '' : String(mmsi);
+  const d = _vidNorm(imo);
+  if (/^\d{9}$/.test(d) && (!mmsi.trim() || _vidNorm(mmsi) === d)) return { imo: '', mmsi: mmsi.trim() ? mmsi : d };
+  return { imo: imo, mmsi: mmsi };
+}
+// A saved vessel object ({imo, mmsi}) has at least one valid identifier.
+function _vidVesselOk(v) { const s = _vidSplitDef(v && v.imo, v && v.mmsi); return _vidInfo(s.imo, s.mmsi).ok; }
+// Card → its two boxes as typed.
+function _cardIds(id) {
+  const i = document.getElementById('v' + id + '-imo'), m = document.getElementById('v' + id + '-mmsi');
+  return { imo: i ? String(i.value || '') : '', mmsi: m ? String(m.value || '') : '' };
+}
+// Fields to store on a vessel record: {mmsi} only when the MMSI box is filled ({} otherwise).
+function _cardIdFields(id) { const m = _cardIds(id).mmsi.trim(); return m ? { mmsi: m } : {}; }
 
 // No year written: this year, unless that's well in the past (a January ETA read in December).
 function _niYear(day, mon, yrStr, now) {
@@ -12526,9 +12823,9 @@ function _niQuantities(text) {
 
 // Vessel prefixes: MV, M/V, M.V., MT, M/T, M.T. ("MT" after a number is the unit).
 const _NI_PREFIX = /(^|[^A-Za-z0-9\/])(M\s*\/\s*[VvTt]|M\.\s*[VvTt]\.?|MV|mv|Mv|MT|M\/Y|MY)\.?\s*[:\-]?\s+(?=[A-Za-z0-9])/g;
-const _NI_NAME_STOP = /^(imo|eta|etb|etd|ata|laycan|l\/c|lc|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|fo|at|for|in|on|to|from|with|via|agent|agents|fujairah|fuj|kfk|khor|opl|anchorage|berth|abt|about|approx|bunkers?|nomination|nominated|arriving|arrival|expected|grade|mt|mts|will|is|has|and|pls|please|req|requires|needs|location|port|spec|iso|eta:|dwt|flag|call|sign|loa|grt|nrt)$/i;
+const _NI_NAME_STOP = /^(imo|mmsi|eta|etb|etd|ata|laycan|l\/c|lc|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|fo|at|for|in|on|to|from|with|via|agent|agents|fujairah|fuj|kfk|khor|opl|anchorage|berth|abt|about|approx|bunkers?|nomination|nominated|arriving|arrival|expected|grade|mt|mts|will|is|has|and|pls|please|req|requires|needs|location|port|spec|iso|eta:|dwt|flag|call|sign|loa|grt|nrt)$/i;
 // Words that end a name even on a labelled line ("Name: On Peace" keeps "On").
-const _NI_NAME_STOP_STRONG = /^(imo|eta|etb|etd|ata|laycan|l\/c|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|agent|agents|location|port|spec|iso|dwt|flag|loa|grt|nrt)$/i;
+const _NI_NAME_STOP_STRONG = /^(imo|mmsi|eta|etb|etd|ata|laycan|l\/c|laydays|qty|quantity|vlsfo|lsfo|ulsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|rmg|agent|agents|location|port|spec|iso|dwt|flag|loa|grt|nrt)$/i;
 function _niCleanName(raw, labelled) {
   // Names are words — tags, quotes and control characters are never part of one.
   let s = String(raw || '').replace(/<[^>]*>?/g, ' ').replace(/[<>"`\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
@@ -12585,7 +12882,7 @@ const _NI_BOILER = /^(dear|hi\b|hello|good\s+(day|morning|afternoon|evening)|gre
 
 function _niParseBlock(text, opts, ctx) {
   const now = opts.now, lines = String(text).split(/\r?\n/);
-  const d = { name: '', imo: '', eta: '', etaWin: '', lc: '', type: 'VLSFO', qty: 0, qtyMin: null, qtyMax: null, mgo: 0, mgoMin: null, mgoMax: null,
+  const d = { name: '', imo: '', mmsi: '', eta: '', etaWin: '', lc: '', type: 'VLSFO', qty: 0, qtyMin: null, qtyMax: null, mgo: 0, mgoMin: null, mgoMax: null,
               area: '', agent: '', spec: '', remarks: '', low: {}, src: String(text).trim() };
   const used = {};          // line index → consumed by a field
   const notes = [];
@@ -12595,15 +12892,25 @@ function _niParseBlock(text, opts, ctx) {
   for (let i = 0; i < lines.length && !nm; i++) { nm = _niNameFromLine(lines[i], true); if (nm) { nm.line = i; } }
   if (!nm) nm = _niCapsName(lines);
   if (nm) { d.name = nm.name; if (nm.low) d.low.name = 'Guessed from an all-caps line'; used[nm.line] = 1; }
-  // ── IMO
-  let r = text.match(/\bIMO\s*(?:no\.?|number|#)?\s*[:\-–=]?\s*(\d{7})\b/i);
+  // ── MMSI ("MMSI: 636012345", "MMSI No. 636012345", "MMSI 636 012 345")
+  let r = text.match(/\bMMSI\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{3}[ ]?\d{3}[ ]?\d{3}|\d{5,12})(?![\d])/i);
+  if (r) { d.mmsi = r[1].replace(/\s/g, ''); if (!_mmsiValid(d.mmsi)) d.low.mmsi = 'MMSI must be 9 digits starting 2–7'; }
+  // ── IMO ("IMO 9321483", "IMO No: 9321483", "IMO: 9321483")
+  r = text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{7})\b/i);
+  const r9 = r ? null : text.match(/\bIMO\s*(?:no\.?|nr\.?|number|#)?\s*[:\-–=.]?\s*(\d{9})\b/i);
   if (r) { d.imo = r[1]; if (!_imoValid(r[1])) d.low.imo = 'IMO check digit does not match'; }
+  else if (r9 && !d.mmsi) { d.mmsi = r9[1]; d.low.mmsi = '9 digits given as "IMO" — taken as the MMSI' + (_mmsiValid(r9[1]) ? '' : ' (must start 2–7)'); }
   else {
     const all = String(text).match(/(?:^|[^\d\/.\-+])(\d{7})(?![\d\/.\-])/g) || [];
     const ok = all.map(function(x) { return x.replace(/\D/g, ''); }).filter(_imoValid);
     if (ok.length) d.imo = ok[0];
   }
-  lines.forEach(function(l, i) { if (/\bIMO\b/i.test(l) && i !== nm?.line) used[i] = used[i] || 2; });
+  // 7 digits given as "MMSI" (e.g. one "IMO / MMSI" column): the IMO number — as on the card.
+  if (/^\d{7}$/.test(d.mmsi) && (!d.imo || d.imo === d.mmsi)) {
+    d.imo = d.mmsi; d.mmsi = ''; delete d.low.mmsi;
+    if (_imoValid(d.imo)) delete d.low.imo; else d.low.imo = 'IMO check digit does not match';
+  }
+  lines.forEach(function(l, i) { if (/\b(?:IMO|MMSI)\b/i.test(l) && i !== nm?.line) used[i] = used[i] || 2; });
   // ── ETA / laycan (labelled)
   lines.forEach(function(l, i) {
     let m = l.match(_NI_LC_LBL);
@@ -12684,7 +12991,7 @@ function _niParseBlock(text, opts, ctx) {
     else { d.spec = +yr < 2017 ? opts.specs[0] : opts.specs[opts.specs.length - 1]; d.low.spec = want + ' requested — not a listed spec'; notes.push(want + ' requested'); }
   } else d.spec = opts.specs[0] || '';
   // ── remarks: a labelled line, plus leftover lines that say something
-  const FIELD = new RegExp('\\b(?:imo|eta|etb|laycan|l\\/c|qty|quantity|vlsfo|lsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|gas\\s*oil|agents?|location|anchorage|berth|fujairah|khor\\s*fakkan|kfk|opl|iso\\s*8217|spec)\\b', 'i');
+  const FIELD = new RegExp('\\b(?:imo|mmsi|eta|etb|laycan|l\\/c|qty|quantity|vlsfo|lsfo|lsmgo|mgo|mdo|dma|ifo|hsfo|gas\\s*oil|agents?|location|anchorage|berth|fujairah|khor\\s*fakkan|kfk|opl|iso\\s*8217|spec)\\b', 'i');
   const rem = [];
   let signedOff = false;
   lines.forEach(function(l, i) {
@@ -12709,7 +13016,7 @@ function _niParseBlock(text, opts, ctx) {
 /* Tables pasted from Excel / Word (tab- or |-separated, with a header row):
    each data row is rewritten as labelled lines and parsed like any block. */
 const _NI_COLS = [
-  ['name', /vessel|ship|^name$|vsl|^m\/?v$/i], ['imo', /imo/i], ['lc', /lay\s*can|l\/c|window|lay\s*days/i],
+  ['name', /vessel|ship|^name$|vsl|^m\/?v$/i], ['mmsi', /mmsi/i], ['imo', /imo/i], ['lc', /lay\s*can|l\/c|window|lay\s*days/i],
   ['eta', /eta|etb|arriv|^date|supply\s*date/i], ['mgo', /mgo|dma|gas\s*oil|gasoil|mdo|lsgo/i],
   ['vlsfo', /vlsfo|lsfo|0\.5|^fo\b|ifo|fuel|rmg/i], ['qty', /qty|quantity|amount/i], ['grade', /grade|product|type/i],
   ['area', /location|port|anch|area|place|berth/i], ['agent', /agent|agency/i], ['spec', /spec|iso/i], ['remarks', /remark|note|comment/i]
@@ -12740,6 +13047,7 @@ function _niTable(text) {
       if (!g('name')) continue;
       const out = ['Vessel: ' + g('name').replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT)\.?\s+/i, '')];
       if (g('imo')) out.push('IMO: ' + g('imo'));
+      if (g('mmsi')) out.push('MMSI: ' + g('mmsi'));
       if (g('eta')) out.push('ETA: ' + g('eta'));
       if (g('lc')) out.push('Laycan: ' + g('lc'));
       if (g('vlsfo')) out.push('VLSFO: ' + g('vlsfo'));
@@ -13019,7 +13327,7 @@ async function niRead() {
   } finally { _niBusy = false; if (btn) btn.disabled = false; }
 }
 
-// Same vessel already in the register? Same IMO, or same name with ETA/laycan within ±2 days.
+// Same vessel already in the register? Same IMO or MMSI, or same name with ETA/laycan within ±2 days.
 function _niNormName(n) { return String(n || '').toUpperCase().replace(/^(?:M\s*\/\s*[VT]|M\.\s*[VT]\.?|MV|MT)\.?\s+/, '').replace(/[^A-Z0-9]+/g, ' ').trim(); }
 function _niWhen(eta, lc) {
   const e = eta ? parseDT(eta) : null;
@@ -13030,10 +13338,12 @@ function _niWhen(eta, lc) {
 function _niFindDuplicate(d) {
   let vs = [];
   try { vs = captureCurrentState().vessels || []; } catch (e) {}
-  const nm = _niNormName(d.name), imo = String(d.imo || '').replace(/\D/g, ''), when = _niWhen(d.eta, d.lc);
+  const nm = _niNormName(d.name), imo = String(d.imo || '').replace(/\D/g, ''), mmsi = String(d.mmsi || '').replace(/\D/g, ''), when = _niWhen(d.eta, d.lc);
   return vs.find(function(v) {
-    const vImo = String(v.imo || '').replace(/\D/g, '');
+    const vs2 = _vidSplitDef(v.imo, v.mmsi);
+    const vImo = String(vs2.imo || '').replace(/\D/g, ''), vMmsi = String(vs2.mmsi || '').replace(/\D/g, '');
     if (imo && vImo && imo === vImo) return true;
+    if (mmsi && vMmsi && mmsi === vMmsi) return true;
     if (!nm || _niNormName(v.name) !== nm) return false;
     const vw = _niWhen(v.eta, v.lc);
     return !when || !vw || Math.abs(vw - when) <= 2 * 86400000;
@@ -13053,7 +13363,7 @@ function _niProblems(d) {
 
 const _NI_FIELDS = [
   // key, label, low-flag key, input kind
-  ['name', 'Vessel', 'name'], ['imo', 'IMO', 'imo'], ['eta', 'ETA', 'eta'], ['lc', 'Laycan', 'lc'],
+  ['name', 'Vessel', 'name'], ['imo', 'IMO', 'imo'], ['mmsi', 'MMSI', 'mmsi'], ['eta', 'ETA', 'eta'], ['lc', 'Laycan', 'lc'],
   ['qtyText', 'VLSFO (MT)', 'qty'], ['mgoText', 'LSMGO (MT)', 'mgo'], ['area', 'Location', 'area'],
   ['agent', 'Agent', 'agent'], ['spec', 'ISO 8217', 'spec']
 ];
@@ -13061,7 +13371,7 @@ const _NI_REMARKS = ['remarks', 'Remarks', 'remarks'];   // full width, on the r
 function _niCell(d, i, f) {
   const k = f[0], low = d.low && d.low[f[2]];
   const miss = (k === 'name' && !String(d.name || '').trim()) || ((k === 'eta' || k === 'lc') && !d.eta && !d.lc);
-  const cls = miss ? 'nimp-miss' : (low ? 'nimp-low' : '');
+  const cls = miss ? 'nimp-miss' : ((k === 'imo' || k === 'mmsi') ? _niIdCls(d, k) : (low ? 'nimp-low' : ''));
   const lbl = f[1] + ' for row ' + (i + 1) + (low ? ' (check: ' + low + ')' : '');
   const common = ' data-i="' + i + '" data-k="' + k + '" class="' + cls + '" aria-label="' + esc(lbl) + '"' + (low ? ' title="' + esc(low) + '"' : '') + ' oninput="_niEdit(this)" onchange="_niEdit(this)"';
   let inner;
@@ -13070,7 +13380,7 @@ function _niCell(d, i, f) {
   } else if (k === 'spec') {
     inner = '<select' + common + '>' + ['ISO 8217:2010', 'ISO 8217:2017'].map(function(o) { return '<option value="' + o + '"' + (o === d.spec ? ' selected' : '') + '>' + o.replace('ISO 8217:', '') + '</option>'; }).join('') + '</select>';
   } else {
-    const ph = { eta: 'e.g. 14 Oct 2026 06:00', lc: 'e.g. 14-16 Oct 2026', qtyText: 'e.g. 500-600', mgoText: 'e.g. 50', imo: '7 digits' }[k] || '';
+    const ph = { eta: 'e.g. 14 Oct 2026 06:00', lc: 'e.g. 14-16 Oct 2026', qtyText: 'e.g. 500-600', mgoText: 'e.g. 50', imo: '7 digits', mmsi: '9 digits' }[k] || '';
     inner = '<input type="text" autocomplete="off"' + (k === 'agent' ? ' list="agent-directory-list"' : '') + ' value="' + esc(d[k] == null ? '' : d[k]) + '" placeholder="' + esc(ph) + '"' + common + '>';
   }
   // ETA: a time-frame select under the date ("Exact time" or EAM / AM / NOON / PM / LPM).
@@ -13081,13 +13391,30 @@ function _niCell(d, i, f) {
   if (k === 'remarks') return inner;
   return '<td data-label="' + esc(f[1]) + '"' + (k === 'name' ? ' class="nimp-wide"' : '') + '>' + inner + '</td>';
 }
+// IMO / MMSI cells of a review row: red = an invalid number, amber = neither box holds a valid one (never blocks Add).
+function _niIdCls(d, k) {
+  const info = _vidInfo(d.imo, d.mmsi), c = info[k];
+  if (c.kind === 'bad') return 'nimp-idbad';
+  if (!info.ok) return 'nimp-low';
+  return (d.low && d.low[k]) ? 'nimp-low' : '';
+}
+function _niIdNote(d) {
+  const info = _vidInfo(d.imo, d.mmsi), bad = [];
+  if (info.imo.kind === 'bad') bad.push(info.imo.msg);
+  if (info.mmsi.kind === 'bad') bad.push(info.mmsi.msg);
+  if (bad.length) return '<span class="idbad">' + esc(bad.join(' · ')) + (info.ok ? '' : ' — add a valid IMO or MMSI for live tracking') + '</span>';
+  if (!info.ok) return '<span class="idmiss">No IMO or MMSI — add one so FLOW can track the vessel</span>';
+  return '';
+}
 function _niMsgHtml(d) {
   const out = [];
   const dup = _niFindDuplicate(d);
-  if (dup) out.push('<span class="dup">Possible duplicate: ' + esc(dup.name || '') + (dup.eta ? ' · ETA ' + esc(dup.eta) : (dup.lc ? ' · ' + esc(dup.lc) : '')) + (dup.imo ? ' · IMO ' + esc(dup.imo) : '') + ' is already in the register</span>');
+  if (dup) out.push('<span class="dup">Possible duplicate: ' + esc(dup.name || '') + (dup.eta ? ' · ETA ' + esc(dup.eta) : (dup.lc ? ' · ' + esc(dup.lc) : '')) + (dup.imo ? ' · IMO ' + esc(dup.imo) : '') + (dup.mmsi ? ' · MMSI ' + esc(dup.mmsi) : '') + ' is already in the register</span>');
   const p = _niProblems(d);
   if (p.length) out.push('<span class="bad">Needs ' + esc(p.join(', ')) + '</span>');
-  const lows = Object.keys(d.low || {}).filter(function(k) { return d.low[k]; }).map(function(k) { return d.low[k]; });
+  const idn = _niIdNote(d);
+  if (idn) out.push(idn);
+  const lows = Object.keys(d.low || {}).filter(function(k) { return d.low[k] && !((k === 'imo' || k === 'mmsi') && idn); }).map(function(k) { return d.low[k]; });
   if (lows.length) out.push('<span class="why">Check: ' + esc(lows.join(' · ')) + '</span>');
   return out.join('');
 }
@@ -13101,7 +13428,7 @@ function _niRenderReview() {
     '<span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap">' +
     '<button type="button" class="btn btn-ghost btn-sm" onclick="niReset()">Discard</button>' +
     '<button type="button" class="btn btn-primary btn-sm" id="nimp-add-all" onclick="niAddDrafts()"' + (n ? '' : ' disabled') + '>Add ' + n + ' nomination' + (n === 1 ? '' : 's') + '</button></span></div>';
-  h += '<div class="nimp-tblwrap"><table class="nimp-tbl"><colgroup><col style="width:30px"><col style="width:15%"><col style="width:8%"><col style="width:13%"><col style="width:12%"><col style="width:8%"><col style="width:7%"><col style="width:8%"><col><col style="width:9%"><col style="width:62px"></colgroup><thead><tr><th><span style="position:absolute;left:-9999px">Include</span></th>' +
+  h += '<div class="nimp-tblwrap"><table class="nimp-tbl"><colgroup><col style="width:30px"><col style="width:14%"><col style="width:8%"><col style="width:9%"><col style="width:12%"><col style="width:11%"><col style="width:7%"><col style="width:7%"><col style="width:8%"><col><col style="width:8%"><col style="width:62px"></colgroup><thead><tr><th><span style="position:absolute;left:-9999px">Include</span></th>' +
     _NI_FIELDS.map(function(f) { return '<th>' + esc(f[1]) + '</th>'; }).join('') + '<th></th></tr></thead><tbody>';
   _niDrafts.forEach(function(d, i) {
     h += '<tr class="nimp-row" id="nimp-row-' + i + '"><td class="nimp-pick" data-label="Include"><input type="checkbox" aria-label="Include row ' + (i + 1) + '"' + (d.pick ? ' checked' : '') + ' onchange="_niTogglePick(' + i + ',this.checked)"></td>' +
@@ -13131,6 +13458,14 @@ function _niEdit(el) {
   const lowKey = (_NI_FIELDS.concat([_NI_REMARKS]).find(function(f) { return f[0] === k; }) || [])[2];
   if (lowKey && d.low && d.low[lowKey]) { delete d.low[lowKey]; el.classList.remove('nimp-low'); el.removeAttribute('title'); }
   if (k === 'name') el.classList.toggle('nimp-miss', !String(el.value).trim());
+  if (k === 'imo' || k === 'mmsi') {
+    const row = document.getElementById('nimp-row-' + i);
+    if (row) row.querySelectorAll('[data-k="imo"],[data-k="mmsi"]').forEach(function(x) {
+      ['nimp-low', 'nimp-idbad'].forEach(function(c) { x.classList.remove(c); });
+      const c = _niIdCls(d, x.dataset.k);
+      if (c) x.classList.add(c);
+    });
+  }
   if (k === 'eta' || k === 'lc') {
     const row = document.getElementById('nimp-row-' + i);
     if (row) row.querySelectorAll('[data-k="eta"],[data-k="lc"]').forEach(function(x) { x.classList.toggle('nimp-miss', !d.eta && !d.lc); });
@@ -13147,12 +13482,17 @@ function _niTogglePick(i, on) {
 function _niDraftToDef(d) {
   const v = _parseQtyInput(d.qtyText), m = _parseQtyInput(d.mgoText);
   const def = {
-    name: String(d.name || '').trim().toUpperCase(), imo: String(d.imo || '').trim(), eta: String(d.eta || '').trim(), lc: String(d.lc || '').trim(),
+    name: String(d.name || '').trim().toUpperCase(), imo: _vidNorm(d.imo), eta: String(d.eta || '').trim(), lc: String(d.lc || '').trim(),
     area: d.area || 'FUJ-A', spec: d.spec || 'ISO 8217:2010', agent: String(d.agent || '').trim(), remarks: String(d.remarks || '').trim(),
     type: v.qty > 0 && m.qty > 0 ? 'BOTH' : (m.qty > 0 ? 'MGO' : 'VLSFO'), qty: v.qty, mgo: m.qty
   };
   if (v.min != null) { def.qtyMin = v.min; def.qtyMax = v.max; }
   if (m.min != null) { def.mgoMin = m.min; def.mgoMax = m.max; }
+  // MMSI only when given (like a hand-made card); a number in the wrong box moves to the right one.
+  const mm = _vidNorm(d.mmsi);
+  if (mm) def.mmsi = mm;
+  if (/^\d{9}$/.test(def.imo) && !def.mmsi) { def.mmsi = def.imo; def.imo = ''; }
+  if (/^\d{7}$/.test(def.mmsi || '') && !def.imo) { def.imo = def.mmsi; delete def.mmsi; }
   // Time-frame ETA: keep the frame; the ETA itself sits at the frame's start.
   const t = def.eta ? parseDT(def.eta) : null;
   if (t && _etaFrame(d.etaWin)) { def.etaWin = _etaFrame(d.etaWin).code; def.eta = _etaPickerStr(_etaFrameStart(t, def.etaWin)); }
@@ -13206,7 +13546,9 @@ function addVessel(def = {}) {
   const name = def.name || '', lc = def.lc || '', eta = def.eta || '';
   const area = def.area || 'FUJ-A', spec = def.spec || 'ISO 8217:2010';
   const agent = def.agent || '', manifold = def.manifold || 'VESSEL MANIFOLD', paq = def.paq || 'no';
-  const imo = def.imo || '', remarks = def.remarks || '';
+  const remarks = def.remarks || '';
+  // IMO / MMSI boxes (a legacy 9-digit MMSI saved in the IMO box shows in the MMSI box).
+  const ids = _vidSplitDef(def.imo, def.mmsi);
   // ETA given only as a part of the day (AM / PM …) — see ETA_TIME_FRAMES.
   const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
@@ -13218,7 +13560,7 @@ function addVessel(def = {}) {
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
   <div class="vcard-hdr">
-    <span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span>
+    <div class="vhdr-l"><span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span><span class="vid-badge" id="v${id}-idbadge"></span></div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="send-email-btn" id="v${id}-send-email-btn" onclick="sendNominationEmailForCard(${id})">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
@@ -13231,9 +13573,17 @@ function addVessel(def = {}) {
       <button class="rm-btn" onclick="rmV(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
     </div>
   </div>
-  <div class="g4 mb10">
-    <div class="field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400)"><div id="v${id}-track-record"></div></div>
-    <div class="field"><label>IMO Number <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="v${id}-imo" value="${esc(imo)}" placeholder="e.g. 9873022" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500)"></div>
+  <div class="g4 mb10 vrow-ids">
+    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400);_vidRender(${id});_vidSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
+    <div class="field vid-field" role="group" aria-labelledby="v${id}-ids-lbl">
+      <label id="v${id}-ids-lbl" for="v${id}-imo" title="At least one of the two — needed for live position tracking">IMO Number / MMSI <span class="vid-req" aria-hidden="true">*</span><span class="vid-sub"> — at least one</span></label>
+      <div class="vid-pair">
+        <div class="vid-box vid-box-imo"><span class="vid-mini" aria-hidden="true">IMO</span><input type="text" class="vid-in" id="v${id}-imo" value="${esc(ids.imo)}" placeholder="7 digits" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="IMO number (7 digits)" aria-describedby="v${id}-idmsg" oninput="vidInput(${id},'imo')" onchange="vidCommit(${id},'imo')" onblur="vidCommit(${id},'imo')"></div>
+        <div class="vid-box vid-box-mmsi"><span class="vid-mini" aria-hidden="true">MMSI</span><input type="text" class="vid-in" id="v${id}-mmsi" value="${esc(ids.mmsi)}" placeholder="9 digits" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="MMSI (9 digits)" aria-describedby="v${id}-idmsg" oninput="vidInput(${id},'mmsi')" onchange="vidCommit(${id},'mmsi')" onblur="vidCommit(${id},'mmsi')"></div>
+      </div>
+      <div class="vid-msg" id="v${id}-idmsg" aria-live="polite"></div>
+      <div class="vid-look" id="v${id}-idlook"><span>Look up</span><a id="v${id}-look-vf" target="_blank" rel="noopener" title="Find the ship on VesselFinder (new tab) to copy its MMSI / IMO">VesselFinder</a><a id="v${id}-look-mt" target="_blank" rel="noopener" title="Find the ship on MarineTraffic (new tab) to copy its MMSI / IMO">MarineTraffic</a></div>
+    </div>
     <div class="field">
       <label>Anchorage / Berth</label>
       <select id="v${id}-area" onchange="saveSharedState()">${areaOptionsHTML(area)}</select>
@@ -13343,6 +13693,7 @@ function addVessel(def = {}) {
   document.getElementById('vc').appendChild(c);
   tQ(id);
   _qtyHints(id);
+  _vidRender(id); // IMO / MMSI state, header badge, look-up links
   if (lc || eta) upd(id);
   if (typeof _aisRenderCard === 'function') _aisRenderCard(id); // Live position (AIS) line
   populateBargeDropdowns();
@@ -13430,9 +13781,10 @@ function getVessels() {
     const bargeId = document.getElementById(`v${id}-barge`)?.value  || '';
     const nomUid  = c.dataset.nomUid || '';
     const imo     = document.getElementById(`v${id}-imo`)?.value     || '';
+    const mmsi    = (document.getElementById(`v${id}-mmsi`)?.value   || '').trim();
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
     out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
-              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, remarks, etaWin, winHrs,
+              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, mmsi, remarks, etaWin, winHrs,
               vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
   return out;
@@ -13480,6 +13832,8 @@ function calculate() {
   if (!vessels.length) { alert('Add at least one vessel.'); _calculating = false; return; }
   const barges = getBarges();
   if (!barges.length) { alert('Add at least one barge.'); _calculating = false; return; }
+  // Nominations without a valid IMO / MMSI: one summary warning, never a block.
+  try { _vidWarnSchedule(); } catch (e) { console.warn('ABPS: IMO/MMSI check failed', e); }
 
   // Warn (don't block) on near-duplicate vessel names — likely typos that would otherwise
   // silently create two separate checklist entries for what is probably the same vessel.
@@ -22855,7 +23209,8 @@ function ciOpenForVessel(vid) {
 
   // id = the vessel card number: ciGenerate/ciOpenPreview re-read the live
   // inputs `v${id}-…` through it, which never happened while it was unset.
-  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, vlsfoTxt: _qtyShow(vqP), lsmgoTxt: _qtyShow(mqP), area, location, laycan, lcRaw, tplKey, eta: _cardEtaTxt(vid) };
+  const cids = _cardIds(vid); // {{IMO}} / {{MMSI}}
+  _ciVesselCtx = { id: vid, vessel, type, vlsfoQty: safeVlsfo, lsmgoQty: safeLsmgo, vlsfoTxt: _qtyShow(vqP), lsmgoTxt: _qtyShow(mqP), area, location, laycan, lcRaw, tplKey, eta: _cardEtaTxt(vid), imo: cids.imo.trim(), mmsi: cids.mmsi.trim() };
 
   document.getElementById('ci-modal-title').textContent   = 'Calling Instructions — ' + vessel;
   document.getElementById('ci-prev-vessel').textContent   = vessel || '(no name)';
@@ -22895,7 +23250,7 @@ document.addEventListener('DOMContentLoaded', function() {
 // Rules: ONLY replace vessel name, fuel lines, location, laycan — nothing else changes
 // ══════════════════════════════════════════════════════════════
 // CI REPLACEMENT ENGINE — Placeholder-based + pattern fallback
-// Supports: {{VESSEL_NAME}} {{VLSFO_QTY}} {{MGO_QTY}} {{LAYCAN}} {{LOCATION}} {{ETA}}
+// Supports: {{VESSEL_NAME}} {{VLSFO_QTY}} {{MGO_QTY}} {{LAYCAN}} {{LOCATION}} {{ETA}} {{IMO}} {{MMSI}}
 // Also detects pattern-based replacements for templates without placeholders
 // ══════════════════════════════════════════════════════════════
 
@@ -22921,9 +23276,10 @@ function ciApplyTemplate(tplText,ctx){
   var v=Number(vlsfoQty)||0,m=Number(lsmgoQty)||0;
   if(v===0&&m===0) throw new Error('Both fuel quantities are 0.');
   var fl=ciBuildFuelLines(type,v,m,ctx.vlsfoTxt,ctx.lsmgoTxt),vs=v>0?(ctx.vlsfoTxt||v.toLocaleString())+' MT':'',ms=m>0?(ctx.lsmgoTxt||m.toLocaleString())+' MT':'';
-  if(tplText.indexOf('{{VESSEL_NAME}}')>=0||tplText.indexOf('{{FUEL_LINES}}')>=0||tplText.indexOf('{{VLSFO_QTY}}')>=0||tplText.indexOf('{{LAYCAN}}')>=0||tplText.indexOf('{{ETA}}')>=0){
+  if(tplText.indexOf('{{VESSEL_NAME}}')>=0||tplText.indexOf('{{FUEL_LINES}}')>=0||tplText.indexOf('{{VLSFO_QTY}}')>=0||tplText.indexOf('{{LAYCAN}}')>=0||tplText.indexOf('{{ETA}}')>=0||tplText.indexOf('{{IMO}}')>=0||tplText.indexOf('{{MMSI}}')>=0){
     // {{ETA}}: the card's ETA as text — "16 Oct 2026 AM (06:00–12:00)" for a time frame.
-    return tplText.split('{{VESSEL_NAME}}').join(vessel).split('{{FUEL_LINES}}').join(fl).split('{{VLSFO_QTY}}').join(vs).split('{{MGO_QTY}}').join(ms).split('{{LSMGO_QTY}}').join(ms).split('{{LAYCAN}}').join(laycan).split('{{LOCATION}}').join(location).split('{{ETA}}').join(ctx.eta||'');
+    // {{IMO}} / {{MMSI}}: the card's identifiers ('' when not filled in).
+    return tplText.split('{{VESSEL_NAME}}').join(vessel).split('{{FUEL_LINES}}').join(fl).split('{{VLSFO_QTY}}').join(vs).split('{{MGO_QTY}}').join(ms).split('{{LSMGO_QTY}}').join(ms).split('{{LAYCAN}}').join(laycan).split('{{LOCATION}}').join(location).split('{{ETA}}').join(ctx.eta||'').split('{{IMO}}').join(ctx.imo||'').split('{{MMSI}}').join(ctx.mmsi||'');
   }
   var out=tplText;
   out=out.replace(/(To\s*:\s*The Master\s*:\s*).+/gi,function(_,p){return p+vessel;});
@@ -22992,6 +23348,7 @@ async function ciGenerate() {
     if (liveType)  ctx.type     = liveType.value;
     if (liveArea)  { ctx.area = liveArea.value; ctx.location = ciAreaLabel(liveArea.value); ctx.tplKey = ciGetTemplateKey(liveArea.value); }
     if (liveLc)    ctx.laycan   = ciLaycanStr(liveLc.value);
+    if (document.getElementById(`v${vid}-imo`)) { const li = _cardIds(vid); ctx.imo = li.imo.trim(); ctx.mmsi = li.mmsi.trim(); }
     if (liveVlsfo || liveMgo) _ctxQtyFromCard(ctx, vid);
     else { ctx.vlsfoQty = 0; ctx.lsmgoQty = 0; }
     // Refresh preview panel
@@ -23265,7 +23622,7 @@ function ciDocxReplaceParagraphText(xml, ctx, warnings) {
   const mgoNum   = (type !== 'VLSFO') ? Number(lsmgoQty) : 0;
   var fl2=ciBuildFuelLines(type,vlsfoNum,mgoNum,ctx.vlsfoTxt,ctx.lsmgoTxt);
   const vS = ctx.vlsfoTxt || vlsfoNum.toLocaleString(), mS = ctx.lsmgoTxt || mgoNum.toLocaleString();
-  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vS+' MT':'','{{MGO_QTY}}':mgoNum>0?mS+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mS+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||'','{{ETA}}':ctx.eta||''};
+  const valueMap={'{{VESSEL_NAME}}':vessel||'','{{FUEL_LINES}}':fl2,'{{VLSFO_QTY}}':vlsfoNum>0?vS+' MT':'','{{MGO_QTY}}':mgoNum>0?mS+' MT':'','{{LSMGO_QTY}}':mgoNum>0?mS+' MT':'','{{LAYCAN}}':laycan||'','{{LOCATION}}':location||'','{{ETA}}':ctx.eta||'','{{IMO}}':ctx.imo||'','{{MMSI}}':ctx.mmsi||''};
 
   // Validate all placeholders exist in raw XML text
   const docTextAll = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/gi)]
@@ -23273,7 +23630,7 @@ function ciDocxReplaceParagraphText(xml, ctx, warnings) {
     .join('');
 
   // Same trigger as ciApplyTemplate(): any of these means "placeholder template".
-  const usePlaceholders = ['{{VESSEL_NAME}}','{{FUEL_LINES}}','{{VLSFO_QTY}}','{{LAYCAN}}','{{ETA}}'].some(ph => docTextAll.includes(ph));
+  const usePlaceholders = ['{{VESSEL_NAME}}','{{FUEL_LINES}}','{{VLSFO_QTY}}','{{LAYCAN}}','{{ETA}}','{{IMO}}','{{MMSI}}'].some(ph => docTextAll.includes(ph));
 
   // Reconstruct placeholder text across split runs
   // Each paragraph: concatenate all <w:t> content, replace, write back
@@ -23479,6 +23836,7 @@ function ciOpenPreview(){
   if(vid){
     var lt=document.getElementById('v'+vid+'-type'),lv=document.getElementById('v'+vid+'-vlsfo'),lm=document.getElementById('v'+vid+'-mgo'),la=document.getElementById('v'+vid+'-area'),ll=document.getElementById('v'+vid+'-lc');
     if(lt)ctx.type=lt.value;if(la){ctx.area=la.value;ctx.location=ciAreaLabel(la.value);ctx.tplKey=ciGetTemplateKey(la.value);}if(ll)ctx.laycan=ciLaycanStr(ll.value);
+    if(document.getElementById('v'+vid+'-imo')){var li=_cardIds(vid);ctx.imo=li.imo.trim();ctx.mmsi=li.mmsi.trim();}
     if(lv||lm)_ctxQtyFromCard(ctx,vid);else{ctx.vlsfoQty=0;ctx.lsmgoQty=0;}
   }
   if(!ctx.tplKey||!_ciTemplates[ctx.tplKey]){errEl.innerHTML='No <strong>'+(ctx.tplKey||'?').toUpperCase()+'</strong> template uploaded.';errEl.style.display='';return;}
@@ -23727,7 +24085,9 @@ function _emailApply(tpl, ctx) {
     .split('{{QTY_LINE}}').join(qtyLine)
     .split('{{VLSFO_QTY}}').join(v > 0 ? v.toLocaleString() : '—')
     .split('{{MGO_QTY}}').join(m > 0 ? m.toLocaleString() : '—')
-    .split('{{VESSEL_NAME}}').join(ctx.vessel || '');
+    .split('{{VESSEL_NAME}}').join(ctx.vessel || '')
+    .split('{{IMO}}').join(ctx.imo || '')
+    .split('{{MMSI}}').join(ctx.mmsi || '');
 }
 
 /* ── HTML formatting layer ──────────────────────────────────────────
@@ -23837,9 +24197,12 @@ function emailOpenForVessel(vid) {
   var location = ciAreaLabel(area);
   var laycan   = ciLaycanStr(lcEl ? lcEl.value : '');
   var agent    = agentEl ? agentEl.value : '';
+  var vids     = _cardIds(vid);
 
   _emailVesselCtx = { id:vid, vessel:vessel, type:type, vlsfoQty:vlsfoQty, lsmgoQty:lsmgoQty, vlsfoTxt:_qtyShow(vqP), lsmgoTxt:_qtyShow(mqP),
-    area:area, location:location, laycan:laycan, agent:agent };
+    area:area, location:location, laycan:laycan, agent:agent, imo:vids.imo.trim(), mmsi:vids.mmsi.trim() };
+  // No valid IMO / MMSI: a warning, the e-mail is still generated.
+  _vidWarnCard(vid, 'the e-mail is generated without it.');
 
   // Look up the typed/selected agent against the Agent Directory (case-insensitive,
   // trimmed match) so the mailto "To" field is pre-filled automatically. If the agent
@@ -24096,6 +24459,58 @@ function _emailShowPasteReminder() {
     </div>
 
 <style>
+/* ── Vessel identifiers (IMO / MMSI) on the nomination card — see VESSEL IDENTIFIERS ── */
+.vhdr-l{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;min-width:0}
+.vid-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.02em;padding:1px 8px;border-radius:999px;border:1px solid;white-space:nowrap;line-height:1.6}
+.vid-badge:empty{display:none}
+.vid-badge.ok{color:var(--green);background:var(--green-lt);border-color:var(--green-bd)}
+.vid-badge.miss{color:var(--amber);background:var(--amber-lt);border-color:var(--amber-bd)}
+.vid-field{min-width:0;container:vid / inline-size}
+.vid-req{color:var(--red);font-weight:700}
+.vid-field > label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vid-sub{font-weight:400;color:var(--muted)}
+.vid-pair{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,9fr);gap:6px;min-width:0}
+.vid-box{position:relative;min-width:0}
+.vid-mini{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;letter-spacing:.05em;color:var(--muted);pointer-events:none;font-family:'DM Mono',monospace;line-height:1}
+.vcard .vid-pair .vid-box input.vid-in{padding-left:32px;padding-right:6px;font-variant-numeric:tabular-nums;min-width:0;text-overflow:ellipsis}
+.vcard .vid-pair .vid-box-mmsi input.vid-in{padding-left:39px}
+/* Desktop: the IMO / MMSI pair gets a wider column so 9 digits always fit. */
+@media (min-width:901px){ .vcard .g4.vrow-ids{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,.8fr)} }
+.vcard .vid-pair .vid-box input.vid-in.vid-ok{border-color:var(--green-bd)}
+.vcard .vid-pair .vid-box input.vid-in.vid-miss{border-color:var(--amber-bd);background-color:var(--amber-lt)}
+.vcard .vid-pair .vid-box input.vid-in.vid-bad{border-color:var(--red);background-color:var(--red-lt);box-shadow:0 0 0 3px rgba(192,57,43,.1)}
+.vid-msg{display:flex;flex-direction:column;gap:2px;font-size:10.5px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.vid-msg .vid-er{color:var(--red);font-weight:600}
+.vid-msg .vid-warn{color:var(--amber);font-weight:600}
+.vid-msg .vid-hint{color:var(--muted)}
+.vid-msg .vid-note{color:var(--azure);font-weight:600}
+.vid-look{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:10.5px;color:var(--muted);min-width:0}
+.vid-look[hidden]{display:none}
+.vid-look a{color:var(--azure);font-weight:600;text-decoration:none;white-space:nowrap}
+.vid-look a::after{content:' \2197';font-size:9px}
+.vid-look a:hover{text-decoration:underline}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in{padding-left:37px;padding-right:10px}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box-mmsi input.vid-in{padding-left:44px}
+html[data-skin="harbour"] .vid-mini{left:12px;font-family:'IBM Plex Mono',monospace;color:#8696AB}
+html[data-skin="harbour"] .vid-badge{border:0;padding:3px 10px;font-size:11px}
+html[data-skin="harbour"] .vid-badge.ok{color:#1B7F5B;background:#E2F5EC}
+html[data-skin="harbour"] .vid-badge.miss{color:#9A5B00;background:#FDF0DA}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-ok{border-color:#9FD8BF}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-miss{border-color:#E7C077;background-color:#FFF8EA}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-bad{border-color:#C0392B;background-color:#FDF1EF;box-shadow:none}
+html[data-skin="harbour"] .vid-msg,html[data-skin="harbour"] .vid-look{font-size:11.5px}
+/* A narrow column (laptop widths, the 2-column tablet layout): the two boxes stack so 9 digits always fit. */
+@container vid (max-width: 259px){ .vid-pair{grid-template-columns:minmax(0,1fr)} }
+/* …and the label keeps to one line (the hint under the boxes says "at least one" too). */
+@container vid (max-width: 239px){ .vid-sub{display:none} }
+/* Phones: the vessel name and the IMO / MMSI pair get a full row each. */
+@media (max-width:560px){ .vcard .g4 > .vname-field, .vcard .g4 > .vid-field{grid-column:1 / -1} }
+/* Import review: an invalid IMO / MMSI cell (never blocks Add) */
+.nimp-tbl :is(input,select).nimp-idbad{border-color:var(--red);background:var(--red-lt)}
+html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-idbad{border-color:var(--red);background-color:var(--red-lt)}
+.nimp-flag .idbad{background:var(--red-lt);color:var(--red);border-color:var(--red-bd)}
+.nimp-flag .idmiss{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
+
 /* ── Live vessel positions (AIS) — nomination card line + dashboard card ── */
 .ais-line{display:none;margin-top:6px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-xs);background:var(--surface2);font-size:11px;color:var(--sub);flex-wrap:wrap;align-items:center;gap:4px 10px;line-height:1.45;min-width:0}
 .ais-line.show{display:flex}
@@ -24233,19 +24648,46 @@ function _aisRef(area) { return AIS_REF_POINTS[area] ? Object.assign({ key: area
 function _aisPosTime(p) { const t = p && p.position_time ? Date.parse(p.position_time) : NaN; return isNaN(t) ? null : t; }
 function _aisHasPos(p) { return !!p && _aisNum(p.lat) != null && _aisNum(p.lon) != null && Math.abs(p.lat) <= 90 && Math.abs(p.lon) <= 180 && _aisPosTime(p) != null; }
 
-/* A nomination ({name, imo, area}) → its AIS row. The IMO box decides:
-   7 digits → by IMO, 9 digits → by MMSI; empty/other → by name (normalised,
-   first 20 characters — "matched by name"). Several candidates (same name,
-   re-flagged ship): one with a fresh position first, then the one nearest
-   the anchorage, then the newest. */
+/* A nomination's identifiers ({imo, mmsi} as typed) → {mmsi, imo, legacy}:
+   mmsi = 9 digits in the MMSI box; imo = 7 digits in the IMO box (or in the
+   MMSI box); legacy = 9 digits in the IMO box (an MMSI typed there before
+   the MMSI box existed). The Edge Function's vesselIds() reads them the
+   same way (folding the legacy MMSI into mmsi when the MMSI box is empty). */
+function _aisVesselIds(v) {
+  const m = _aisClassifyId(v && v.mmsi), i = _aisClassifyId(v && v.imo);
+  return {
+    mmsi: m && m.kind === 'mmsi' ? m.value : null,
+    imo: i && i.kind === 'imo' ? i.value : (m && m.kind === 'imo' ? m.value : null),
+    legacy: !(m && m.kind === 'mmsi') && i && i.kind === 'mmsi' ? i.value : null
+  };
+}
+function _aisHasIds(v) { const x = _aisVesselIds(v); return !!(x.mmsi || x.imo || x.legacy); }
+// "MMSI 636012345" / "IMO 9321483" / "MMSI 636012345 / IMO 9321483" ('' without identifiers).
+function _aisIdTxt(v) {
+  const x = _aisVesselIds(v), mm = x.mmsi || x.legacy;
+  return [mm ? 'MMSI ' + mm : '', x.imo ? 'IMO ' + x.imo : ''].filter(Boolean).join(' / ');
+}
+/* A nomination ({name, imo, mmsi, area}) → its AIS row. Tried in order:
+   the MMSI box, the IMO box, a legacy 9-digit MMSI in the IMO box; with no
+   identifier at all → by name (normalised, first 20 characters — "matched
+   by name"). A nomination with an identifier is never matched by name.
+   Several candidates (same name, re-flagged ship): one with a fresh
+   position first, then the one nearest the anchorage, then the newest. */
 function _aisMatch(v, positions, now) {
   positions = positions || [];
   now = now == null ? Date.now() : now;
-  const id = _aisClassifyId(v && v.imo);
-  let hits, by;
-  if (id) {
-    by = id.kind;
-    hits = positions.filter(function(p) { return p && String(id.kind === 'imo' ? (p.imo || '') : (p.mmsi || '')) === id.value; });
+  const ids = _aisVesselIds(v);
+  const tries = [];
+  if (ids.mmsi) tries.push(['mmsi', ids.mmsi]);
+  if (ids.imo) tries.push(['imo', ids.imo]);
+  if (ids.legacy) tries.push(['mmsi', ids.legacy]);
+  let hits = [], by = null;
+  if (tries.length) {
+    for (let t = 0; t < tries.length && !hits.length; t++) {
+      const col = tries[t][0], val = tries[t][1];
+      by = col;
+      hits = positions.filter(function(p) { return p && String(p[col] || '') === val; });
+    }
   } else {
     const n = _aisNameKey(v && v.name);
     if (!n) return null;
@@ -24402,21 +24844,21 @@ function _aisCardVessel(id) {
   const card = document.getElementById('vessel-' + id);
   if (!card) return null;
   const val = function(f) { const el = document.getElementById('v' + id + '-' + f); return el && el.value != null ? String(el.value) : ''; };
-  const name = val('name').trim().replace(/\s+/g, ' '), imo = val('imo').trim();
+  const name = val('name').trim().replace(/\s+/g, ' '), imo = val('imo').trim(), mmsi = val('mmsi').trim();
   const win = typeof _cardEtaWin === 'function' ? _cardEtaWin(id) : '';
   const eta0 = val('eta') ? parseDT(val('eta')) : null;
   const eta = (eta0 && win) ? _etaFrameStart(eta0, win) : eta0;
   const etaEnd = (eta && win) ? _etaFrameEnd(eta, win) : eta;
   let lc = null;
   try { lc = val('lc') ? parseLaycan(val('lc')) : null; } catch (e) { lc = null; }
-  return { cid: String(id), nomUid: card.dataset.nomUid || '', name: name, imo: imo, area: val('area') || 'FUJ-A', eta: eta || null, etaWin: win, etaEnd: etaEnd || null, lcTo: lc && lc.to instanceof Date ? lc.to : null };
+  return { cid: String(id), nomUid: card.dataset.nomUid || '', name: name, imo: imo, mmsi: mmsi, area: val('area') || 'FUJ-A', eta: eta || null, etaWin: win, etaEnd: etaEnd || null, lcTo: lc && lc.to instanceof Date ? lc.to : null };
 }
 function _aisAllInfos(now) {
   now = now == null ? Date.now() : now;
   const out = [];
   document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
     const v = _aisCardVessel(card.id.replace('vessel-', ''));
-    if (!v || (!v.name && !_aisClassifyId(v.imo))) return;
+    if (!v || (!v.name && !_aisHasIds(v))) return;
     out.push({ v: v, a: _aisAssess(v, _aisMatch(v, _ais.positions, now), now) });
   });
   return out;
@@ -24475,9 +24917,9 @@ function _aisCardLineHtml(x) {
   const a = x.a, v = x.v, p = a.pos;
   const parts = ['<span class="ais-lbl">Live position (AIS)</span>', '<span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>'];
   if (a.status === 'notseen') {
-    const id = _aisClassifyId(v.imo);
+    const idTxt = _aisIdTxt(v);
     if (p && /^\d{9}$/.test(String(p.mmsi || ''))) parts.push('<span class="ais-fact ais-wrap">Identified on AIS (MMSI ' + esc(p.mmsi) + ') — no position received yet</span>');
-    else parts.push('<span class="ais-fact ais-wrap">No AIS position yet for ' + (id ? (id.kind === 'imo' ? 'IMO ' : 'MMSI ') + esc(id.value) : 'this vessel name') + '</span>');
+    else parts.push('<span class="ais-fact ais-wrap">No AIS position yet for ' + (idTxt ? esc(idTxt) : 'this vessel name') + '</span>');
     if (a.matchedByName) parts.push('<span class="ais-note">matched by name</span>');
     parts.push(_aisLinks(p));
     return parts.join('');
@@ -24489,7 +24931,7 @@ function _aisCardLineHtml(x) {
   if (p.destination) parts.push('<span class="ais-fact ais-wrap">Dest. ' + esc(p.destination) + '</span>');
   if (p.ais_eta) parts.push(_aisEtaFact(p.ais_eta));
   parts.push('<span class="ais-fact">' + _aisAgoSpan('seen ', p.position_time) + '</span>');
-  if (a.matchedByName) parts.push('<span class="ais-note" title="No IMO/MMSI on this nomination — matched on the AIS name, check it is the right ship">matched by name</span>');
+  if (a.matchedByName) parts.push('<span class="ais-note" title="No IMO / MMSI on this nomination — matched on the AIS name, check it is the right ship (add the MMSI to be sure)">matched by name</span>');
   parts.push(_aisLinks(p));
   if (a.warn) parts.push('<div class="ais-warn ' + a.warn.level + '" role="status">' + esc(a.warn.text) + '</div>');
   return parts.join('');
@@ -24504,7 +24946,7 @@ function _aisRenderCard(id) {
   try {
     if (_aisActive()) {
       const v = _aisCardVessel(id);
-      if (v && (v.name || _aisClassifyId(v.imo))) {
+      if (v && (v.name || _aisHasIds(v))) {
         const a = _aisAssess(v, _aisMatch(v, _ais.positions));
         html = _aisCardLineHtml({ v: v, a: a });
         st = a.status + (a.warn ? ' ' + a.warn.level : '');
@@ -24595,7 +25037,7 @@ function renderDashAis() {
     if (sched) subHtml += '<br><span class="ais-sub-err" data-ais-sched="1">' + esc(sched) + '</span>';
   }
   sub.innerHTML = subHtml;
-  if (!infos.length) { body.innerHTML = '<div class="ais-empty">No nominated vessels with a name or IMO to track.</div>'; return; }
+  if (!infos.length) { body.innerHTML = '<div class="ais-empty">No nominated vessels with a name, IMO or MMSI to track.</div>'; return; }
   const rank = { arrived: 3, approaching: 2, underway: 4, stale: 5, notseen: 6 };
   infos.sort(function(x, y) {
     const wx = x.a.warn ? (x.a.warn.level === 'red' ? 0 : 1) : 2, wy = y.a.warn ? (y.a.warn.level === 'red' ? 0 : 1) : 2;
@@ -24614,7 +25056,7 @@ function renderDashAis() {
     else facts.push('<span class="ais-fact">' + (p ? 'identified, no position yet' : 'no AIS position yet') + '</span>');
     facts.push(_aisLinks(p));
     return '<div class="ais-row" data-cid="' + esc(v.cid) + '" data-ais-status="' + a.status + '">' +
-      '<div class="ais-row-main"><span class="ais-row-name">' + esc(v.name || ('IMO ' + v.imo)) + '</span><span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>' + (a.matchedByName ? '<span class="ais-note">matched by name</span>' : '') + '</div>' +
+      '<div class="ais-row-main"><span class="ais-row-name">' + esc(v.name || _aisIdTxt(v)) + '</span><span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>' + (a.matchedByName ? '<span class="ais-note">matched by name</span>' : '') + '</div>' +
       '<div class="ais-row-facts">' + facts.join('') + '</div>' +
       (a.warn ? '<div class="ais-warn ' + a.warn.level + '">' + esc(a.warn.text) + '</div>' : '') +
       '</div>';
@@ -24749,13 +25191,13 @@ function _aisStop() {
 document.addEventListener('visibilitychange', function() {
   if (document.visibilityState === 'visible' && _ais.wanted && Date.now() - _ais.loadedAt >= AIS_CFG.pollMs) _aisLoad('visible');
 });
-// Name / IMO / anchorage / time-frame edits re-match that card (ETA & laycan go through upd()).
+// Name / IMO / MMSI / anchorage / time-frame edits re-match that card (ETA & laycan go through upd()).
 (function() {
   const vcEl = document.getElementById('vc');
   if (!vcEl) return;
   const timers = {};
   const onEdit = function(e) {
-    const m = e && e.target && /^v(\d+)-(name|imo|area|etawin|etawin-chk|lc|eta)$/.exec(e.target.id || '');
+    const m = e && e.target && /^v(\d+)-(name|imo|mmsi|area|etawin|etawin-chk|lc|eta)$/.exec(e.target.id || '');
     if (!m) return;
     clearTimeout(timers[m[1]]);
     timers[m[1]] = setTimeout(function() { _aisRenderCard(m[1]); _aisSyncAlerts(); }, 400);

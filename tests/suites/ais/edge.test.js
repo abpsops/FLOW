@@ -174,6 +174,36 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
     check('E2 classifyId: 7 digits = IMO, 9 digits = MMSI, prefixes/spaces ok, anything else null',
       JSON.stringify([C('9873022'), C('IMO 9873022'), C('IMO9873022'), C('MMSI: 538 001 234'), C('53800123'), C('abc'), C('')]) ===
       JSON.stringify([{ kind: 'imo', value: '9873022' }, { kind: 'imo', value: '9873022' }, { kind: 'imo', value: '9873022' }, { kind: 'mmsi', value: '538001234' }, null, null, null]));
+    // The nomination card's own MMSI box (vessel.mmsi) — added next to the IMO box.
+    const V = AIS.vesselIds;
+    check('E2 vesselIds: MMSI box first (7 digits there = IMO), IMO box 7 digits = IMO, 9 digits in the IMO box = legacy MMSI only when the MMSI box is empty',
+      JSON.stringify([V({ imo: '9321483', mmsi: '636012345' }), V({ imo: '', mmsi: 'MMSI 636 012 345' }), V({ imo: '538009876' }), V({ imo: '538009876', mmsi: '636012345' }), V({ mmsi: '9321483' }), V({ imo: 'x', mmsi: '12' }), V(null)]) ===
+      JSON.stringify([{ mmsi: '636012345', imo: '9321483' }, { mmsi: '636012345', imo: null }, { mmsi: '538009876', imo: null }, { mmsi: '636012345', imo: null }, { mmsi: null, imo: '9321483' }, { mmsi: null, imo: null }, { mmsi: null, imo: null }]));
+    const PM = { state: { vessels: [
+      { nomUid: 'm1', name: 'MIKE ONE', imo: '9321483', mmsi: '636012345' },  // both boxes → ONE vessel, keyed by its MMSI
+      { nomUid: 'm2', name: 'MIKE TWO', imo: '', mmsi: '538009876' },         // MMSI box only
+      { nomUid: 'm3', name: 'MIKE THREE', imo: '538001234' },                 // legacy: MMSI typed in the IMO box
+      { nomUid: 'm4', name: 'MIKE ONE AGAIN', imo: '9321483' },               // same IMO as m1 → same vessel
+      { nomUid: 'm5', name: 'MIKE FIVE', imo: '9074729' },                    // IMO only …
+      { nomUid: 'm6', name: 'MIKE FIVE', imo: '9074729', mmsi: '211111111' }, // … a later card with the same IMO adds its MMSI
+      { nomUid: 'm7', name: 'Name Only' },
+    ], lastSched: [{ sno: 1, nomUid: 'm2', name: 'MIKE TWO' }] } };
+    const tm = AIS.trackedFromPayload(PM);
+    check('E2 tracked from the MMSI box: one entry per vessel (cards sharing an MMSI / IMO merge), key mmsi: when known, legacy 9-digit IMO box = MMSI',
+      tm.map(t => t.key).join(',') === 'mmsi:636012345,mmsi:538009876,mmsi:538001234,imo:9074729,name:NAME ONLY' &&
+      tm[0].imo === '9321483' && tm[0].mmsi === '636012345' && tm[2].mmsi === '538001234' && tm[2].imo === null && tm[3].mmsi === '211111111' && tm[3].imo === '9074729', tm);
+    const cm = AIS.buildContext(tm, [{ mmsi: '311000555', imo: '9321483', name: 'MIKE ONE' }, { mmsi: '311000556', imo: null, name: 'MIKE TWO' }]);
+    check('E2 context: a vessel with MMSI + IMO is in trackedMmsi AND trackedImo (same key); only ID-less vessels are name-tracked; an earlier IMO link joins the same vessel',
+      [...cm.trackedMmsi.keys()].join(',') === '636012345,538009876,538001234,211111111' && cm.trackedImo.get('9321483') === 'mmsi:636012345' && cm.trackedImo.get('9074729') === 'imo:9074729' &&
+      [...cm.trackedNames.keys()].join(',') === 'NAME ONLY' && cm.known.get('311000555').by === 'imo' && cm.known.get('311000555').key === 'mmsi:636012345' && !cm.known.has('311000556') && cm.known.get('538009876').by === 'mmsi', { mm: [...cm.trackedMmsi.keys()], names: [...cm.trackedNames.keys()], known: [...cm.known] });
+    const pb0 = AIS.pickPhaseBMmsis(cm, new Map(), 50);
+    const obsM = new Map([['311000555', { mmsi: '311000555', key: 'mmsi:636012345', position_time: Date.now() }]]);
+    const pb1 = AIS.pickPhaseBMmsis(cm, obsM, 50);
+    check('E2 phase B prefers the MMSIs typed on the cards, then learned ones; a vessel already found through another MMSI goes last',
+      pb0.join(',') === '636012345,538009876,538001234,211111111,311000555' && pb1.join(',') === '538009876,538001234,211111111,636012345', { pb0, pb1 });
+    const nowM = Date.now();
+    check('E2 prefilter: positions of MMSIs from the MMSI box are parsed; a same-name ship of an MMSI vessel is not a name match',
+      AIS.prefilter(posMsg('538009876', 'WHATEVER', 25, 56, nowM), cm) === true && AIS.prefilter(posMsg('211111111', 'X', 25, 56, nowM), cm) === true && AIS.prefilter(posMsg('311000999', 'MIKE TWO', 25, 56, nowM), cm) === '311000999');
     const tr = AIS.trackedFromPayload(PAYLOAD);
     check('E2 tracked = cards + schedule items without a card; a card\'s own schedule row (same nomUid or name) adds nothing',
       tr.length === 5 && tr.map(t => t.key).join(',') === 'imo:9000001,mmsi:538000002,name:SEA BREEZE,imo:9000004,name:ECHO SCHED', tr.map(t => t.key));
@@ -376,6 +406,37 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
     const b3 = await r3.json();
     check('E3 a scheduled call skipped by the throttle (HTTP 200) still records that it arrived (last_cron_at moves)',
       r3.status === 200 && b3.throttled === true && Date.parse(fake.status().last_cron_at) > Date.parse(lc0) && srv.connections.length === n0, [lc0, fake.status().last_cron_at]);
+  }
+
+  // 3m — a run where the nominations carry the MMSI box: typed MMSIs drive phase A matching and the phase B filter
+  {
+    let subsM = [];
+    script = (conn) => {
+      subsM = [];
+      conn.on('message', async (raw) => {
+        subsM.push(JSON.parse(String(raw)));
+        if (subsM.length === 1) {
+          send(conn, [
+            [posMsg('636012345', 'MIKE ONE', 25.30, 56.90, T - 5 * 60000, { sog: 9 }), false],            // MMSI box of MIKE ONE (it also has an IMO)
+            [posMsg('311000999', 'MIKE TWO', 25.10, 56.80, T - 5 * 60000), false],                          // same name as an MMSI vessel → ignored
+          ]);
+        } else if (subsM.length === 2) {
+          send(conn, [[posMsg('538009876', 'MIKE TWO', 1.25, 103.8, T - 2 * 60000, { sog: 12 }), true], [posMsg('538001234', 'MIKE THREE', 10.5, 60.1, T - 3 * 60000), false]]);
+        }
+      });
+    };
+    const fake = makeFakeDb({ payload: { version: 9, state: { vessels: [
+      { nomUid: 'm1', name: 'MIKE ONE', imo: '9321483', mmsi: '636012345', area: 'FUJ-A' },
+      { nomUid: 'm2', name: 'MIKE TWO', imo: '', mmsi: '538009876', area: 'KFK-A' },
+      { nomUid: 'm3', name: 'MIKE THREE', imo: '538001234', area: 'FUJ-A' },
+    ], lastSched: [] } }, status: {} });
+    const res = await call(fake, CRON);
+    const body = await res.json();
+    const one = fake.row('636012345'), two = fake.row('538009876'), three = fake.row('538001234');
+    check('E3m MMSI box: tracked 3, all found; MIKE ONE (MMSI + IMO) matched by its MMSI in phase A', res.status === 200 && body.ok === true && body.tracked === 3 && body.found === 3 && one && one.matched_by === 'mmsi' && one.lat === 25.30, { body, one });
+    check('E3m phase B filter = the typed MMSIs not seen yet (MMSI box first, then the legacy one); the same-name ship is not stored',
+      subsM[1] && JSON.stringify(subsM[1].FiltersShipMMSI) === JSON.stringify(['538009876', '538001234']) && !fake.row('311000999'), subsM[1] && subsM[1].FiltersShipMMSI);
+    check('E3m MMSI-box and legacy vessels stored from phase B (matched_by mmsi)', two && two.matched_by === 'mmsi' && two.lat === 1.25 && three && three.matched_by === 'mmsi', { two, three });
   }
 
   // 3c — auth + CORS (+ rejections are logged)

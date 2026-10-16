@@ -137,10 +137,34 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       return r;
     });
     check('A1 IMO box with 7 digits → matched by IMO', m.n1 && m.n1.mmsi === '636012345' && m.n1.by === 'imo', m.n1);
-    check('A1 IMO box with 9 digits → matched as MMSI', m.n2 && m.n2.mmsi === '538009876' && m.n2.by === 'mmsi', m.n2);
+    check('A1 legacy: 9 digits saved in the IMO box → matched as MMSI', m.n2 && m.n2.mmsi === '538009876' && m.n2.by === 'mmsi', m.n2);
     check('A1 no IMO → matched by normalised name ("MV Sea Breeze" = "SEA BREEZE")', m.n3 && m.n3.mmsi === '477000003' && m.n3.by === 'name', m.n3);
     check('A1 a nomination WITH an IMO is never matched by name (same-name ship, other IMO ignored)', m.n4 === null, m.n4);
     check('A1 classify / normalise helpers', JSON.stringify(m.cls) === '[{"kind":"imo","value":"9873022"},{"kind":"mmsi","value":"538009876"},null]' && m.norm.join('|') === 'SEA BREEZE|OCEAN', m);
+    // The MMSI box (vessel.mmsi): tried first, then the IMO box, then a legacy 9-digit IMO box; never by name with an identifier.
+    const mm = await page.evaluate(() => {
+      const P = _ais.positions;
+      const f = v => { const x = _aisMatch(v, P); return x ? x.pos.mmsi + ':' + x.by : null; };
+      const id2 = __cid('n2'), cv = _aisCardVessel(id2);
+      return {
+        n2boxes: [document.getElementById('v' + id2 + '-imo').value, document.getElementById('v' + id2 + '-mmsi').value], n2card: [cv.imo, cv.mmsi],
+        mmsiField: f({ name: 'X', imo: '', mmsi: '538009876' }),
+        both: f({ name: 'X', imo: '9873022', mmsi: '636012345' }),
+        mmsiFirst: f({ name: 'X', imo: '9222222', mmsi: '636012345' }),
+        fallback: f({ name: 'X', imo: '9873022', mmsi: '999999999' }),
+        legacy: f({ name: 'X', imo: '538009876' }),
+        legacyLoses: f({ name: 'X', imo: '538009876', mmsi: '636012345' }),
+        noName: f({ name: 'GHOST TRADER', imo: '', mmsi: '244000099' }),
+        sevenInMmsi: f({ name: 'X', imo: '', mmsi: '9873022' }),
+        ids: [_aisIdTxt({ imo: '9111111', mmsi: '244000007' }), _aisIdTxt({ imo: '538009876' }), _aisIdTxt({ imo: '', mmsi: '' })],
+      };
+    });
+    check('A1 legacy 9-digit IMO box shows in the card\'s MMSI box and is read from there', JSON.stringify(mm.n2boxes) === '["","538009876"]' && JSON.stringify(mm.n2card) === '["","538009876"]', mm);
+    check('A1 MMSI box: matched by MMSI, ahead of the IMO box (even a different IMO); MMSI not on AIS → falls back to the IMO; 7 digits in the MMSI box count as the IMO',
+      mm.mmsiField === '538009876:mmsi' && mm.both === '636012345:mmsi' && mm.mmsiFirst === '636012345:mmsi' && mm.fallback === '636012345:imo' && mm.sevenInMmsi === '636012345:imo', mm);
+    check('A1 legacy 9 digits in the IMO box → MMSI (the MMSI box wins when both are set); an MMSI-only nomination is never matched by name',
+      mm.legacy === '538009876:mmsi' && mm.legacyLoses === '636012345:mmsi' && mm.noName === null, mm);
+    check('A1 identifier text for the card line / dashboard row', JSON.stringify(mm.ids) === JSON.stringify(['MMSI 244000007 / IMO 9111111', 'MMSI 538009876', '']), mm.ids);
 
     const a = await page.evaluate(() => {
       const out = {};
@@ -301,6 +325,18 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     });
     check('A2 editing IMO / anchorage re-matches the line (name match → flagged; distance to KFK B)',
       /matched by name/.test(ed.t1) && /to KFK B/.test(ed.t2) && /40 nm to FUJ A/.test(ed.t3), ed);
+    // the MMSI box re-matches too: GHOST TRADER (card IMO not on AIS) is found by the MMSI typed next to it
+    const mb = await page.evaluate(async () => {
+      const id = __cid('n4'), el = document.getElementById('v' + id + '-mmsi');
+      el.value = '244000007'; el.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 600));
+      const t1 = __line('n4').textContent, chip1 = (__line('n4').querySelector('.ais-chip') || {}).textContent;
+      el.value = ''; el.dispatchEvent(new Event('input', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 600));
+      return { t1, chip1, t2: __line('n4').textContent };
+    });
+    check('A2 typing an MMSI re-matches the line by MMSI (IMO not on AIS); cleared → "Not seen" for the IMO again',
+      mb.chip1 === 'Approaching' && /20 nm to FUJ A/.test(mb.t1) && !/matched by name/.test(mb.t1) && /No AIS position yet for IMO 9111111/.test(mb.t2), mb);
 
     // both looks, token colours, layout
     const looks = [];

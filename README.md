@@ -67,7 +67,9 @@ yet" on the dashboard and traders see nothing.
 > **Already set this up before?** Run `supabase_ais_setup.sql` again (it
 > only adds one column, `ais_status.last_cron_at`; nothing else changes) and
 > deploy the function again (step 4: paste the new `index.ts`, or
-> `supabase functions deploy ais-poll --no-verify-jwt`).
+> `supabase functions deploy ais-poll --no-verify-jwt`). The function must be
+> redeployed for the nomination card's **MMSI** box to be used — until then
+> it still finds ships by IMO / name, and by an MMSI typed into the IMO box.
 
 ### Set it up (about 15 minutes, once)
 
@@ -141,12 +143,29 @@ yet" on the dashboard and traders see nothing.
 
 ### What you see
 
-- **Matching:** the nomination's IMO box — 7 digits = IMO number, 9 digits =
-  MMSI (enter the MMSI when you have it: the ship is then found anywhere in
-  the world on the next run). Empty → the vessel name is used (upper-case,
-  spaces collapsed, an "MV"/"M/V"/"MT" prefix ignored, compared on the first
-  20 characters because AIS only carries 20) and the line says **matched by
-  name** — check it is the right ship.
+- **Matching:** each nomination card has an **IMO** box and an **MMSI** box
+  ("IMO Number / MMSI \*" — at least one is wanted). The MMSI is tried first
+  (the ship is then found anywhere in the world on the next run), then the
+  IMO (linked to the ship's MMSI from its static data). A 9-digit MMSI saved
+  in the IMO box by an older version shows in the MMSI box and is stored
+  there with the card's next edit. Neither → the vessel name is used
+  (upper-case, spaces collapsed, an "MV"/"M/V"/"MT" prefix ignored, compared
+  on the first 20 characters because AIS only carries 20) and the line says
+  **matched by name** — check it is the right ship.
+- **IMO / MMSI on the card:** IMO = 7 digits with a valid check digit, MMSI =
+  9 digits starting 2–7; "IMO 9321483" and spaces are accepted. A wrong
+  number turns red with the reason; with neither box valid the card says
+  *"Add an IMO or MMSI so FLOW can track the vessel"*, its header badge says
+  **ID missing** (otherwise "IMO ✓", "MMSI ✓" or both), and the nomination is
+  listed in Needs Attention and the bell (never a toast). Generate Schedule,
+  Send Nomination Email and Generate Email warn once but never block. Nine
+  digits typed into the IMO box move to the MMSI box (and 7 digits in the
+  MMSI box move to IMO when you leave it). **Look up** opens VesselFinder /
+  MarineTraffic for the IMO (or the vessel name) in a new tab, to copy the
+  MMSI from. Calling-instruction templates (text and .docx) and the e-mail
+  templates accept `{{IMO}}` and `{{MMSI}}`; the nomination / cancellation
+  e-mails list both when filled in. The import panel reads "IMO …" /
+  "MMSI …" from the pasted text and has an MMSI column.
 - **Status:** **Arrived** (within 5 nm of its anchorage/berth point and under
   1 kn, or AIS "at anchor"/"moored" within 8 nm) · **Approaching** (within
   60 nm) · **Underway** (further) · **Stale** (last position older than 6 h)

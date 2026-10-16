@@ -14,8 +14,13 @@
        and catches positions of tracked ships near Fujairah/Khor Fakkan.
        What was collected is saved at the end of phase A (checkpoint).
      Phase B (~25 s): the subscription is replaced by a worldwide box +
-       FiltersShipMMSI (the known MMSIs not yet seen, max 50) to catch
-       tracked ships that are still far away.
+       FiltersShipMMSI (the known MMSIs not yet seen, max 50 — the MMSIs
+       typed on the nomination cards first) to catch tracked ships that
+       are still far away.
+     Which ships: every nomination card (payload.state.vessels) by its
+       MMSI box (vessel.mmsi), its IMO box (vessel.imo; 9 digits there =
+       an MMSI typed before the MMSI box existed), or — with neither — its
+       name; plus schedule items that no longer have a card.
      If aisstream drops the connection mid-run the function reconnects
      once; the run then records a note ("Partial run: …") in ais_status.
      CPU (free plan: 2 s per request): messages are NOT JSON.parse'd
@@ -120,20 +125,34 @@ function normName(s) {
    characters ("MARAN GAS ALEXANDROUPOLIS" is broadcast as "MARAN GAS
    ALEXANDROU"). The app's _aisNameKey is identical. */
 function nameKey(s) { return normName(s).slice(0, AIS_NAME_LEN).trim(); }
-/* The nomination's "IMO" box: 7 digits = IMO number, 9 digits = MMSI. "IMO 9873022",
-   "MMSI: 538 001 234" are accepted. Anything else → null (the name is used instead). */
+/* One identifier box: 7 digits = IMO number, 9 digits = MMSI. "IMO 9873022",
+   "MMSI: 538 001 234" are accepted. Anything else → null. */
 function classifyId(raw) {
   const s = String(raw == null ? '' : raw).toUpperCase().replace(/(MMSI|IMO)[\s:.#-]*/g, '').replace(/[\s.\-]/g, '');
   if (/^\d{7}$/.test(s)) return { kind: 'imo', value: s };
   if (/^\d{9}$/.test(s)) return { kind: 'mmsi', value: s };
   return null;
 }
+/* A nomination's identifiers → {mmsi, imo} (null when absent). The MMSI box
+   (vessel.mmsi) first; 7 digits there count as the IMO. The IMO box
+   (vessel.imo): 7 digits = IMO; 9 digits = an MMSI typed there before the
+   MMSI box existed (used when the MMSI box is empty). The app's
+   _aisVesselIds() reads them the same way (it keeps that legacy MMSI apart
+   only to try it after the IMO). */
+function vesselIds(v) {
+  const m = classifyId(v && v.mmsi), i = classifyId(v && v.imo);
+  const imo = i && i.kind === 'imo' ? i.value : (m && m.kind === 'imo' ? m.value : null);
+  const mmsi = m && m.kind === 'mmsi' ? m.value : (i && i.kind === 'mmsi' ? i.value : null);
+  return { mmsi, imo };
+}
 /* Tracked vessels from the shared workspace payload (abps_workspace id='main'):
    the nomination cards (payload.state.vessels) plus schedule items
    (payload.state.lastSched) that no longer have a card. Schedule items carry
-   no IMO, so an item belonging to a card (same nomUid, or same name) is
-   skipped — the card's IMO / MMSI decides how that vessel is tracked. One
-   entry per IMO / MMSI / normalised name. */
+   no IMO / MMSI, so an item belonging to a card (same nomUid, or same name)
+   is skipped — the card's MMSI / IMO decides how that vessel is tracked.
+   One entry per vessel: cards sharing an MMSI or an IMO are one vessel (an
+   entry gains the other identifier from a later card); without either, one
+   entry per normalised name. key = 'mmsi:…' / 'imo:…' / 'name:…'. */
 function trackedFromPayload(payload) {
   const st = (payload && typeof payload === 'object' && payload.state && typeof payload.state === 'object') ? payload.state : {};
   const cards = (Array.isArray(st.vessels) ? st.vessels : []).filter((v) => v && typeof v === 'object');
@@ -141,26 +160,38 @@ function trackedFromPayload(payload) {
   for (const v of cards) { if (v.nomUid) cardUids.add(String(v.nomUid)); const n = nameKey(v.name); if (n) cardNames.add(n); }
   const sched = (Array.isArray(st.lastSched) ? st.lastSched : []).filter((v) => v && typeof v === 'object' &&
     !(v.nomUid && cardUids.has(String(v.nomUid))) && !cardNames.has(nameKey(v.name)));
-  const out = new Map();
+  const out = [], byId = new Map();
   for (const v of cards.concat(sched)) {
-    const id = classifyId(v.imo);
+    const ids = vesselIds(v);
     const name = normName(v.name);
-    const key = id ? id.kind + ':' + id.value : (name ? 'name:' + name : '');
-    if (!key || out.has(key)) continue;
-    out.set(key, { key, imo: id && id.kind === 'imo' ? id.value : null, mmsi: id && id.kind === 'mmsi' ? id.value : null, name: name || null });
+    const look = [];
+    if (ids.mmsi) look.push('mmsi:' + ids.mmsi);
+    if (ids.imo) look.push('imo:' + ids.imo);
+    if (!look.length && name) look.push('name:' + name);
+    if (!look.length) continue;
+    let e = null;
+    for (const k of look) { if (byId.has(k)) { e = byId.get(k); break; } }
+    if (!e) { e = { key: look[0], imo: ids.imo || null, mmsi: ids.mmsi || null, name: name || null }; out.push(e); }
+    else {
+      if (!e.mmsi && ids.mmsi && !byId.has('mmsi:' + ids.mmsi)) e.mmsi = ids.mmsi;
+      if (!e.imo && ids.imo && !byId.has('imo:' + ids.imo)) e.imo = ids.imo;
+    }
+    for (const k of look) if (!byId.has(k)) byId.set(k, e);
   }
-  return [...out.values()];
+  return out;
 }
-/* Lookup sets for one run. known: MMSI → {by, key} — tracked MMSIs plus the
-   IMO→MMSI / name→MMSI links learned in earlier runs (stored in ais_positions).
-   trackedNames is keyed by nameKey() and holds ONLY vessels without IMO/MMSI. */
+/* Lookup sets for one run. known: MMSI → {by, key} — tracked MMSIs (typed on
+   the cards) first, then the IMO→MMSI / name→MMSI links learned in earlier
+   runs (stored in ais_positions). A vessel with both an MMSI and an IMO is in
+   trackedMmsi AND trackedImo (same key). trackedNames is keyed by nameKey()
+   and holds ONLY vessels without IMO/MMSI. */
 function buildContext(tracked, existingRows) {
   const ctx = { trackedImo: new Map(), trackedMmsi: new Map(), trackedNames: new Map(), known: new Map(), keys: new Set() };
   for (const t of tracked || []) {
     ctx.keys.add(t.key);
     if (t.imo) ctx.trackedImo.set(t.imo, t.key);
-    else if (t.mmsi) ctx.trackedMmsi.set(t.mmsi, t.key);
-    else if (t.name) ctx.trackedNames.set(nameKey(t.name), t.key);
+    if (t.mmsi) ctx.trackedMmsi.set(t.mmsi, t.key);
+    if (!t.imo && !t.mmsi && t.name) ctx.trackedNames.set(nameKey(t.name), t.key);
   }
   for (const [mmsi, key] of ctx.trackedMmsi) ctx.known.set(mmsi, { by: 'mmsi', key });
   for (const r of existingRows || []) {
@@ -182,18 +213,20 @@ function buildSubscription(apiKey, phase, opts) {
   const max = opts.max || DEFAULTS.maxMmsiFilter;
   return { APIKey: apiKey, BoundingBoxes: [WORLD_BOX], FiltersShipMMSI: (opts.mmsi || []).map(String).slice(0, max), FilterMessageTypes: PHASE_B_TYPES.slice() };
 }
-/* Phase B filter: known MMSIs with no position yet this run; those whose
-   vessel is already found through another MMSI (same name) go last. */
+/* Phase B filter: known MMSIs with no position yet this run — the MMSIs typed
+   on the cards first, then those learned from IMO / name; MMSIs whose vessel
+   is already found through another MMSI (same name / IMO) go last. */
 function pickPhaseBMmsis(ctx, obs, max) {
   const foundKeys = new Set();
   for (const r of obs.values()) if (r.position_time != null) foundKeys.add(r.key);
-  const a = [], b = [];
+  const typed = [], learned = [], b = [];
   for (const [mmsi, m] of ctx.known) {
     const r = obs.get(mmsi);
     if (r && r.position_time != null) continue;
-    (foundKeys.has(m.key) ? b : a).push(mmsi);
+    if (foundKeys.has(m.key)) b.push(mmsi);
+    else (ctx.trackedMmsi.has(mmsi) ? typed : learned).push(mmsi);
   }
-  return a.concat(b).slice(0, max || DEFAULTS.maxMmsiFilter);
+  return typed.concat(learned, b).slice(0, max || DEFAULTS.maxMmsiFilter);
 }
 /* How long phases A and B may run when collecting can last `leftMs` more:
    phase B is cut first, then phase A. */
@@ -749,7 +782,7 @@ async function handleRequest(req, deps) {
 
 const AIS = {
   DEFAULTS, WORLD_BOX, CORS, POSITION_TYPES, PHASE_A_TYPES, PHASE_B_TYPES, ROW_COLUMNS, AIS_NAME_LEN, ACTIVE_RUNS,
-  normName, nameKey, classifyId, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
+  normName, nameKey, classifyId, vesselIds, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
   scanDigits, scanString, prefilter, parseAisTime, parsePosition, parseStatic, formatAisEta,
   observe, mergeRow, pruneList, messageText, countFound, collect, runPoll, interruptRuns, safeEqual, authorize, claimRun, markCronCall,
   parseBox, makeConfig, handleRequest,
