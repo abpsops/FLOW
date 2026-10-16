@@ -24649,13 +24649,14 @@ const AIS_CFG = {
   nearNm: 3,           // within 3 nm and moving (manoeuvring, or leaving after supply): no estimate, no warning
   waitNm: 15,          // slower than waitSog within 15 nm = waiting / drifting off the port (OPL): no estimate, no warning
   waitSog: 3,
+  farNm: 150,          // further than this, a moving ship gets a "at current speed" time even if its course doesn't point at the port yet (routes bend around coasts)
   staleHrs: 6,         // Stale: last position older than 6 h
   lateHrs: 2,          // amber warning: AIS estimate > 2 h after the ETA (frame END for a time frame)
   feedDownHrs: 24,     // no successful update for this long → hide per-vessel lines / warnings
   cronLateMin: 25,     // operators warned when the last scheduled run is older than this
   pollMs: 120000,      // re-read the tables every 2 min while visible
   refreshPollMs: 10000,     // after "Refresh now": check ais_status every 10 s …
-  refreshTimeoutMs: 150000, // … for up to 2½ min
+  refreshTimeoutMs: 120000, // … for up to 2 min
 };
 const AIS_NAME_LEN = 20; // AIS carries at most 20 characters of a ship's name
 const AIS_STATUS_LABEL = { arrived: 'Arrived', approaching: 'Approaching', underway: 'Underway', stale: 'Stale', notseen: 'Not seen' };
@@ -24801,7 +24802,13 @@ function _aisAssess(v, m, now) {
     // tell the operator a ship pointed at the port is leaving it.
     out.course = off > AIS_CFG.courseTolDeg ? 'away' : (sog * Math.cos(off * Math.PI / 180) >= AIS_CFG.movingSog ? 'toward' : 'slow');
   }
-  if (out.course === 'away' || out.course === 'slow') return out; // heading away / not really closing: no estimate, no warning
+  if (out.course === 'away' || out.course === 'slow') {
+    // Far out, a course that doesn't point at the port yet usually just means the
+    // route still bends around a coast: give the plain time at current speed
+    // (no warning is ever raised from it).
+    if (out.distNm > AIS_CFG.farNm) out.estSpeed = new Date(tPos + out.distNm / sog * 3600000);
+    return out; // heading away / not really closing: no estimate, no warning
+  }
   out.est = new Date(tPos + out.distNm / Math.max(sog, 1) * 3600000);
   const etaEnd = (v && v.etaEnd instanceof Date && !isNaN(v.etaEnd.getTime())) ? v.etaEnd : null;
   const lcTo = (v && v.lcTo instanceof Date && !isNaN(v.lcTo.getTime())) ? v.lcTo : null;
@@ -24883,6 +24890,38 @@ function _aisCourseTxt(a) {
   if (a.course === 'near') return 'moving within 3 nm of ' + where;
   if (a.course === 'waiting') return 'slow / waiting near ' + where;
   return '';
+}
+/* Current position as text + a rough sea-area name (approximate boxes, first match wins). */
+const AIS_SEA_AREAS = [
+  ['off Fujairah / Khor Fakkan', 24.9, 25.7, 56.2, 56.9],
+  ['Strait of Hormuz', 25.7, 27.2, 55.8, 57.2],
+  ['Gulf of Oman', 22.3, 26.6, 56.3, 61.6],
+  ['Persian Gulf', 23.5, 30.6, 47.5, 56.6],
+  ['Gulf of Aden', 10.5, 15.5, 43.0, 51.5],
+  ['Red Sea', 12.5, 30.0, 32.0, 43.5],
+  ['Arabian Sea', 5.0, 25.6, 51.5, 75.0],
+  ['Bay of Bengal', 5.0, 23.0, 79.0, 95.0],
+  ['Malacca / Singapore Strait', -1.5, 6.5, 95.0, 105.0],
+  ['South China Sea', -1.0, 23.0, 105.0, 121.0],
+  ['Mediterranean', 30.0, 46.0, -6.0, 36.0],
+  ['Indian Ocean', -45.0, 5.0, 35.0, 110.0],
+];
+function _aisSeaArea(lat, lon) {
+  for (let i = 0; i < AIS_SEA_AREAS.length; i++) {
+    const a = AIS_SEA_AREAS[i];
+    if (lat >= a[1] && lat <= a[2] && lon >= a[3] && lon <= a[4]) return a[0];
+  }
+  return '';
+}
+function _aisPosFact(p) {
+  if (!_aisHasPos(p)) return '';
+  const lat = +p.lat, lon = +p.lon;
+  if (!isFinite(lat) || !isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return '';
+  const txt = Math.abs(lat).toFixed(2) + '°' + (lat >= 0 ? 'N' : 'S') + ' ' + Math.abs(lon).toFixed(2) + '°' + (lon >= 0 ? 'E' : 'W');
+  const area = _aisSeaArea(lat, lon);
+  const url = 'https://www.openstreetmap.org/?mlat=' + lat.toFixed(4) + '&mlon=' + lon.toFixed(4) + '#map=8/' + lat.toFixed(4) + '/' + lon.toFixed(4);
+  return '<span class="ais-fact" title="Current position (last AIS fix)' + (area ? ' — area is approximate' : '') + '">📍 ' + (area ? esc(area) + ' · ' : '') +
+    '<a href="' + url + '" target="_blank" rel="noopener">' + txt + '</a></span>';
 }
 function _aisLinks(p) {
   if (!p) return '';
@@ -24979,9 +25018,11 @@ function _aisCardLineHtml(x) {
     parts.push(_aisLinks(p));
     return parts.join('');
   }
-  parts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point)"><b>' + _aisNm(a.distNm) + '</b> to ' + esc(areaShort(a.ref.key)) + '</span>');
+  parts.push(_aisPosFact(p));
+  parts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point) — the sea route can be longer"><b>' + _aisNm(a.distNm) + '</b> left to ' + esc(areaShort(a.ref.key)) + '</span>');
   parts.push('<span class="ais-fact"><b>' + _aisKn(a.sog) + '</b></span>');
   if (a.est) parts.push('<span class="ais-fact" title="Time of the last position + distance ÷ speed">AIS arrival <b>~' + _aisWhen(a.est) + '</b></span>');
+  else if (a.estSpeed) parts.push('<span class="ais-fact" title="Distance ÷ current speed — the course doesn\'t point at the port yet, so treat it as a rough guide">at current speed <b>~' + _aisWhen(a.estSpeed) + '</b></span>');
   else if (_aisCourseTxt(a)) parts.push('<span class="ais-fact">' + esc(_aisCourseTxt(a)) + '</span>');
   if (p.destination) parts.push('<span class="ais-fact ais-wrap">Dest. ' + esc(p.destination) + '</span>');
   if (p.ais_eta) parts.push(_aisEtaFact(p.ais_eta));
@@ -25059,7 +25100,7 @@ function renderDashAis() {
   if (!show) { body.innerHTML = ''; sub.textContent = ''; return; }
   if (_ais.state === 'loading') { sub.textContent = 'Loading live positions…'; body.innerHTML = ''; return; }
   const st = _ais.status || {};
-  const refreshing = _ais.refresh ? 'Refreshing… (about 1½ minutes)' : '';
+  const refreshing = _ais.refresh ? 'Refreshing… (about 1 minute)' : '';
   if (!configured) {
     sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
     body.innerHTML = _ais.state === 'error'
@@ -25103,10 +25144,11 @@ function renderDashAis() {
   body.innerHTML = '<div class="ais-list">' + infos.map(function(x) {
     const a = x.a, v = x.v, p = a.pos;
     const facts = [];
-    if (a.distNm != null) facts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point)"><b>' + _aisNm(a.distNm) + '</b> to ' + esc(areaShort(a.ref.key)) + '</span>');
+    if (p && a.status !== 'notseen') { const pf = _aisPosFact(p); if (pf) facts.push(pf); }
+    if (a.distNm != null) facts.push('<span class="ais-fact" title="Straight-line distance to ' + esc(a.ref.label) + ' (approximate point) — the sea route can be longer"><b>' + _aisNm(a.distNm) + '</b> left to ' + esc(areaShort(a.ref.key)) + '</span>');
     if (a.status !== 'notseen') facts.push('<span class="ais-fact"><b>' + _aisKn(a.sog) + '</b></span>');
     const etaTxt = _aisEtaTxt(v);
-    if (a.est || etaTxt) facts.push('<span class="ais-fact">' + (a.est ? 'AIS <b>~' + _aisWhen(a.est) + '</b>' + (etaTxt ? ' · ' : '') : (_aisCourseTxt(a) ? esc(_aisCourseTxt(a)) + (etaTxt ? ' · ' : '') : '')) + (etaTxt ? 'ETA ' + esc(etaTxt) : '') + '</span>');
+    if (a.est || a.estSpeed || etaTxt) facts.push('<span class="ais-fact">' + (a.est ? 'AIS <b>~' + _aisWhen(a.est) + '</b>' + (etaTxt ? ' · ' : '') : a.estSpeed ? 'at current speed <b>~' + _aisWhen(a.estSpeed) + '</b>' + (etaTxt ? ' · ' : '') : (_aisCourseTxt(a) ? esc(_aisCourseTxt(a)) + (etaTxt ? ' · ' : '') : '')) + (etaTxt ? 'ETA ' + esc(etaTxt) : '') + '</span>');
     if (a.ageMs != null) facts.push('<span class="ais-fact">' + _aisAgoSpan('seen ', p && p.position_time) + '</span>');
     else facts.push('<span class="ais-fact">' + (p ? 'identified, no position yet' : 'no AIS position yet') + '</span>');
     facts.push(_aisLinks(p));
@@ -25355,7 +25397,7 @@ async function aisRefreshNow() {
     return;
   }
   if (data.started || data.running) {
-    showToast(data.running ? 'A live position update is already running — the list updates when it finishes.' : 'Fetching live positions — this takes about 1½ minutes. The list updates by itself.', 'info', 6000);
+    showToast(data.running ? 'A live position update is already running — the list updates when it finishes.' : 'Fetching live positions — this takes about 1 minute. The list updates by itself.', 'info', 6000);
     _aisRefreshWait();
     return;
   }
