@@ -1,0 +1,433 @@
+/* "Last known position" — a position report pasted from the ship's public page
+   (MyShipTracking / VesselFinder / MarineTraffic), a noon report or an agent's
+   message, stored on the nomination as vessel.posRpt.
+   node report.test.js [appDir] [only] [shotDir]   (or $SHOTS_DIR for screenshots) */
+const fs = require('fs');
+const path = require('path');
+const H = require(path.join(__dirname, '..', '..', 'harness', 'harness.js'));
+const U = require(path.join(__dirname, '..', 'r3', 'util.js'));
+const appDir = process.argv[2] || H.APP_DIR;
+const only = process.argv[3] || '';
+const SHOTS = process.argv[4] || process.env.SHOTS_DIR || '';
+
+let pass = 0, fail = 0;
+function check(name, cond, info) {
+  cond ? pass++ : fail++;
+  console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond || info === undefined ? '' : '  -> ' + JSON.stringify(info).slice(0, 900)));
+}
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const HR = 3600000, MIN = 60000;
+const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const p2 = n => String(n).padStart(2, '0');
+// "16 Oct 2026 08:00" in Asia/Dubai (UTC+4) — the app's ETA format (the harness runs the page in Dubai time)
+function dubai(ms) { const d = new Date(ms + 4 * HR); return p2(d.getUTCDate()) + ' ' + MO[d.getUTCMonth()] + ' ' + d.getUTCFullYear() + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()); }
+// "2026-10-15 20:28" in UTC (MyShipTracking's format)
+function utcTxt(ms) { const d = new Date(ms); return d.getUTCFullYear() + '-' + p2(d.getUTCMonth() + 1) + '-' + p2(d.getUTCDate()) + ' ' + p2(d.getUTCHours()) + ':' + p2(d.getUTCMinutes()); }
+const iso = ms => new Date(ms).toISOString();
+const clone = x => JSON.parse(JSON.stringify(x));
+
+function vessel(o) {
+  return Object.assign({ nomUid: '', name: '', imo: '', area: 'FUJ-A', type: 'VLSFO', qty: 500, mgo: 0, spec: 'ISO 8217:2010', agent: '', manifold: 'VESSEL MANIFOLD', remarks: '', lc: '', eta: '', paq: 'yes', bargeId: '', refuelChk: false, rfv: 0, rfm: 0, rfvr: 750, rfmr: 275 }, o);
+}
+function scene(now) {
+  return [
+    vessel({ nomUid: 'n1', name: 'SEA VALIANT', imo: '9420629', mmsi: '538009850', area: 'FUJ-A', eta: dubai(now + 60 * HR), lc: dubai(now - 24 * HR).slice(0, 11) + ' - ' + dubai(now + 120 * HR).slice(0, 11) }),
+    vessel({ nomUid: 'n2', name: 'CMA CGM DAKAR', imo: '9448827', mmsi: '248222000', area: 'FUJ-A', eta: dubai(now + 20 * HR) }),
+    vessel({ nomUid: 'n3', name: 'SEA VALIANT', imo: '9420629', area: 'KFK-A', eta: dubai(now + 70 * HR), type: 'MGO', qty: 0, mgo: 100 }),
+    vessel({ nomUid: 'n4', name: 'OCEAN PEARL', imo: '9873022', area: 'FUJ-A', eta: dubai(now + 5 * HR) }),
+    vessel({ nomUid: 'n5', name: 'REIMEI', imo: '', area: 'FUJ-A', eta: dubai(now + 30 * HR) }),
+  ];
+}
+function aisData(now) {
+  return {
+    positions: [{ mmsi: '636012345', imo: '9873022', name: 'OCEAN PEARL', lat: 25.0, lon: 56.9, sog: 10, cog: 290, heading: 290, nav_status: 0, destination: 'FUJAIRAH', ais_eta: null, matched_by: 'imo', position_time: iso(now - 8 * MIN), updated_at: iso(now - 5 * MIN) }],
+    status: { last_run_at: iso(now - 2 * MIN), last_ok_at: iso(now - 2 * MIN), last_cron_at: iso(now - 2 * MIN), running_since: null, ok: true, tracked: 5, found: 1, messages: 900, error: null, duration_ms: 90000 },
+  };
+}
+// The page texts (as copied with Ctrl+A / Ctrl+C), relative to `now`.
+function mstPage(now, o) {
+  o = o || {};
+  return `MyShipTracking   Vessels   Ports
+SEA VALIANT
+The current position of ${o.name || 'SEA VALIANT'} is in Arabian Sea with coordinates ${o.lat || '19.27129'}° / ${o.lon || '65.06209'}° as reported on ${utcTxt(o.at || now - 2 * HR)} by AIS to our vessel tracker app. The vessel's current speed is ${o.sog || '11.5'} Knots and is heading at the port of ${o.dest || 'FUJAIRAH'}.
+The vessel ${o.name || 'SEA VALIANT'} (IMO: ${o.imo || '9420629'}, MMSI: ${o.mmsi || '538009850'}) is a Bulk Carrier that was built in 2010 ( 16 years old ). It's sailing under the flag of [MH] Marshall Islands.
+Vessel Info
+Status\tActive
+Current Trip
+SOHAR
+OMSOH
+ATD
+2026-10-12
+07:20 (UTC)
+FUJAIRAH
+AEFJR
+ETA*
+${utcTxt(o.eta || now + 50 * HR).replace(' ', '\n')} (UTC)
+Current Position
+Longitude\t---
+Latitude\t---
+Status\tUnder way using engine
+Speed\t11.5 Knots
+Course\t302°
+Area\tArabian Sea
+Station\tT-AIS
+Position Received\t2 h ago
+Events
+2026-10-12 08:01
+Status Changed
+At anchor
+Under way using engine`;
+}
+const VF_TEXT = `VesselFinder  Vessels  Ports
+The current position of CMA CGM DAKAR is at Gulf of Oman reported 3 hours ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 0.4 knots and expected to arrive there on Oct 17, 08:00.
+The vessel CMA CGM DAKAR (IMO 9448827, MMSI 248222000) is a Container Ship built in 2009 (17 years old) and currently sailing under the flag of Malta.
+Navigation Status  Under way using engine    Position received  3 hours ago`;
+
+const TOAST_LOG = () => {
+  window.__toastLog = [];
+  document.addEventListener('DOMContentLoaded', () => {
+    const st = document.getElementById('toast-stack');
+    if (st) new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => {
+      const t = n.querySelector && n.querySelector('.toast-msg');
+      if (t) window.__toastLog.push({ m: t.textContent, type: (n.className.match(/toast-(\w+)/) || [])[1] });
+    }))).observe(st, { childList: true });
+  });
+};
+const PAGE_HELPERS = () => {
+  window.__cid = nomUid => { const c = [...document.querySelectorAll('.vcard[id^="vessel-"]')].find(x => x.dataset.nomUid === nomUid); return c ? c.id.replace('vessel-', '') : null; };
+  window.__panel = nomUid => document.getElementById('v' + __cid(nomUid) + '-prpt');
+  window.__dlg = k => document.querySelector('.prd-ov [data-prd="' + k + '"]');
+  window.__paste = async text => { const t = __dlg('text'); t.value = text; t.dispatchEvent(new Event('input', { bubbles: true })); await new Promise(r => setTimeout(r, 250)); };
+  window.__setF = (k, val) => { const el = __dlg(k); el.value = val; el.dispatchEvent(new Event(el.tagName === 'SELECT' ? 'change' : 'input', { bubbles: true })); };
+  window.__toasts = () => (window.__toastLog || []).map(t => t.m);
+  window.__cells = nomUid => { const o = {}; (__panel(nomUid) ? __panel(nomUid).querySelectorAll('.prpt-cell') : []).forEach(c => { o[c.querySelector('.prpt-k').textContent] = c.querySelector('.prpt-v').textContent.replace(/\s+/g, ' ').trim(); }); return o; };
+};
+async function open(browser, db, uid, extra) {
+  const app = await H.openApp(browser, db, Object.assign({ appDir, uid: uid || 'user-operator', beforeLoad: async (ctx, page) => { await page.addInitScript(TOAST_LOG); } }, extra || {}));
+  await app.page.evaluate(PAGE_HELPERS);
+  await app.page.waitForFunction(() => typeof _ais !== 'undefined' && (_ais.state === 'ready' || _ais.state === 'missing' || _ais.state === 'error' || _ais.state === 'idle') && !_ais.loading, null, { timeout: 15000 });
+  return app;
+}
+function realErrors(app) { return app.errors.filter(e => !/capacitorExports/.test(e)); }
+async function scenario(browser, name, fn) {
+  if (only && !name.includes(only)) return;
+  console.log('— ' + name);
+  const apps = [];
+  const openT = async (db, uid, extra) => { const a = await open(browser, db, uid, extra); apps.push(a); return a; };
+  try { await fn(openT); } catch (e) { check(name + ' (threw)', false, String(e && e.stack || e).split('\n').slice(0, 5).join(' | ')); }
+  const errs = [].concat(...apps.map(realErrors));
+  check(name + ': no page errors', errs.length === 0, errs.slice(0, 3));
+  for (const a of apps) await a.ctx.close();
+}
+const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS, { recursive: true }); await locOrPage.screenshot({ path: path.join(SHOTS, file) }); };
+const vOf = (db, nomUid) => U.row(db).payload.state.vessels.find(v => v.nomUid === nomUid);
+async function scrollTo(page, sel, off) {
+  await page.evaluate(([s, o]) => { document.querySelectorAll('#toast-stack .toast').forEach(t => t.remove()); const el = document.querySelector(s); const hb = document.getElementById('topbar'); window.scrollTo({ top: el.getBoundingClientRect().top + scrollY - (hb ? hb.getBoundingClientRect().bottom : 0) - (o || 8), behavior: 'instant' }); }, [sel, off]);
+  await sleep(250);
+}
+
+(async () => {
+  const browser = await H.launch();
+
+  /* 1 — the parser (pure) */
+  await scenario(browser, 'R1 parser', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: [] }) });
+    const { page } = await openT(db, 'user-operator');
+    const now = Date.parse('2026-10-16T08:00:00Z');
+    const r = await page.evaluate(([now, mst]) => {
+      const P = t => { const p = _prParse(t, now); return Object.assign({}, p, { eta: p.eta == null ? null : new Date(p.eta).toISOString(), at: p.at == null ? null : new Date(p.at).toISOString(), arrAt: p.arrAt == null ? null : new Date(p.arrAt).toISOString() }); };
+      return {
+        mst: P(mst),
+        mstProse: P('The current position of EAGLE HALIFAX is in Gulf of Mexico with coordinates 29.35138° / -94.78444° as reported on 2026-10-15 20:28 by AIS to our vessel tracker app. The vessel\'s current speed is 12.6 Knots and is heading at the port of HOUSTON.'),
+        vfA: P('The current position of EPOS is at Arabian Sea reported 6 days ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 12.1 knots and expected to arrive there on Oct 10, 21:30.\nThe vessel EPOS (IMO 9687588, MMSI 636092814) is a Crude Oil Tanker built in 2015'),
+        vfArr: P('The current position of X is at Gulf of Oman reported 3 hours ago by AIS. The vessel arrived at the port of Khor al Fakkan Anch., United Arab Emirates (UAE) on Sep 10, 19:32 UTC.\nNavigation Status  Moored    Position received  6 hours ago'),
+        vfTable: P('Predicted ETA  -    Distance / Time  -    Course / Speed  67.7° / 0.4 kn    Current draught  11.5 m\nNavigation Status  Moored    Position received  6 hours ago\nDestination  Los Angeles, United States (USA)   ATA: Apr 12, 14:29 UTC   |   ETA: Apr 9, 23:00   |   ATD: Jun 7, 21:44 UTC\nVesselFinder'),
+        mt: P('MarineTraffic SEA VALIANT\nNavigational Status: Under way using engine\nSpeed/Course: 11.5 kn / 213°\nLatitude / Longitude: 19.27129° / 65.06209°\nPosition Received: 2 hours ago\nDestination: FUJAIRAH\nReported ETA: 2026-10-18 23:00 (UTC)'),
+        noon: P('Noon report 16/10: Pos 19-16.3N 065-03.7E, course 300, speed 11.5 kts, ETA Fujairah 18th Oct 2300 UTC, ROB fine'),
+        noon2: P('MV SEA VALIANT noon position LAT 19°16\'N LONG 065°03\'E avg spd 11.2 kn ETA FUJ 18/2300 UTC'),
+        agent: P('Vessel anchored at Fujairah OPL since 15th Oct 0800 hrs, position 25 10.2N 056 27.6E'),
+        nothing: P('hello world, nothing here'),
+        empty: P(''),
+        future: P('The current position of X is in Arabian Sea with coordinates 19.1° / 65.1° as reported on 2026-10-20 10:00 by AIS'),
+        coords: [_prCoord1("19°16.3'N", 'lat'), _prCoord1('065-03.7E', 'lon'), _prCoord1('1916N', 'lat'), _prCoord1('06503E', 'lon'), _prCoord1('-19.27', 'lat'), _prCoord1('19.27 E', 'lat'), _prCoord1('91', 'lat'), _prCoord1('19 61N', 'lat'), _prCoord1("19°16'12\"S", 'lat'), _prCoord1('S 19.5', 'lat')],
+      };
+    }, [now, mstPage(now, { eta: Date.parse('2026-10-18T10:00:00Z'), at: Date.parse('2026-10-16T06:00:00Z') })]);
+    const m = r.mst;
+    check('R1 MyShipTracking page: source, ship, exact position, area, status, speed, course, destination, ETA (UTC), reported (UTC)',
+      m.src === 'mst' && m.name === 'SEA VALIANT' && m.imo === '9420629' && m.mmsi === '538009850' && m.lat === 19.27129 && m.lon === 65.06209 && m.area === 'Arabian Sea' &&
+      m.nav === 'Under way' && m.sog === 11.5 && m.cog === 302 && m.dest === 'FUJAIRAH' && m.eta === '2026-10-18T10:00:00.000Z' && m.at === '2026-10-16T06:00:00.000Z' && m.atApprox === false, m);
+    check('R1 …"Status Active" (registry) and the event list ("Status Changed / At anchor") are not taken as the AIS status', m.nav === 'Under way', m.nav);
+    check('R1 MyShipTracking prose alone (negative longitude)', r.mstProse.lat === 29.35138 && r.mstProse.lon === -94.78444 && r.mstProse.dest === 'HOUSTON' && r.mstProse.sog === 12.6 && r.mstProse.at === '2026-10-15T20:28:00.000Z', r.mstProse);
+    check('R1 VesselFinder prose: sea area only (no coordinates on the free page), destination without the country, ETA year inferred, "6 days ago" → approximate time',
+      r.vfA.src === 'vf' && r.vfA.lat === null && r.vfA.area === 'Arabian Sea' && r.vfA.dest === 'Fujairah' && r.vfA.sog === 12.1 && r.vfA.eta === '2026-10-10T21:30:00.000Z' &&
+      r.vfA.at === '2026-10-10T08:00:00.000Z' && r.vfA.atApprox === true && r.vfA.imo === '9687588' && r.vfA.mmsi === '636092814', r.vfA);
+    check('R1 VesselFinder "arrived at the port of …" + table status / "Position received 6 hours ago"',
+      r.vfArr.arr === 'Khor al Fakkan Anch.' && r.vfArr.arrAt === '2026-09-10T19:32:00.000Z' && r.vfArr.nav === 'Moored' && r.vfArr.atApprox && r.vfArr.at === '2026-10-16T05:00:00.000Z', r.vfArr);
+    check('R1 VesselFinder table: Course / Speed, Destination label, ETA label', r.vfTable.cog === 67.7 && r.vfTable.sog === 0.4 && r.vfTable.dest === 'Los Angeles' && r.vfTable.nav === 'Moored' && r.vfTable.eta != null, r.vfTable);
+    check('R1 MarineTraffic-style labels: status, speed/course, lat/lon, destination, reported ETA',
+      r.mt.src === 'mt' && r.mt.nav === 'Under way' && r.mt.sog === 11.5 && r.mt.cog === 213 && r.mt.lat === 19.27129 && r.mt.lon === 65.06209 && r.mt.dest === 'FUJAIRAH' && r.mt.eta === '2026-10-18T23:00:00.000Z' && r.mt.atApprox, r.mt);
+    check('R1 noon reports: degrees-minutes positions, speed, "ETA Fujairah 18th Oct 2300 UTC" / "ETA FUJ 18/2300 UTC"',
+      r.noon.src === 'report' && r.noon.lat === 19.27167 && r.noon.lon === 65.06167 && r.noon.sog === 11.5 && r.noon.dest === 'Fujairah' && r.noon.eta === '2026-10-18T23:00:00.000Z' && r.noon.at === null &&
+      r.noon2.lat === 19.26667 && r.noon2.lon === 65.05 && r.noon2.sog === 11.2 && r.noon2.dest === 'FUJ' && r.noon2.eta === '2026-10-18T23:00:00.000Z', [r.noon, r.noon2]);
+    check('R1 agent message: "anchored" + "25 10.2N 056 27.6E"; area named from the position', r.agent.nav === 'At anchor' && r.agent.lat === 25.17 && r.agent.lon === 56.46 && r.agent.area === 'off Fujairah / Khor Fakkan', r.agent);
+    check('R1 nothing recognised → empty result (never throws)', r.nothing.found.length === 0 && r.nothing.lat === null && r.empty.found.length === 0, [r.nothing, r.empty]);
+    check('R1 a report time in the future is not trusted', r.future.at === null && r.future.lat === 19.1, r.future);
+    check('R1 coordinates: DM / DDMM / signed / wrong axis / out of range / 61 minutes / DMS south / "S 19.5"',
+      JSON.stringify(r.coords) === JSON.stringify([19.27167, 65.06167, 19.26667, 65.05, -19.27, null, null, null, -19.27, -19.5]), r.coords);
+  });
+
+  /* 2 — the card: prompt, dialog, paste, save, the same ship's other card, payload */
+  await scenario(browser, 'R2 card + dialog', async (openT) => {
+    const now = Date.now();
+    const seed = U.seedPayload({ vessels: scene(now) });
+    const db = H.createDb({ workspace: seed, ais: aisData(now), realtime: false });
+    const before = clone(seed.state.vessels);
+    const { page } = await openT(db, 'user-operator');
+    await page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    const p0 = await page.evaluate(() => ['n1', 'n2', 'n3', 'n4', 'n5'].map(n => ({ n, show: __panel(n).classList.contains('show'), txt: __panel(n).textContent.replace(/\s+/g, ' ').trim() })));
+    check('R2 no report yet: a one-line "Last known position — not added yet" prompt on cards AIS has not seen',
+      ['n1', 'n2', 'n3', 'n5'].every(n => { const x = p0.find(y => y.n === n); return x.show && /Last known position\s*not added yet\s*\+ Add from MyShipTracking \/ VesselFinder/.test(x.txt); }), p0);
+    check('R2 …but none on a card with a fresh live AIS position (OCEAN PEARL)', !p0.find(x => x.n === 'n4').show, p0.find(x => x.n === 'n4'));
+    await page.evaluate(() => __panel('n1').querySelector('.prpt-btn').click());
+    await sleep(150);
+    const d0 = await page.evaluate(() => ({
+      title: document.getElementById('prd-title').textContent,
+      links: [...document.querySelectorAll('.prd-ov [data-prd-link]')].map(a => a.getAttribute('data-prd-link') + '=' + a.href + '|' + a.target + '|' + a.rel),
+      focus: document.activeElement === __dlg('text'), modal: document.querySelector('.prd').getAttribute('aria-modal'), remove: !!__dlg('remove'),
+    }));
+    check('R2 dialog: title, links to the ship\'s pages (MyShipTracking by MMSI+IMO, VesselFinder by IMO, MarineTraffic by MMSI) in a new tab, focus in the paste box',
+      d0.title === 'Last known position — SEA VALIANT' && d0.focus && d0.modal === 'true' && !d0.remove &&
+      d0.links.join(',') === 'mst=https://www.myshiptracking.com/vessels/mmsi-538009850-imo-9420629|_blank|noopener,vf=https://www.vesselfinder.com/vessels/details/9420629|_blank|noopener,mt=https://www.marinetraffic.com/en/ais/details/ships/mmsi:538009850|_blank|noopener', d0);
+    const atMs = Math.floor((now - 2 * HR) / MIN) * MIN, etaMs = Math.floor((now + 50 * HR) / MIN) * MIN;
+    await page.evaluate(t => __paste(t), mstPage(now, { at: atMs, eta: etaMs }));
+    const d1 = await page.evaluate(() => ({
+      found: __dlg('found').textContent, warn: __dlg('warn').hidden,
+      f: ['lat', 'lon', 'area', 'nav', 'sog', 'cog', 'dest', 'eta', 'at', 'src'].map(k => __dlg(k).value), calc: __dlg('calc').textContent,
+    }));
+    check('R2 paste: "Found position, status, speed, heading to, ETA, reported time — from MyShipTracking", no wrong-ship warning',
+      /^Found position, status, speed, heading to, ETA, reported time — from MyShipTracking\.$/.test(d1.found) && d1.warn, d1);
+    check('R2 …fields filled for checking (local times)', JSON.stringify(d1.f) === JSON.stringify(['19.27129 N', '65.06209 E', 'Arabian Sea', 'Under way', '11.5', '302', 'FUJAIRAH', await page.evaluate(t => _prFmtLocal(t), etaMs), await page.evaluate(t => _prFmtLocal(t), atMs), 'mst']), d1.f);
+    check('R2 …preview of distance left and expected arrival', /^→ [\d,]+ nm left to FUJ A · expected arrival ~\d+ \w{3} \d\d:\d\d at 11\.5 kn/.test(d1.calc), d1.calc);
+    if (SHOTS) await shot(page.locator('.prd'), 'report-dialog.png');
+    const w0 = U.writes(db, 'user-operator').length;
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(900);
+    const c1 = await page.evaluate(() => ({ open: !!document.querySelector('.prd-ov'), cells: __cells('n1'), hd: __panel('n1').querySelector('.prpt-hd').textContent.replace(/\s+/g, ' ').trim(), n3: __cells('n3'), toasts: __toasts(), focusBtn: document.activeElement && document.activeElement.classList.contains('prpt-btn') }));
+    check('R2 saved: dialog closed, card shows the table: Last position, Status / speed, Heading to, ETA, Reported, Distance left, Expected arrival',
+      !c1.open && /^📍 Arabian Sea · 19\.27°N 65\.06°E$/.test(c1.cells['Last position']) && c1.cells['Status / speed'] === 'Under way · 11.5 kn' && c1.cells['Heading to'] === 'FUJAIRAH' &&
+      /^\d+ \w{3} \d\d:\d\d$/.test(c1.cells['ETA']) && /^\d+ \w{3} \d\d:\d\d · 2 h ago$/.test(c1.cells['Reported']) && /^[\d,]+ nm to FUJ A$/.test(c1.cells['Distance left']) && /^~\d+ \w{3} \d\d:\d\d at 11\.5 kn$/.test(c1.cells['Expected arrival']), c1);
+    check('R2 header: label, status chip (Underway — far from the port), source, Update', /^Last known position\s*Underway\s*from MyShipTracking\s*Update$/.test(c1.hd), c1.hd);
+    const distN1 = parseFloat(c1.cells['Distance left'].replace(/,/g, ''));
+    check('R2 distance 19.27N 65.06E → FUJ A ≈ 600 nm (great circle)', distN1 > 580 && distN1 < 620, distN1);
+    check('R2 the other nomination of the same ship (same IMO) got the same report — distance to ITS anchorage (KFK A)', /^[\d,]+ nm to KFK A$/.test(c1.n3['Distance left'] || '') && c1.n3['Heading to'] === 'FUJAIRAH', c1.n3);
+    check('R2 toast says so', c1.toasts.some(t => /^Last known position saved \(also on 1 other nomination for the same ship\)\.$/.test(t)), c1.toasts);
+    const v1 = vOf(db, 'n1'), v3 = vOf(db, 'n3');
+    check('R2 one save; vessel.posRpt stored with only the set fields, ISO times and an updatedAt stamp',
+      U.writes(db, 'user-operator').length === w0 + 1 && v1.posRpt && v1.posRpt.src === 'mst' && v1.posRpt.lat === 19.27129 && v1.posRpt.lon === 65.06209 && v1.posRpt.nav === 'Under way' && v1.posRpt.sog === 11.5 && v1.posRpt.cog === 302 &&
+      v1.posRpt.dest === 'FUJAIRAH' && v1.posRpt.eta === iso(etaMs) && v1.posRpt.at === iso(atMs) && !('atApprox' in v1.posRpt) && typeof v1.posRpt.updatedAt === 'number' && v1.posRpt.by === 'user-operator@test' && JSON.stringify(v3.posRpt) === JSON.stringify(v1.posRpt), v1.posRpt);
+    const others = ['n2', 'n4', 'n5'].map(n => vOf(db, n));
+    check('R2 vessels without a report: no posRpt key, otherwise byte-identical', others.every((v, i) => !('posRpt' in v) && JSON.stringify(v) === JSON.stringify(before.find(b => b.nomUid === ['n2', 'n4', 'n5'][i]))), others);
+    if (SHOTS) { await scrollTo(page, '#vessel-' + await page.evaluate(() => __cid('n1'))); await shot(page.locator('#vessel-' + await page.evaluate(() => __cid('n1'))), 'report-card-harbour.png'); }
+
+    // Wrong ship pasted: warning, but may still save
+    await page.evaluate(() => __panel('n2').querySelector('.prpt-btn').click());
+    await sleep(100);
+    await page.evaluate(t => __paste(t), mstPage(now, { name: 'SOME OTHER', imo: '9111111', mmsi: '311000111' }));
+    const wr = await page.evaluate(() => ({ hidden: __dlg('warn').hidden, txt: __dlg('warn').textContent }));
+    check('R2 a page for another ship → "This page is for IMO 9111111 — the nomination has IMO 9448827 … MMSI …"', !wr.hidden && /IMO 9111111 — the nomination has IMO 9448827/.test(wr.txt) && /MMSI 311000111 — the nomination has MMSI 248222000/.test(wr.txt), wr);
+    // VesselFinder instead: no coordinates → sea area only, no distance
+    await page.evaluate(t => __paste(t), VF_TEXT);
+    const vf = await page.evaluate(() => ({ found: __dlg('found').textContent, hidden: __dlg('warn').hidden, lat: __dlg('lat').value, area: __dlg('area').value, at: __dlg('at').value, note: __dlg('atnote').hidden, calc: __dlg('calc').textContent, src: __dlg('src').value }));
+    check('R2 VesselFinder paste: sea area, approximate time note, "no exact position" hint, no distance', /No exact position on this page/.test(vf.found) && vf.hidden && vf.lat === '' && vf.area === 'Gulf of Oman' && vf.at !== '' && !vf.note && vf.src === 'vf' && /Add the position/.test(vf.calc), vf);
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(600);
+    const c2 = await page.evaluate(() => ({ cells: __cells('n2'), n1same: __cells('n1')['Heading to'] }));
+    check('R2 VesselFinder report on the card: "📍 Gulf of Oman (no exact position)", "Under way · 0.4 kn", "Fujairah", ETA, "~… · 3 h ago", no distance',
+      c2.cells['Last position'] === '📍 Gulf of Oman (no exact position)' && c2.cells['Status / speed'] === 'Under way · 0.4 kn' && c2.cells['Heading to'] === 'Fujairah' && /^~\d+ \w{3} \d\d:\d\d · 3 h ago$/.test(c2.cells['Reported']) && !('Distance left' in c2.cells) && c2.n1same === 'FUJAIRAH', c2);
+    check('R2 approximate time stored as such', vOf(db, 'n2').posRpt.atApprox === true && vOf(db, 'n2').posRpt.src === 'vf' && !('lat' in vOf(db, 'n2').posRpt), vOf(db, 'n2').posRpt);
+
+    // Typed by hand + validation
+    await page.evaluate(() => __panel('n5').querySelector('.prpt-btn').click());
+    await sleep(100);
+    const d5 = await page.evaluate(() => ({ links: [...document.querySelectorAll('.prd-ov [data-prd-link]')].map(a => a.getAttribute('data-prd-link') + '=' + a.href), hint: document.querySelector('.prd-ov .prd-hint').textContent }));
+    check('R2 name-only nomination: VesselFinder search link only, no MyShipTracking (needs the MMSI)', d5.links.join(',') === 'vf=https://www.vesselfinder.com/vessels?name=REIMEI' && /Add the MMSI on the card/.test(d5.hint), d5);
+    await page.evaluate(() => __dlg('save').click());
+    const e1 = await page.evaluate(() => __dlg('err').textContent);
+    await page.evaluate(() => { __setF('lat', '24 21.5N'); __setF('lon', 'east'); __dlg('save').click(); });
+    const e2 = await page.evaluate(() => __dlg('err').textContent);
+    await page.evaluate(() => { __setF('lon', '056 41E'); __setF('sog', '55'); __dlg('save').click(); });
+    const e3 = await page.evaluate(() => __dlg('err').textContent);
+    await page.evaluate(() => { __setF('sog', '0.2'); __setF('nav', 'At anchor'); __setF('at', 'yesterday'); __dlg('save').click(); });
+    const e4 = await page.evaluate(() => __dlg('err').textContent);
+    check('R2 validation: nothing / bad longitude / speed > 40 / unreadable time — each says what to fix, nothing saved',
+      /^Nothing to save yet/.test(e1) && /^Latitude \/ longitude not understood/.test(e2) && /^Speed must be/.test(e3) && /^Reported time not understood/.test(e4) && !('posRpt' in vOf(db, 'n5')), [e1, e2, e3, e4]);
+    await page.evaluate(() => { __setF('at', ''); __setF('src', 'report'); __dlg('save').click(); });
+    await sleep(600);
+    const c5 = await page.evaluate(() => ({ cells: __cells('n5'), toasts: __toasts() }));
+    check('R2 typed DM position at anchor near Sohar: saved, time set to now (said so), distance to FUJ A, "not moving"',
+      /^📍 Gulf of Oman · 24\.36°N 56\.68°E$/.test(c5.cells['Last position']) && c5.cells['Status / speed'] === 'At anchor · 0.2 kn' && /^~.* · just now$/.test(c5.cells['Reported']) && /^\d+ nm to FUJ A$/.test(c5.cells['Distance left']) &&
+      c5.toasts.some(t => /reported time set to now/.test(t)) && vOf(db, 'n5').posRpt.src === 'report' && vOf(db, 'n5').posRpt.atApprox === true, c5);
+
+    // Reopen → form shows the saved report; Remove
+    await page.evaluate(() => __panel('n2').querySelector('.prpt-btn').click());
+    await sleep(100);
+    const r2 = await page.evaluate(() => ({ dest: __dlg('dest').value, area: __dlg('area').value, note: __dlg('atnote').hidden, rm: !!__dlg('remove') }));
+    check('R2 Update opens the saved report (approximate-time note, Remove offered)', r2.dest === 'Fujairah' && r2.area === 'Gulf of Oman' && !r2.note && r2.rm, r2);
+    await page.keyboard.press('Escape');
+    check('R2 Esc closes the dialog without saving', await page.evaluate(() => !document.querySelector('.prd-ov')));
+    await page.evaluate(() => { window.confirm = () => true; __panel('n1').querySelector('.prpt-btn').click(); });
+    await sleep(100);
+    await page.evaluate(() => __dlg('remove').click());
+    await sleep(600);
+    check('R2 Remove: gone from this card and from the same ship\'s other card; posRpt keys dropped',
+      !('posRpt' in vOf(db, 'n1')) && !('posRpt' in vOf(db, 'n3')) && await page.evaluate(() => /not added yet/.test(__panel('n1').textContent) && /not added yet/.test(__panel('n3').textContent)), [vOf(db, 'n1'), vOf(db, 'n3')]);
+  });
+
+  /* 3 — dashboard rows, AIS not live, warnings stay off the bell */
+  await scenario(browser, 'R3 dashboard', async (openT) => {
+    const now = Date.now();
+    const vs = scene(now);
+    // SEA VALIANT 40 nm out, 10 kn toward FUJ A, reported 1 h ago, laycan closed → red "Last report suggests…" (card + row only)
+    const lat = 25.170 - 40 / 60.0405;
+    vs[0].lc = dubai(now - 72 * HR).slice(0, 11) + ' - ' + dubai(now - 30 * HR).slice(0, 11);
+    vs[0].eta = dubai(now - 31 * HR);
+    vs[0].posRpt = { src: 'mst', lat: +lat.toFixed(5), lon: 56.44, nav: 'Under way', sog: 10, cog: 0, dest: 'FUJAIRAH', at: iso(now - HR), updatedAt: now - HR };
+    vs[1].posRpt = { src: 'vf', area: 'Gulf of Oman', nav: 'Under way', sog: 0.4, dest: 'Fujairah', at: iso(now - 3 * HR), atApprox: true, updatedAt: now - 3 * HR };
+    vs[4].posRpt = { src: 'report', lat: 19.5, lon: 64.8, sog: 11, at: iso(now - 4 * 24 * HR), updatedAt: now - 4 * 24 * HR };
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: vs }), ais: aisData(now), realtime: false });
+    const { page } = await openT(db, 'user-operator', { settleMs: 1000 });
+    await page.evaluate(() => { try { flowWelcomeGo('dashboard'); } catch (e) {} showPage('dashboard'); });
+    await sleep(500);
+    const d = await page.evaluate(() => ({
+      sub: document.getElementById('dash-ais-sub').textContent,
+      rows: [...document.querySelectorAll('#dash-ais-body .ais-row')].map(r => ({ src: r.dataset.src || 'ais', name: r.querySelector('.ais-row-name').textContent, txt: r.textContent.replace(/\s+/g, ' ').trim(), warn: r.querySelector('.ais-warn') ? r.querySelector('.ais-warn').className : '' })),
+      alerts: _aisAlerts().length, bell: (typeof _globalAlerts === 'function' ? '' : ''),
+    }));
+    check('R3 sub line counts the vessels shown from a last known position', /1 of 5 nominated vessels seen · 3 from a last known position/.test(d.sub), d.sub);
+    const sv = d.rows.find(r => r.name === 'SEA VALIANT' && r.src === 'report'), dk = d.rows.find(r => r.name === 'CMA CGM DAKAR'), rm = d.rows.find(r => r.name === 'REIMEI'), op = d.rows.find(r => r.name === 'OCEAN PEARL');
+    check('R3 report rows: chip, "last known position" tag, position, distance, status/speed, destination, expected, reported + source, Update position',
+      sv && /Approaching\s*last known position/.test(sv.txt) && /40 nm left to FUJ A/.test(sv.txt) && /Under way · 10\.0 kn/.test(sv.txt) && /to FUJAIRAH/.test(sv.txt) && /expected ~\d+ \w{3} \d\d:\d\d/.test(sv.txt) && /reported \d+ \w{3} \d\d:\d\d · 1 h ago · MyShipTracking/.test(sv.txt) && /Update position/.test(sv.txt), sv);
+    check('R3 red warning from a recent report (laycan closed) on the row — "Last report suggests arrival …"', sv && /ais-warn red/.test(sv.warn) && /Last report suggests arrival ~/.test(sv.txt), sv);
+    check('R3 …but never in the bell / Needs Attention (AIS alerts only)', d.alerts === 0, d.alerts);
+    check('R3 VesselFinder report row: sea area, no distance; old report (4 days) shown in amber, its worked-out arrival marked "already past", no estimate warning',
+      dk && /📍 Gulf of Oman \(no exact position\)/.test(dk.txt) && !/nm left/.test(dk.txt) && rm && /reported ~?\d+ \w{3} \d\d:\d\d · 4 days ago/.test(rm.txt) && /expected ~\d+ \w{3} \d\d:\d\d — already past, get a newer report/.test(rm.txt) && rm.warn === '', [dk, rm]);
+    check('R3 live AIS row unchanged (OCEAN PEARL), and the second SEA VALIANT nomination without its own report gets "+ Add last position"',
+      op && op.src === 'ais' && !/last known position/.test(op.txt) && d.rows.some(r => r.name === 'SEA VALIANT' && r.src === 'ais' && /\+ Add last position/.test(r.txt)), d.rows.map(r => r.name + ':' + r.src));
+    const amber = await page.evaluate(() => { const el = [...document.querySelectorAll('#dash-ais-body .ais-row')].find(r => r.querySelector('.ais-row-name').textContent === 'REIMEI').querySelector('.prpt-old'); return el ? getComputedStyle(el).color : null; });
+    check('R3 amber colour for a day-old report', !!amber && amber !== 'rgb(0, 0, 0)', amber);
+    if (SHOTS) { await scrollTo(page, '#dash-ais'); await shot(page.locator('#dash-ais'), 'report-dashboard.png'); }
+    // Update position from the dashboard opens the dialog for that card
+    await page.evaluate(() => [...document.querySelectorAll('#dash-ais-body .ais-row')].find(r => r.querySelector('.ais-row-name').textContent === 'CMA CGM DAKAR').querySelector('.prpt-link').click());
+    await sleep(150);
+    check('R3 "Update position" in the row opens the dialog for that nomination', await page.evaluate(() => /CMA CGM DAKAR/.test(document.getElementById('prd-title').textContent) && __dlg('dest').value === 'Fujairah'));
+    await page.keyboard.press('Escape');
+    // the card's panel: red warning there too; the header knows a newer live AIS fix when there is one
+    await page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    const card = await page.evaluate(() => ({ warn: __panel('n1').querySelector('.ais-warn') ? __panel('n1').querySelector('.ais-warn').textContent : '' }));
+    check('R3 card panel carries the same warning', /^Last report suggests arrival ~.* may miss laycan$/.test(card.warn), card);
+    if (SHOTS) {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await sleep(300);
+      await scrollTo(page, '#v' + await page.evaluate(() => __cid('n1')) + '-prpt', 200);
+      await shot(page, 'report-card-phone.png');
+      await page.setViewportSize({ width: 1440, height: 900 });
+    }
+    const ph = await page.evaluate(async () => {
+      const r = __panel('n1').getBoundingClientRect();
+      return { fit: r.right <= innerWidth + 1, docW: document.documentElement.scrollWidth, winW: innerWidth };
+    });
+    check('R3 panel fits the card width, no horizontal page scroll', ph.fit && ph.docW <= ph.winW + 1, ph);
+  });
+
+  /* 4 — AIS not set up / trader / sync: reload, trader RPC, merge takes the newer report whole */
+  await scenario(browser, 'R4 sync, trader, AIS not set up', async (openT) => {
+    const now = Date.now();
+    const vs = scene(now);
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: vs }), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await A.page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    check('R4 without AIS set up the card panel still works (prompt on every card)', await A.page.evaluate(() => ['n1', 'n2', 'n3', 'n4', 'n5'].every(n => /not added yet/.test(__panel(n).textContent))));
+    // A saves a report on n2
+    await A.page.evaluate(() => __panel('n2').querySelector('.prpt-btn').click());
+    await sleep(100);
+    await A.page.evaluate(t => __paste(t), VF_TEXT);
+    await A.page.evaluate(() => __dlg('save').click());
+    await sleep(700);
+    const stamp1 = vOf(db, 'n2').posRpt.updatedAt;
+    // B (second operator) opens: sees it; reload of A keeps it
+    const B = await openT(db, 'user-operator2');
+    await B.page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    check('R4 another operator sees the report after loading', await B.page.evaluate(() => __cells('n2')['Heading to'] === 'Fujairah' && /from VesselFinder/.test(__panel('n2').textContent)));
+    // both edit the same nomination's report without pulling in between → the newer one wins WHOLE
+    await A.page.evaluate(async t => { __panel('n2').querySelector('.prpt-btn').click(); await new Promise(r => setTimeout(r, 80)); await __paste(t); __dlg('save').click(); }, mstPage(now, { name: 'CMA CGM DAKAR', imo: '9448827', mmsi: '248222000', lat: '25.12000', lon: '56.50000', dest: 'FUJAIRAH ANCH', sog: '0.3' }));
+    await sleep(700);
+    await sleep(20);
+    await B.page.evaluate(async () => { __panel('n2').querySelector('.prpt-btn').click(); await new Promise(r => setTimeout(r, 80)); __setF('dest', 'KHOR FAKKAN'); __setF('area', 'Gulf of Oman'); __dlg('save').click(); });
+    await sleep(1500);
+    const merged = vOf(db, 'n2').posRpt;
+    check('R4 two operators saving different reports: the newer report wins whole (no mix of the two)', merged && merged.dest === 'KHOR FAKKAN' && !('lat' in merged) && merged.updatedAt > stamp1, merged);
+    await A.page.evaluate(() => _pollOnce(true));
+    await sleep(500);
+    check('R4 …and the first operator converges to it', await A.page.evaluate(() => __cells('n2')['Heading to'] === 'KHOR FAKKAN'));
+    // reload keeps it; a clean reload writes nothing
+    const wB = U.writes(db, 'user-operator2').length;
+    const C = await openT(db, 'user-operator2');
+    await sleep(1500);
+    check('R4 reopening: report restored, no write', await C.page.evaluate(() => __cells('n2')['Heading to'] === 'KHOR FAKKAN') && U.writes(db, 'user-operator2').length === wB);
+    // trader saves a report through the RPC; the server keeps it
+    const T = await openT(db, 'user-trader');
+    await T.page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    await T.page.evaluate(async t => { __panel('n1').querySelector('.prpt-btn').click(); await new Promise(r => setTimeout(r, 80)); await __paste(t); __dlg('save').click(); }, mstPage(now));
+    await sleep(900);
+    const rpc = db.log.filter(o => o.action === 'rpc' && o.name === 'trader_update_vessels').pop();
+    const tv = rpc && rpc.args.new_vessels.find(v => v.nomUid === 'n1');
+    check('R4 a trader may save a report: carried by trader_update_vessels and kept (also on the same ship\'s other card)', tv && tv.posRpt && tv.posRpt.lat === 19.27129 && vOf(db, 'n1').posRpt && vOf(db, 'n3').posRpt && vOf(db, 'n3').posRpt.updatedAt === vOf(db, 'n1').posRpt.updatedAt, tv && tv.posRpt);
+    // trash + restore keeps it
+    const tr = await A.page.evaluate(async () => {
+      await _pollOnce(true);
+      window.confirm = () => false;
+      rmV(+__cid('n1'));
+      await new Promise(r => setTimeout(r, 400));
+      const def = _trashBin[_trashBin.length - 1].def;
+      restoreFromTrash(_trashBin.length - 1);
+      await new Promise(r => setTimeout(r, 300));
+      return { def: !!def.posRpt, cell: __cells('n1')['Heading to'] };
+    });
+    check('R4 removing to the trash and restoring keeps the report', tr.def && tr.cell === 'FUJAIRAH', tr);
+    // dashboard while AIS is not set up: operator sees the note + the report rows
+    await A.page.evaluate(() => { try { flowWelcomeGo('dashboard'); } catch (e) {} showPage('dashboard'); renderDashAis(); });
+    await sleep(300);
+    const dash = await A.page.evaluate(() => ({ show: document.getElementById('dash-ais').style.display !== 'none', setup: !!document.querySelector('#dash-ais-body [data-ais-setup]'), rows: document.querySelectorAll('#dash-ais-body .ais-row[data-src="report"]').length }));
+    check('R4 dashboard without AIS: setup note + the report rows', dash.show && dash.setup && dash.rows === 3, dash);
+  });
+
+  /* 5 — untrusted text */
+  await scenario(browser, 'R5 XSS', async (openT) => {
+    const now = Date.now();
+    const vs = scene(now);
+    const bad = '<img src=x onerror="window.__pwn=1">';
+    vs[1].posRpt = { src: '<b>x</b>', area: bad, nav: bad, dest: bad, arr: bad, by: bad, at: iso(now - HR), updatedAt: now };
+    vs[2].posRpt = { src: 'mst', lat: '"><svg onload=window.__pwn=2>', lon: 5, area: 'A', at: 'not a date', updatedAt: 'x' };
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: vs }), ais: aisData(now), realtime: false });
+    const { page } = await openT(db, 'user-operator');
+    await page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    await page.evaluate(t => { __panel('n5').querySelector('.prpt-btn').click(); return new Promise(r => setTimeout(r, 80)).then(() => __paste(t)); }, 'The current position of ' + bad + ' is in ' + bad + ' with coordinates 19.1° / 65.1° as reported on 2026-10-15 20:28 by AIS. heading at the port of ' + bad + '. IMO: 9111111');
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(600);
+    await page.evaluate(() => { try { flowWelcomeGo('dashboard'); } catch (e) {} showPage('dashboard'); });
+    await sleep(400);
+    const r = await page.evaluate(() => ({ pwn: window.__pwn || 0, imgs: document.querySelectorAll('#vc img[src="x"], #dash-ais img[src="x"], .prd-ov img').length, n2: __cells('n2'), n3: __panel('n3').textContent, n5: __cells('n5') }));
+    check('R5 pasted / synced HTML is shown as text everywhere (card, dialog, dashboard), never run', r.pwn === 0 && r.imgs === 0 && /<img/.test(r.n2['Heading to'] || '') && /<img/.test(r.n5['Heading to'] || ''), r);
+    check('R5 an unknown status / source is dropped; a bad latitude drops the position (kept: area)', !/onerror/.test(r.n2['Status / speed']) && /from Other/.test(await page.evaluate(() => __panel('n2').textContent)) && /📍 A \(no exact position\)/.test(r.n3), r);
+  });
+
+  await browser.close();
+  console.log('Last known position: ' + pass + ' passed, ' + fail + ' failed');
+  process.exitCode = fail ? 1 : 0;
+})();

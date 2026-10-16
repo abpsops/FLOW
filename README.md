@@ -212,6 +212,49 @@ yet" on the dashboard and traders see nothing.
   feed not updating since …"; traders see nothing. Everything comes back by
   itself on the next successful run.
 
+### Last known position (free, pasted)
+
+aisstream.io does not hear most ships out at sea or at the Fujairah
+anchorage, and it keeps no history. For those, every nomination card has a
+**Last known position** panel, filled from the ship's public tracking page:
+
+1. Click **+ Add from MyShipTracking / VesselFinder** (or **Update**) on the
+   card, or **+ Add last position / Update position** in the dashboard's
+   Vessel Positions list.
+2. Open the ship's page from the dialog. **MyShipTracking** (needs the MMSI)
+   gives the exact position and time. **VesselFinder** and **MarineTraffic**
+   work too, but VesselFinder's free page only gives the sea area.
+3. On that page press **Ctrl+A** then **Ctrl+C** (phone: Select all, then
+   Copy), and paste into the dialog. A noon report or an agent's message
+   ("Pos 19-16.3N 065-03.7E, speed 11.5 kts, ETA Fujairah 18th Oct 2300 UTC")
+   works as well, or type the details by hand.
+4. FLOW reads the position, status, speed, destination ("heading to"), the
+   ship's AIS ETA and when it was reported. Check them, then **Save**.
+
+The panel then shows **Last position · Status / speed · Heading to · ETA ·
+Reported**, plus the **Distance left** to the nomination's anchorage and the
+**Expected arrival** (worked out the same way as the AIS estimate, counted
+from the time of the report). The dashboard list shows the report for every
+vessel that live AIS has not seen.
+
+- **Same ship:** the report is saved on every nomination for the same ship
+  (same IMO or MMSI).
+- **Wrong ship:** the dialog warns when the pasted page is for another
+  IMO / MMSI / name.
+- **Older reports:** a report more than a day old shows its time in amber,
+  and an expected arrival that is already in the past says
+  "already past, get a newer report".
+- **Late arrival:** a report at most 2 days old is checked against the
+  nominated ETA and laycan ("Last report suggests arrival …"). This shows on
+  the card and the dashboard row only, never in the bell or Needs Attention.
+- **Storage:** reports are saved with the nomination (`vessel.posRpt`, only
+  when set) and sync like any other edit. Traders can add them too. If two
+  people save a report for the same nomination at once, the newer one wins
+  whole.
+- **Why not automatic:** these tracking sites' terms do not allow automated
+  collection, so FLOW never fetches them itself. You open and copy the page,
+  and FLOW only reads what you paste.
+
 ### Limitations
 
 - aisstream.io is built from volunteer **shore-based** receivers: ships near

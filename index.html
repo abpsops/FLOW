@@ -6049,9 +6049,10 @@ document.addEventListener('DOMContentLoaded', () => {
   // screen (showPage('dashboard') refreshes on arrival anyway).
   const vcEl = document.getElementById('vc');
   if (vcEl) {
-    // The live-position (AIS) line inside a card changes nothing the dashboard shows — ignore it.
+    // The live-position (AIS) line and the "Last known position" panel inside a card
+    // change nothing the rest of the dashboard shows — ignore them.
     new MutationObserver((muts) => {
-      if (muts.every(m => m.target && m.target.closest && m.target.closest('.ais-line'))) return;
+      if (muts.every(m => m.target && m.target.closest && m.target.closest('.ais-line, .prpt'))) return;
       _scheduleDashRefresh(true);
     }).observe(vcEl, {childList:true, subtree:true});
   }
@@ -9335,7 +9336,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id), _cardPosRptFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore; posRpt — only when set
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -12085,7 +12086,7 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details.
-    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))
+    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id), _cardPosRptFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -13601,6 +13602,8 @@ function addVessel(def = {}) {
   // the saved pair itself is kept until these boxes are edited — _vidRemember / _cardIdStore).
   const ids = _vidSplitDef(def.imo, def.mmsi);
   _vidRemember(id, def, ids);
+  // Last known position (pasted position report) — kept as saved, see _prRemember / _cardPosRptFields.
+  _prRemember(id, def);
   // ETA given only as a part of the day (AM / PM …) — see ETA_TIME_FRAMES.
   const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
@@ -13713,6 +13716,7 @@ function addVessel(def = {}) {
   <div class="lc-box" id="v${id}-lcbox"></div>
   <div class="etc-prev" id="v${id}-prev"></div>
   <div class="ais-line" id="v${id}-ais" aria-live="polite"></div>
+  <div class="prpt" id="v${id}-prpt"></div>
   <div class="field" style="margin-top:10px">
     <label>Remarks <span style="font-weight:400;color:var(--muted)">— optional, included in nomination emails</span></label>
     <textarea id="v${id}-remarks" rows="2" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500)" style="width:100%;resize:vertical">${esc(remarks)}</textarea>
@@ -24606,6 +24610,66 @@ html[data-skin="harbour"] .ais-line{border:0;background:#F1F5FA;border-radius:12
 html[data-skin="harbour"] .ais-list{border-color:#E3E9F1;border-radius:14px}
 html[data-skin="harbour"] .ais-row{border-top-color:#EEF2F7}
 html[data-skin="harbour"] .ais-warn{border:0;border-radius:10px}
+
+/* ── Last known position (pasted position report) — card panel, dashboard rows, dialog ── */
+.prpt{display:none;margin-top:6px;padding:7px 10px;border:1px dashed var(--border);border-radius:var(--radius-xs);background:var(--surface);font-size:11px;color:var(--sub);line-height:1.45;min-width:0}
+.prpt.show{display:block}
+.prpt-hd{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;min-width:0}
+.prpt-src{color:var(--muted);white-space:nowrap}
+.prpt-mute{color:var(--muted)}
+.prpt-old{color:var(--amber);font-weight:600}
+.prpt-btn{margin-left:auto;font:inherit;font-size:11px;font-weight:700;color:var(--azure);background:var(--azure-lt);border:1px solid var(--azure-bd);border-radius:999px;padding:2px 10px;cursor:pointer;white-space:nowrap}
+.prpt-btn:hover{filter:brightness(.97)}
+.prpt-btn:focus-visible,.prpt-link:focus-visible{outline:2px solid var(--azure);outline-offset:2px}
+.prpt-link{font:inherit;font-size:11px;font-weight:600;color:var(--azure);background:none;border:0;padding:0;cursor:pointer;white-space:nowrap}
+.prpt-link:hover{text-decoration:underline}
+.prpt-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 14px;margin-top:6px}
+.prpt-cell{display:flex;flex-direction:column;gap:1px;min-width:0}
+.prpt-k{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.prpt-v{color:var(--text);overflow-wrap:anywhere}
+.prpt-v .ais-fact{white-space:normal}
+.prpt .ais-warn{margin-top:6px}
+.prpt-tag{font-size:10px;color:var(--muted);font-style:italic;white-space:nowrap}
+.ais-st-report{color:var(--sub);background:var(--surface2);border-color:var(--border)}
+.prpt-dash{margin-top:8px}
+html[data-skin="harbour"] .prpt{border-color:#D9E2EC;border-radius:12px;background:#FBFCFE}
+.prd-ov{position:fixed;inset:0;z-index:9600;background:var(--overlay,rgba(13,27,42,.45));backdrop-filter:blur(3px);display:flex;align-items:flex-start;justify-content:center;padding:4vh 16px;overflow-y:auto}
+.prd{background:var(--surface);color:var(--text);border-radius:16px;width:min(680px,100%);box-shadow:0 20px 60px rgba(13,27,42,.25);padding:18px 20px;font-size:12.5px}
+.prd-hd{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:10px;margin-bottom:10px;border-bottom:1px solid var(--border)}
+.prd-title{font-size:16px;font-weight:700;color:var(--ink);overflow-wrap:anywhere}
+.prd-sub{font-size:12px;color:var(--sub);margin-top:3px}
+.prd-x{background:none;border:0;font-size:16px;line-height:1;color:var(--muted);cursor:pointer;padding:4px 6px;border-radius:6px}
+.prd-x:hover{background:var(--surface2)}
+.prd-step{display:flex;gap:10px;align-items:flex-start;padding:8px 0}
+.prd-n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--azure-lt);color:var(--azure);border:1px solid var(--azure-bd);font-weight:700;font-size:11.5px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.prd-links{display:inline-flex;flex-wrap:wrap;gap:6px 12px;margin-left:6px}
+.prd-links a{color:var(--azure);font-weight:700;text-decoration:none}
+.prd-links a:hover{text-decoration:underline}
+.prd-hint{font-size:11.5px;color:var(--muted);margin-top:2px}
+.prd-hint kbd{font:inherit;font-size:10.5px;padding:0 4px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;background:var(--surface2)}
+.prd-text{width:100%;margin-top:6px;resize:vertical;min-height:64px;font:inherit;font-size:12px;padding:7px 9px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--text)}
+.prd-row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin-top:6px}
+.prd-row .prpt-btn{margin-left:0}
+.prd-found{font-size:11.5px}
+.prd-found.ok{color:var(--green);font-weight:600}
+.prd-found.bad{color:var(--amber);font-weight:600}
+.prd-warn{margin-top:6px;padding:6px 9px;border-radius:8px;background:var(--amber-lt);color:var(--amber);border:1px solid var(--amber-bd);font-weight:600;overflow-wrap:anywhere}
+.prd-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px 12px;margin-top:8px}
+.prd-grid label{display:flex;flex-direction:column;gap:3px;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:var(--sub);min-width:0}
+.prd-grid .prd-wide{grid-column:span 2}
+.prd-grid input,.prd-grid select{font:inherit;font-size:12.5px;font-weight:400;letter-spacing:0;padding:6px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface);color:var(--text);min-width:0;width:100%}
+.prd-tz{font-weight:400;color:var(--muted)}
+.prd-note{margin-top:6px;font-size:11.5px;color:var(--amber)}
+.prd-calc{margin-top:8px;font-size:12px;color:var(--sub);min-height:1em}
+.prd-calc b{color:var(--text)}
+.prd-wtxt{color:var(--amber);font-weight:600}
+.prd-err{margin-top:8px;padding:6px 9px;border-radius:8px;background:var(--red-lt);color:var(--red);border:1px solid var(--red-bd);font-weight:600}
+.prd-ft{display:flex;align-items:center;gap:8px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}
+.prd-ft button{font:inherit;font-size:12.5px;font-weight:700;border-radius:8px;padding:7px 16px;cursor:pointer}
+.prd-save{background:var(--azure);color:#fff;border:1px solid var(--azure)}
+.prd-cancel{background:var(--surface);color:var(--sub);border:1px solid var(--border)}
+.prd-rm{background:none;color:var(--red);border:1px solid var(--red-bd)}
+@media (max-width:600px){ .prd{padding:14px} .prd-grid{grid-template-columns:repeat(2,minmax(0,1fr))} .prd-grid .prd-wide{grid-column:span 2} .prpt-btn{margin-left:0} }
 </style>
 <script>
 /* ═══════════════════════════════════════════════════════════════
@@ -24771,9 +24835,11 @@ function _aisMatch(v, positions, now) {
    a time frame), lcTo (Date|null: laycan end), etaWin} and its match m.
    The arrival estimate counts from the TIME OF THE FIX (not from now — an
    old fix must not make an on-time ship look late) and is only made for a
-   ship doing ≥ 1 kn on a course roughly toward the reference point. */
-function _aisAssess(v, m, now) {
+   ship doing ≥ 1 kn on a course roughly toward the reference point.
+   opt.staleHrs: older fixes are "stale" (default AIS_CFG.staleHrs; position reports pass more). */
+function _aisAssess(v, m, now, opt) {
   now = now == null ? Date.now() : now;
+  const staleHrs = opt && opt.staleHrs != null ? opt.staleHrs : AIS_CFG.staleHrs; // position reports allow older fixes
   const ref = _aisRef(v && v.area);
   const out = { status: 'notseen', by: m ? m.by : null, pos: m ? m.pos : null, ref: ref, distNm: null, sog: null, est: null, warn: null, ageMs: null, course: null, matchedByName: false };
   if (m && (m.by === 'name' || (m.pos && m.pos.matched_by === 'name'))) out.matchedByName = true;
@@ -24783,7 +24849,7 @@ function _aisAssess(v, m, now) {
   out.sog = _aisNum(p.sog);
   const tPos = Math.min(_aisPosTime(p), now); // a fix "in the future" (clock skew) counts as now
   out.ageMs = Math.max(0, now - tPos);
-  if (out.ageMs > AIS_CFG.staleHrs * 3600000) { out.status = 'stale'; return out; }
+  if (out.ageMs > staleHrs * 3600000) { out.status = 'stale'; return out; }
   const sog = out.sog == null ? 0 : out.sog;
   const ns = _aisNum(p.nav_status);
   if ((out.distNm <= AIS_CFG.arrivedNm && sog < AIS_CFG.arrivedSog) || ((ns === 1 || ns === 5) && out.distNm <= AIS_CFG.anchoredNm)) {
@@ -25041,6 +25107,8 @@ function _aisCardLineHtml(x) {
 // (keeps the fix time itself: a new fix with the same rounded facts must still reset "seen …")
 function _aisStaticSig(html) { return html.replace(/(<span class="ais-ago" data-ts="[^"]*")[^>]*>[^<]*<\/span>/g, '$1>'); }
 function _aisRenderCard(id) {
+  // The card's "Last known position" panel follows the same inputs (ETA, laycan, anchorage, IDs, positions).
+  if (typeof _prRenderCard === 'function') { try { _prRenderCard(id); } catch (e) { console.warn('FLOW: last known position failed', e); } }
   const el = document.getElementById('v' + id + '-ais');
   if (!el) return;
   let html = '', st = '';
@@ -25122,8 +25190,10 @@ function renderDashAis() {
   const operator = !isTrader();
   const configured = _aisConfigured(), active = configured && !_aisFeedDown();
   const started = _ais.state !== 'idle';
-  // Traders only see the card while positions are live; operators always (with a note).
-  const show = started && (active || operator);
+  // Vessels with a pasted "Last known position" (shown even while AIS isn't live).
+  const prList = _prDashInfos();
+  // Traders only see the card while positions are live (or reports exist); operators always (with a note).
+  const show = started && (active || operator || prList.length > 0);
   card.style.display = show ? '' : 'none';
   if (btn) {
     const canRefresh = operator && started && _ais.state !== 'missing' && !!supabaseClient;
@@ -25137,28 +25207,39 @@ function renderDashAis() {
   const st = _ais.status || {};
   const refreshing = _ais.refresh ? 'Refreshing… (about 1½ minutes)' : '';
   if (!configured) {
-    sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
-    body.innerHTML = _ais.state === 'error'
+    sub.textContent = refreshing || (operator || !prList.length ? 'Live AIS positions of nominated vessels' : 'Last known positions of nominated vessels');
+    body.innerHTML = (!operator ? '' : _ais.state === 'error'
       ? '<div class="ais-empty">Live positions are unavailable right now — will retry automatically.</div>'
-      : '<div class="ais-empty" data-ais-setup="1"><b>Live positions not set up yet</b> — see README → “Live vessel positions (AIS)”.' + (_ais.state !== 'missing' ? ' Then press Refresh now to collect the first positions.' : '') + '</div>';
+      : '<div class="ais-empty" data-ais-setup="1"><b>Live positions not set up yet</b> — see README → “Live vessel positions (AIS)”.' + (_ais.state !== 'missing' ? ' Then press Refresh now to collect the first positions.' : '') + '</div>') +
+      _prDashListHtml(prList);
     return;
   }
   if (!active) {
-    // Operators only (traders don't see the card): one note instead of stale lines everywhere.
+    // Operators: one note instead of stale lines everywhere (traders see only the pasted reports).
     const good = _aisLastGood();
-    sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
-    body.innerHTML = '<div class="ais-empty" data-ais-down="1"><b>AIS feed not updating' + (good ? ' since ' + esc(_aisWhen(new Date(good))) : '') + '</b> — ' +
+    sub.textContent = refreshing || (operator || !prList.length ? 'Live AIS positions of nominated vessels' : 'Last known positions of nominated vessels');
+    body.innerHTML = (!operator ? '' : '<div class="ais-empty" data-ais-down="1"><b>AIS feed not updating' + (good ? ' since ' + esc(_aisWhen(new Date(good))) : '') + '</b> — ' +
       (good ? 'no successful update for ' + esc(_aisAgo(Date.now() - good).replace(/ ago$/, '')) + '. ' : 'no successful update yet. ') +
-      'Vessel positions are hidden until it runs again — see README → “Live vessel positions (AIS)”.' +
-      (st.ok === false && st.error ? '<br><span class="ais-sub-err">Last error: ' + esc(String(st.error).slice(0, 200)) + '</span>' : '') + '</div>';
+      'Live AIS positions are hidden until it runs again — see README → “Live vessel positions (AIS)”.' +
+      (st.ok === false && st.error ? '<br><span class="ais-sub-err">Last error: ' + esc(String(st.error).slice(0, 200)) + '</span>' : '') + '</div>') +
+      _prDashListHtml(prList);
     return;
   }
   const infos = _aisAllInfos();
+  // Not seen live (or only an older fix): show the pasted last known position instead.
+  infos.forEach(function(x) {
+    x.r = _prGet(x.v.cid);
+    const aisT = x.a.pos && _aisHasPos(x.a.pos) ? _aisPosTime(x.a.pos) : null;
+    x.useR = !!x.r && (x.a.status === 'notseen' || (x.a.status === 'stale' && (x.r.at == null || aisT == null || x.r.at > aisT)));
+    x.ra = x.useR ? _prAssess(x.v, x.r) : null;
+  });
   const seen = infos.filter(function(x) { return x.a.status !== 'notseen' && x.a.status !== 'stale'; }).length;
+  const fromRpt = infos.filter(function(x) { return x.useR; }).length;
   const good = _aisLastGood();
   const parts = [good ? _aisAgoSpan('Updated ', good) : 'Not updated yet'];
   if (operator && st.last_cron_at && !isNaN(Date.parse(st.last_cron_at))) parts.push(_aisAgoSpan('last scheduled call ', st.last_cron_at));
   parts.push(seen + ' of ' + infos.length + ' nominated vessel' + (infos.length === 1 ? '' : 's') + ' seen');
+  if (fromRpt) parts.push(fromRpt + ' from a last known position');
   let subHtml = (refreshing ? esc(refreshing) + ' · ' : '') + parts.join(' · ');
   if (operator) {
     if (st.ok === false && st.error) subHtml += '<br><span class="ais-sub-err">Last update failed: ' + esc(String(st.error).slice(0, 200)) + '</span>';
@@ -25169,14 +25250,18 @@ function renderDashAis() {
   }
   sub.innerHTML = subHtml;
   if (!infos.length) { body.innerHTML = '<div class="ais-empty">No nominated vessels with a name, IMO or MMSI to track.</div>'; return; }
-  const rank = { arrived: 3, approaching: 2, underway: 4, stale: 5, notseen: 6 };
+  const rank = { arrived: 3, approaching: 2, underway: 4, stale: 5, report: 5.5, notseen: 6 };
+  const eff = function(x) { return x.useR ? x.ra : x.a; };
+  const effSt = function(x) { const a = eff(x); return x.useR && a.status === 'notseen' ? 'report' : a.status; };
   infos.sort(function(x, y) {
-    const wx = x.a.warn ? (x.a.warn.level === 'red' ? 0 : 1) : 2, wy = y.a.warn ? (y.a.warn.level === 'red' ? 0 : 1) : 2;
+    const ax = eff(x), ay = eff(y);
+    const wx = ax.warn ? (ax.warn.level === 'red' ? 0 : 1) : 2, wy = ay.warn ? (ay.warn.level === 'red' ? 0 : 1) : 2;
     if (wx !== wy) return wx - wy;
-    if (rank[x.a.status] !== rank[y.a.status]) return rank[x.a.status] - rank[y.a.status];
-    return (x.a.distNm == null ? 1e9 : x.a.distNm) - (y.a.distNm == null ? 1e9 : y.a.distNm);
+    if (rank[effSt(x)] !== rank[effSt(y)]) return rank[effSt(x)] - rank[effSt(y)];
+    return (ax.distNm == null ? 1e9 : ax.distNm) - (ay.distNm == null ? 1e9 : ay.distNm);
   });
   body.innerHTML = '<div class="ais-list">' + infos.map(function(x) {
+    if (x.useR) return _prDashRowHtml(x);
     const a = x.a, v = x.v, p = a.pos;
     const facts = [];
     if (p && a.status !== 'notseen') { const pf = _aisPosFact(p); if (pf) facts.push(pf); }
@@ -25187,6 +25272,7 @@ function renderDashAis() {
     if (a.ageMs != null) facts.push('<span class="ais-fact">' + _aisAgoSpan('seen ', p && p.position_time) + '</span>');
     else facts.push('<span class="ais-fact">' + (p ? 'identified, no position yet' : 'no AIS position yet') + '</span>');
     facts.push(_aisLinks(p));
+    if (a.status === 'notseen' || a.status === 'stale') facts.push(_prDashBtn(v.cid, false));
     return '<div class="ais-row" data-cid="' + esc(v.cid) + '" data-ais-status="' + a.status + '">' +
       '<div class="ais-row-main"><span class="ais-row-name">' + esc(v.name || _aisIdTxt(v)) + '</span><span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>' + (a.matchedByName ? '<span class="ais-note">matched by name</span>' : '') + '</div>' +
       '<div class="ais-row-facts">' + facts.join('') + '</div>' +
@@ -25440,6 +25526,759 @@ async function aisRefreshNow() {
   _aisRefreshEnd();
   await _aisLoad('refresh');
   _aisSummaryToast(data);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LAST KNOWN POSITION (position reports)
+   ─────────────────────────────────────────────────────────────
+   aisstream (above) only hears ships near a few coasts and keeps no
+   history, so a ship out at sea — or at the Fujairah anchorage — usually
+   shows "Not seen". A position report fills that gap for free: the ship's
+   public page on MyShipTracking (best: exact position and time),
+   VesselFinder or MarineTraffic — or a noon report / agent's message — is
+   copied and pasted into the card's "Last known position" dialog.
+   _prParse() reads the position, status, speed, destination, the ship's
+   AIS ETA and when it was reported; the user checks the preview and
+   saves. Nothing is fetched automatically: those sites' terms do not
+   allow automated collection — a person copying a page they are viewing
+   is ordinary use.
+   Stored on the nomination as vessel.posRpt — only when set, so older
+   records stay byte-identical. It is ONE value: it carries updatedAt, so
+   the 3-way merge takes the newer report whole, never a mix of two
+   (_merge3). Saving applies the same report to every card for the same
+   ship (same IMO or MMSI). Distance left and the expected arrival follow
+   the AIS rules (_aisAssess), counted from the time of the report.
+   The card panel lives inside the AIS block's render path
+   (_aisRenderCard), so every hook that refreshes the AIS line (ETA,
+   laycan, anchorage, IDs, new positions) refreshes it too.
+   All pasted text is untrusted: it is only ever shown through esc() and
+   set into inputs through .value.
+   ═══════════════════════════════════════════════════════════════ */
+const PR_CFG = {
+  staleHrs: 24 * 14,  // a report older than 14 days: "Stale", no distance-based estimate
+  warnMaxAgeHrs: 48,  // ETA / laycan comparison only from a report at most 2 days old
+  oldHrs: 24,         // "reported … ago" in amber after a day
+  maxLen: 80,         // longest text kept per field
+};
+const PR_SRC = { mst: 'MyShipTracking', vf: 'VesselFinder', mt: 'MarineTraffic', report: 'Noon report / agent', other: 'Other' };
+// AIS navigational status words → [label, AIS code (for _aisAssess: 1 at anchor, 5 moored)]
+const PR_NAV = [
+  [/under\s*way\s+using\s+engine/i, 'Under way', 0],
+  [/under\s*way\s+sailing/i, 'Under way (sailing)', 8],
+  [/under\s*way|underway/i, 'Under way', 0],
+  [/at\s+anchor|anchored/i, 'At anchor', 1],
+  [/moored/i, 'Moored', 5],
+  [/not\s+under\s+command/i, 'Not under command', 2],
+  [/restricted\s+manoeuvrability|restricted\s+maneuverability/i, 'Restricted manoeuvrability', 3],
+  [/constrained\s+by\s+(?:her\s+)?draught/i, 'Constrained by draught', 4],
+  [/aground/i, 'Aground', 6],
+  [/engaged\s+in\s+fishing/i, 'Fishing', 7],
+  [/drifting/i, 'Drifting', null],
+  [/stopped/i, 'Stopped', null],
+];
+const PR_NAV_LABELS = ['Under way', 'At anchor', 'Moored', 'Drifting', 'Stopped', 'Not under command', 'Restricted manoeuvrability', 'Constrained by draught', 'Aground', 'Fishing', 'Under way (sailing)'];
+const PR_MON = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+const PR_UNIT_MS = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
+let _prByCard = {};   // card id → the saved posRpt object as it came (written back unchanged)
+let _prDlg = null;    // the open dialog: {id, ov, prevFocus, parsed, existing, t}
+
+/* ── Parsing ── */
+function _prNavOf(s) {
+  for (let i = 0; i < PR_NAV.length; i++) if (PR_NAV[i][0].test(s)) return PR_NAV[i][1];
+  return '';
+}
+// A status phrase that STARTS the given text ("At anchor …" yes; "Changed At anchor" no).
+function _prNavAt(s) {
+  for (let i = 0; i < PR_NAV.length; i++) {
+    const re = new RegExp('^(?:' + PR_NAV[i][0].source + ')', 'i');
+    if (re.test(s)) return PR_NAV[i][1];
+  }
+  return '';
+}
+function _prNavCode(label) {
+  for (let i = 0; i < PR_NAV.length; i++) if (PR_NAV[i][1] === label) return PR_NAV[i][2];
+  return null;
+}
+function _prText(s, max) {
+  return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max || PR_CFG.maxLen);
+}
+// "Fujairah, United Arab Emirates (UAE)" → "Fujairah"; "FUJAIRAH." → "FUJAIRAH".
+function _prPlace(s) {
+  let t = _prText(s, 120).replace(/[.,;:\s]+$/, '');
+  if (t.indexOf(',') > 0) t = t.slice(0, t.indexOf(',')).trim();
+  return t.slice(0, PR_CFG.maxLen);
+}
+/* One coordinate as typed or pasted → decimal degrees (5 decimals) or null.
+   "19.27", "-19.27", "19.27N", "19.27 °N", "19°16.3'N", "19 16.3 N", "19-16N",
+   "19°16'12\"N", "1916N" / "06503E" (DDMM / DDDMM). axis 'lat' | 'lon'. */
+function _prCoord1(s, axis) {
+  s = String(s == null ? '' : s).trim().toUpperCase().replace(/[′’`´]/g, "'").replace(/[″”“]/g, '"').replace(/,/g, '.');
+  if (!s) return null;
+  let m, val = null, hem = null;
+  if ((m = /^([+-]?\d{1,3}(?:\.\d+)?)\s*°?\s*([NSEW])?$/.exec(s))) { val = parseFloat(m[1]); hem = m[2] || null; }
+  else if ((m = /^([NSEW])\s*(\d{1,3}(?:\.\d+)?)\s*°?$/.exec(s))) { val = parseFloat(m[2]); hem = m[1]; }
+  else if ((m = /^(\d{1,3})\s*(?:°\s*|-\s*|\s+)(\d{1,2}(?:\.\d+)?)\s*'?\s*(?:(\d{1,2}(?:\.\d+)?)\s*"?)?\s*([NSEW])$/.exec(s))) {
+    const mins = parseFloat(m[2]), secs = m[3] ? parseFloat(m[3]) : 0;
+    if (mins >= 60 || secs >= 60) return null;
+    val = +m[1] + mins / 60 + secs / 3600; hem = m[4];
+  } else if ((m = /^(\d{2,3})(\d{2}(?:\.\d+)?)([NSEW])$/.exec(s)) && ((m[1].length === 2 && /[NS]/.test(m[3])) || (m[1].length === 3 && /[EW]/.test(m[3])))) {
+    const mins = parseFloat(m[2]);
+    if (mins >= 60) return null;
+    val = +m[1] + mins / 60; hem = m[3];
+  } else return null;
+  if (hem) {
+    if (axis === 'lat' && !/[NS]/.test(hem)) return null;
+    if (axis === 'lon' && !/[EW]/.test(hem)) return null;
+    if (val < 0) return null;
+    if (hem === 'S' || hem === 'W') val = -val;
+  }
+  const lim = axis === 'lat' ? 90 : 180;
+  return isFinite(val) && Math.abs(val) <= lim ? Math.round(val * 1e5) / 1e5 : null;
+}
+function _prPair(lat, lon) {
+  if (lat == null || lon == null || !isFinite(lat) || !isFinite(lon)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180 || (lat === 0 && lon === 0)) return null;
+  return { lat: lat, lon: lon };
+}
+/* The ship's position in pasted text (flattened), most specific form first. */
+function _prFindPos(flat) {
+  let m;
+  // MyShipTracking: "with coordinates 29.35138° / -94.78444°"
+  if ((m = /with coordinates\s+(-?\d{1,2}(?:\.\d+)?)\s*°?\s*\/\s*(-?\d{1,3}(?:\.\d+)?)\s*°?/i.exec(flat))) {
+    const p = _prPair(_prCoord1(m[1], 'lat'), _prCoord1(m[2], 'lon')); if (p) return p;
+  }
+  // "Latitude / Longitude: 19.27129° / 65.06209°" (MarineTraffic-style)
+  if ((m = /Latitude\s*\/\s*Longitude\s*:?\s*(-?\d{1,2}(?:\.\d+)?\s*°?\s*[NS]?)\s*\/\s*(-?\d{1,3}(?:\.\d+)?\s*°?\s*[EW]?)(?![\d.])/i.exec(flat))) {
+    const p = _prPair(_prCoord1(m[1], 'lat'), _prCoord1(m[2], 'lon')); if (p) return p;
+  }
+  // "Lat 19.27 N, Lon 65.06 E" · "Latitude: 19.27129 Longitude: 65.06209" · "Lat: 19°16.3'N Long: 065°03.7'E"
+  if ((m = /\bLat(?:itude)?\.?\s*[:=]?\s*(-?\d{1,3}(?:[.°'"\s-]+\d{1,2}(?:\.\d+)?){0,2}(?:\.\d+)?\s*['"°]?\s*[NS]?)\s*[,;\/]?\s*\bLon(?:g(?:itude)?)?\.?\s*[:=]?\s*(-?\d{1,3}(?:[.°'"\s-]+\d{1,2}(?:\.\d+)?){0,2}(?:\.\d+)?\s*['"°]?\s*[EW]?)(?![\d.])/i.exec(flat))) {
+    const p = _prPair(_prCoord1(m[1], 'lat'), _prCoord1(m[2], 'lon')); if (p) return p;
+  }
+  // Hemisphere pairs anywhere: "19.27N 65.06E", "19.27°N / 65.06°E", "19°16.3'N 065°03.7'E", "19-16N 065-03E"
+  const part = '(\\d{1,3}(?:\\.\\d+)?(?:\\s*(?:°\\s*|-\\s*|\\s+)\\d{1,2}(?:\\.\\d+)?\\s*\'?(?:\\s*\\d{1,2}(?:\\.\\d+)?\\s*")?)?)\\s*°?\\s*';
+  const re = new RegExp('(?:^|[^\\d.])' + part + '([NS])\\b[\\s,;\\/]*' + part + '([EW])\\b', 'gi');
+  const flat2 = flat.replace(/[′’`´]/g, "'").replace(/[″”“]/g, '"');
+  while ((m = re.exec(flat2))) {
+    const p = _prPair(_prCoord1(m[1] + ' ' + m[2], 'lat'), _prCoord1(m[3] + ' ' + m[4], 'lon'));
+    if (p) return p;
+  }
+  // Compact DDMM: "1916N 06503E"
+  if ((m = /(?:^|[^\d.])(\d{4}(?:\.\d+)?)\s*([NS])\s*[,\/]?\s*(\d{5}(?:\.\d+)?)\s*([EW])\b/i.exec(flat))) {
+    const p = _prPair(_prCoord1(m[1] + m[2], 'lat'), _prCoord1(m[3] + m[4], 'lon')); if (p) return p;
+  }
+  return null;
+}
+// A date without a year ("Oct 10, 21:30", UTC): the year that makes sense.
+// kind 'eta' → not more than 60 days in the past; 'past' → not in the future (+1 day of slack).
+function _prNoYear(mon, day, h, mi, now, kind) {
+  if (mon == null || !(day >= 1 && day <= 31) || h > 23 || mi > 59) return null;
+  const y = new Date(now).getUTCFullYear(), D = 86400000;
+  let t = Date.UTC(y, mon, day, h, mi);
+  if (kind === 'past' && t > now + D) t = Date.UTC(y - 1, mon, day, h, mi);
+  if (kind === 'eta' && t < now - 60 * D) t = Date.UTC(y + 1, mon, day, h, mi);
+  return isNaN(t) ? null : t;
+}
+function _prUtc(y, mo, d, h, mi) {
+  if (!(mo >= 0 && mo <= 11) || !(d >= 1 && d <= 31) || h > 23 || mi > 59) return null;
+  const t = Date.UTC(y, mo, d, h, mi);
+  return isNaN(t) ? null : t;
+}
+// Local-time (this device) date → ms, or null.
+function _prLocal(y, mo, d, h, mi) {
+  if (!(mo >= 0 && mo <= 11) || !(d >= 1 && d <= 31) || h > 23 || mi > 59) return null;
+  const t = new Date(y, mo, d, h, mi, 0, 0).getTime();
+  return isNaN(t) ? null : t;
+}
+function _prAgoMs(n, unit) {
+  const k = String(unit || '').toLowerCase();
+  const u = /^s/.test(k) ? 's' : /^(m|min)/.test(k) ? 'm' : /^h/.test(k) ? 'h' : /^d/.test(k) ? 'd' : '';
+  const num = /^an?$/i.test(String(n)) ? 1 : parseFloat(n);
+  return u && isFinite(num) ? num * PR_UNIT_MS[u] : null;
+}
+/* Pasted page / message text → {src, name, imo, mmsi, lat, lon, area, nav, sog, cog,
+   dest, eta (ms UTC), at (ms), atApprox, arr, arrAt (ms), found[]}. Never throws. */
+function _prParse(raw, now) {
+  now = now == null ? Date.now() : now;
+  const out = { src: 'other', name: '', imo: '', mmsi: '', lat: null, lon: null, area: '', nav: '', sog: null, cog: null, dest: '', eta: null, at: null, atApprox: false, arr: '', arrAt: null, found: [] };
+  const text = String(raw == null ? '' : raw).slice(0, 300000).replace(/\r\n?/g, '\n').replace(/[    ]/g, ' ');
+  const flat = text.replace(/\s+/g, ' ').trim();
+  if (!flat) return out;
+  let m;
+  if (/myshiptracking|our vessel tracker app|\bETA\*/i.test(flat)) out.src = 'mst';
+  else if (/vesselfinder|reported .{1,30}? ago by AIS|The vessel is en route to/i.test(flat)) out.src = 'vf';
+  else if (/marinetraffic/i.test(flat)) out.src = 'mt';
+  else if (/\b(?:noon|position|pos|eta|speed|lat|anchor|anchored|drifting)\b/i.test(flat)) out.src = 'report';
+
+  // Identity (to warn when the page is for another ship)
+  if ((m = /The current position of (.{1,40}?) is (?:in|at) /.exec(flat))) out.name = _prText(m[1], 40);
+  if ((m = /\(IMO:?\s*(\d{7}|---|-)?\s*,\s*MMSI:?\s*(\d{9})\)/i.exec(flat))) { if (m[1] && /^\d{7}$/.test(m[1])) out.imo = m[1]; out.mmsi = m[2]; }
+  if (!out.imo && (m = /\bIMO(?:\s*(?:no\.?|nr\.?|number|#))?\s*[:.\-]?\s*(\d{7})(?!\d)/i.exec(flat))) out.imo = m[1];
+  if (!out.mmsi && (m = /\bMMSI\s*(?:no\.?|number|#)?\s*[:.\-]?\s*(\d{9})(?!\d)/i.exec(flat))) out.mmsi = m[1];
+
+  // Position + sea area
+  const pos = _prFindPos(flat);
+  if (pos) { out.lat = pos.lat; out.lon = pos.lon; }
+  if ((m = / is in (.{2,40}?) with coordinates/.exec(flat))) out.area = _prText(m[1], 40);
+  else if ((m = /The current position of .{1,40}? is at (.{2,40}?)\s+reported\b/.exec(flat))) out.area = _prText(m[1], 40);
+
+  // Speed / course
+  if ((m = /current speed is (\d{1,2}(?:\.\d+)?) Knots/i.exec(flat))) out.sog = +m[1];
+  else if ((m = /sailing at a speed of (\d{1,2}(?:\.\d+)?) knots/i.exec(flat))) out.sog = +m[1];
+  if ((m = /Course\s*\/\s*Speed\s*:?\s*(\d{1,3}(?:\.\d+)?)\s*°?\s*\/\s*(\d{1,2}(?:\.\d+)?)\s*kn/i.exec(flat))) { out.cog = +m[1]; if (out.sog == null) out.sog = +m[2]; }
+  else if ((m = /Speed\s*\/\s*Course\s*:?\s*(\d{1,2}(?:\.\d+)?)\s*kn\s*\/\s*(\d{1,3}(?:\.\d+)?)\s*°/i.exec(flat))) { if (out.sog == null) out.sog = +m[1]; out.cog = +m[2]; }
+  if (out.sog == null && (m = /\b(?:speed|sog|spd)\b[^0-9]{0,15}?(\d{1,2}(?:\.\d+)?)\s*(?:knots?|kts?|kn)\b/i.exec(flat))) out.sog = +m[1];
+  if (out.cog == null && (m = /\b(?:Course|COG)\b\s*:?\s*(\d{1,3}(?:\.\d+)?)\s*°/i.exec(flat))) out.cog = +m[1];
+  if (out.sog != null && !(out.sog >= 0 && out.sog <= 40)) out.sog = null;
+  if (out.cog != null && !(out.cog >= 0 && out.cog <= 360)) out.cog = null;
+
+  // Navigational status: after a "Status" label, the status phrase must come first.
+  const reSt = /(?:Navigation(?:al)?\s+)?Status\s*[:\-]?\s*([A-Za-z][A-Za-z ]{2,40})/g;
+  while ((m = reSt.exec(flat))) { const n = _prNavAt(m[1].trim()); if (n) { out.nav = n; break; } }
+  if (!out.nav && flat.length <= 1500) {
+    // A short message (noon report / agent): the words themselves.
+    if (/\b(?:at anchor|anchored)\b/i.test(flat)) out.nav = 'At anchor';
+    else if (/\bdrifting\b/i.test(flat)) out.nav = 'Drifting';
+    else if (/\b(?:moored|alongside|berthed)\b/i.test(flat)) out.nav = 'Moored';
+    else if (/\b(?:under\s*way|underway|steaming|proceeding)\b/i.test(flat)) out.nav = 'Under way';
+  }
+
+  // Destination ("heading to")
+  if ((m = /heading at the port of (.{2,60}?)(?:\s*\.(?:\s|$)|\s+The vessel\b|$)/i.exec(flat))) out.dest = _prPlace(m[1]);
+  else if ((m = /en route to (?:the port of )?(.{2,80}?),?\s+sailing at a speed/i.exec(flat))) out.dest = _prPlace(m[1]);
+  else if ((m = /\b([A-Z][A-Z0-9 .'\/\-]{1,40}?)\s+[A-Z]{2}[A-Z2-9]{3}\s+ETA\*?\s+\d{4}-\d{2}-\d{2}/.exec(flat))) out.dest = _prPlace(m[1]);
+  else if ((m = /\b(?:Destination|Dest\.?|Bound for|Next port)\s*[:\-]?\s*([A-Za-z][A-Za-z0-9 .'\/\-]{1,40}?)(?=\s+(?:ATA|ETA|ATD|Reported|Predicted|Distance|Draught|Course|Speed|Navigation|Status|Position|Last|Lat|Long|IMO|MMSI)\b|\s*[|\n,;(]|$)/i.exec(text.replace(/[ \t]+/g, ' ')))) out.dest = _prPlace(m[1]);
+  if (out.dest && /^(?:-+|n\/?a|unknown|not available|none)$/i.test(out.dest)) out.dest = '';
+
+  // The ship's AIS ETA (UTC on these sites)
+  let eta = null;
+  if ((m = /\bETA\*?\s*:?\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/i.exec(flat))) eta = _prUtc(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  if (eta == null && (m = /expected to arrive there on ([A-Z][a-z]{2}) (\d{1,2}), (\d{2}):(\d{2})/.exec(flat))) eta = _prNoYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, 'eta');
+  if (eta == null && (m = /\bETA\s*:?\s*([A-Z][a-z]{2}) (\d{1,2}),? (\d{2}):(\d{2})/.exec(flat))) eta = _prNoYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, 'eta');
+  if (eta == null && out.src === 'report') {
+    // Noon report / agent: "ETA FUJAIRAH 18TH OCT 2300LT", "ETA 18 Oct 2026 23:00 UTC", "ETA 18/2300 LT"
+    let d = null, mo = null, y = null, h = null, mi = null, tz = '';
+    if ((m = /\bETA\b[^0-9]{0,30}?(\d{1,2})(?:st|nd|rd|th)?[\s\-\/.]*([A-Za-z]{3})[a-z]*\.?[\s\-\/.,]*(\d{4})?[\s,]*(\d{2})[:.h]?(\d{2})\s*(?:hrs?|h)?\s*(LT|UTC|GMT|Z|LMT|local)?/i.exec(flat)) && PR_MON[m[2].toLowerCase()] != null) {
+      d = +m[1]; mo = PR_MON[m[2].toLowerCase()]; y = m[3] ? +m[3] : null; h = +m[4]; mi = +m[5]; tz = m[6] || '';
+    } else if ((m = /\bETA\b[^0-9]{0,30}?(\d{1,2})\s*\/\s*(\d{2})[:.]?(\d{2})\s*(?:hrs?|h)?\s*(LT|UTC|GMT|Z|LMT|local)?/i.exec(flat))) {
+      d = +m[1]; h = +m[2]; mi = +m[3]; tz = m[4] || '';
+    }
+    if (d != null) {
+      const utc = /^(UTC|GMT|Z)$/i.test(tz);
+      const base = new Date(now);
+      const yy = y != null ? y : (utc ? base.getUTCFullYear() : base.getFullYear());
+      let mm = mo != null ? mo : (utc ? base.getUTCMonth() : base.getMonth());
+      let t = utc ? _prUtc(yy, mm, d, h, mi) : _prLocal(yy, mm, d, h, mi);
+      // "18/2300" with no month: the next 18th from now (a few days back allowed)
+      if (t != null && mo == null && t < now - 5 * 86400000) t = utc ? _prUtc(mm === 11 ? yy + 1 : yy, (mm + 1) % 12, d, h, mi) : _prLocal(mm === 11 ? yy + 1 : yy, (mm + 1) % 12, d, h, mi);
+      if (t != null && y == null && mo != null && t < now - 60 * 86400000) t = utc ? _prUtc(yy + 1, mm, d, h, mi) : _prLocal(yy + 1, mm, d, h, mi);
+      eta = t;
+    }
+    if (!out.dest && (m = /\bETA\s+(?:at\s+|to\s+)?([A-Z][A-Za-z .\-]{2,25}?)\s+(?:on\s+)?\d/i.exec(flat)) && !PR_MON[m[1].trim().toLowerCase().slice(0, 3)]) out.dest = _prPlace(m[1]);
+  }
+  out.eta = eta;
+
+  // When the position was reported
+  let at = null, approx = false;
+  if ((m = /as reported on (\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})/i.exec(flat))) at = _prUtc(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  if (at == null && (m = /(?:Position\s+received|Last\s+(?:position\s+)?(?:received|report(?:ed)?|update[d]?)|Position\s+time|reported\s+on|Position\s+date)\s*:?\s*(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::\d{2})?\s*(UTC|GMT|Z|LT)?/i.exec(flat))) {
+    at = /LT/i.test(m[6] || '') ? _prLocal(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]) : _prUtc(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  }
+  if (at == null && (m = /(?:Position\s+received|Last\s+(?:position\s+)?(?:received|report(?:ed)?))\s*:?\s*([A-Z][a-z]{2}) (\d{1,2}), (\d{4}) (\d{2}):(\d{2})\s*(?:UTC|GMT)?/.exec(flat))) at = _prUtc(+m[3], PR_MON[m[1].toLowerCase()], +m[2], +m[4], +m[5]);
+  if (at == null && (m = /\breported\s+(an?|\d+)\s+(secs?|seconds?|mins?|minutes?|hours?|hrs?|days?)\s+ago\b/i.exec(flat))) { const ms = _prAgoMs(m[1], m[2]); if (ms != null) { at = now - ms; approx = true; } }
+  if (at == null && (m = /Position\s+received\s*:?\s*(an?|\d+)\s*(s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?)\s+ago\b/i.exec(flat))) { const ms = _prAgoMs(m[1], m[2]); if (ms != null) { at = now - ms; approx = true; } }
+  if (at == null && /(?:reported|Position\s+received)\s*:?\s*(?:just now|a few seconds ago)/i.test(flat)) { at = now; approx = true; }
+  if (at != null && at > now + 3600000) at = null; // a report "in the future": not trusted
+  out.at = at; out.atApprox = approx;
+
+  // VesselFinder "The vessel arrived at the port of Fujairah, … on Jun 30, 17:01 UTC."
+  if ((m = /arrived at the port of (.{2,80}?) on ([A-Z][a-z]{2}) (\d{1,2}), (\d{2}):(\d{2}) UTC/.exec(flat))) {
+    out.arr = _prPlace(m[1]);
+    out.arrAt = _prNoYear(PR_MON[m[2].toLowerCase()], +m[3], +m[4], +m[5], now, 'past');
+  }
+  if (!out.area && pos) out.area = _aisSeaArea(pos.lat, pos.lon);
+
+  if (pos) out.found.push('position');
+  else if (out.area) out.found.push('sea area');
+  if (out.nav) out.found.push('status');
+  if (out.sog != null) out.found.push('speed');
+  if (out.dest) out.found.push('heading to');
+  if (out.eta != null) out.found.push('ETA');
+  if (out.at != null) out.found.push('reported time');
+  if (out.arr) out.found.push('arrival');
+  return out;
+}
+
+/* ── Stored report ── */
+function _prIso(t) { return t == null || !isFinite(t) ? '' : new Date(t).toISOString(); }
+// Saved posRpt (any shape — it comes from sync) → a safe report or null.
+function _prClean(r) {
+  if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+  const num = function(x, lo, hi) { const n = (x === null || x === undefined || x === '') ? NaN : Number(x); return isFinite(n) && n >= lo && n <= hi ? n : null; };
+  const time = function(x) { const t = typeof x === 'number' ? x : Date.parse(String(x || '')); return isFinite(t) && t > 0 ? t : null; };
+  const out = {
+    lat: num(r.lat, -90, 90), lon: num(r.lon, -180, 180),
+    area: _prText(r.area, 40), nav: PR_NAV_LABELS.indexOf(String(r.nav || '')) >= 0 ? String(r.nav) : '',
+    sog: num(r.sog, 0, 40), cog: num(r.cog, 0, 360), dest: _prText(r.dest),
+    eta: time(r.eta), at: time(r.at), atApprox: !!r.atApprox,
+    arr: _prText(r.arr), arrAt: time(r.arrAt),
+    src: Object.prototype.hasOwnProperty.call(PR_SRC, r.src) ? r.src : 'other',
+    by: _prText(r.by, 60), updatedAt: num(r.updatedAt, 0, 1e15) || 0,
+  };
+  if (out.lat == null || out.lon == null || (out.lat === 0 && out.lon === 0)) { out.lat = null; out.lon = null; }
+  if (out.lat == null && !out.area && !out.nav && !out.dest && !out.arr && out.sog == null) return null;
+  return out;
+}
+function _prGet(id) { return _prClean(_prByCard[id]); }
+function _prRemember(id, def) {
+  if (def && def.posRpt && typeof def.posRpt === 'object' && !Array.isArray(def.posRpt)) _prByCard[id] = def.posRpt;
+  else delete _prByCard[id];
+}
+// Fields for a vessel record: {posRpt} only when the card has one ({} otherwise).
+function _cardPosRptFields(id) { return _prByCard[id] ? { posRpt: _prByCard[id] } : {}; }
+// Report → the AIS-row shape _aisAssess reads (null without a position / time).
+function _prAsPos(r) {
+  if (!r || r.lat == null || r.lon == null || r.at == null) return null;
+  return { lat: r.lat, lon: r.lon, sog: r.sog, cog: r.cog, heading: null, nav_status: _prNavCode(r.nav), position_time: new Date(r.at).toISOString(), destination: r.dest, ais_eta: null, mmsi: '', imo: '' };
+}
+function _prAssess(v, r, now) {
+  now = now == null ? Date.now() : now;
+  const p = _prAsPos(r);
+  const a = _aisAssess(v, p ? { pos: p, by: 'report' } : null, now, { staleHrs: PR_CFG.staleHrs });
+  if (!p && r && r.at != null) a.ageMs = Math.max(0, now - Math.min(r.at, now));
+  if (a.warn) {
+    if (a.ageMs != null && a.ageMs > PR_CFG.warnMaxAgeHrs * 3600000) a.warn = null;
+    else a.warn = { level: a.warn.level, hrs: a.warn.hrs, text: a.warn.text.replace(/^AIS suggests/, 'Last report suggests') };
+  }
+  return a;
+}
+// Every card for the same ship as card `id` (same valid IMO or MMSI), `id` itself first.
+function _prSameShipCards(id) {
+  const out = [String(id)];
+  const me = _aisCardVessel(id);
+  if (!me) return out;
+  const mine = _aisVesselIds(me), myM = mine.mmsi || mine.legacy, myI = mine.imo;
+  if (!myM && !myI) return out;
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
+    const cid = card.id.replace('vessel-', '');
+    if (cid === String(id)) return;
+    const o = _aisCardVessel(cid);
+    if (!o) return;
+    const x = _aisVesselIds(o), oM = x.mmsi || x.legacy;
+    if ((myI && x.imo === myI) || (myM && oM === myM)) out.push(cid);
+  });
+  return out;
+}
+
+/* ── Formatting ── */
+function _prSrcName(r) { return PR_SRC[r && r.src] || 'Other'; }
+function _prWhen(t) { return t == null ? '—' : _aisWhen(new Date(t)); }
+function _prPosHtml(r) {
+  if (r.lat != null && r.lon != null) {
+    const lat = r.lat, lon = r.lon;
+    const txt = Math.abs(lat).toFixed(2) + '°' + (lat >= 0 ? 'N' : 'S') + ' ' + Math.abs(lon).toFixed(2) + '°' + (lon >= 0 ? 'E' : 'W');
+    const area = r.area || _aisSeaArea(lat, lon);
+    const url = 'https://www.openstreetmap.org/?mlat=' + lat.toFixed(4) + '&mlon=' + lon.toFixed(4) + '#map=7/' + lat.toFixed(4) + '/' + lon.toFixed(4);
+    return '<span class="ais-fact ais-wrap" title="Last known position (position report)">📍 ' + (area ? esc(area) + ' · ' : '') + '<a href="' + url + '" target="_blank" rel="noopener">' + txt + '</a></span>';
+  }
+  if (r.area) return '<span class="ais-fact ais-wrap">📍 ' + esc(r.area) + ' <span class="prpt-mute">(no exact position)</span></span>';
+  return '<span class="ais-fact prpt-mute">no position given</span>';
+}
+function _prStatusTxt(r) {
+  const parts = [];
+  if (r.nav) parts.push(r.nav);
+  if (r.sog != null) parts.push(_aisKn(r.sog));
+  return parts.join(' · ');
+}
+function _prAgeHtml(r) {
+  if (r.at == null) return '<span class="prpt-mute">time not given</span>';
+  const old = Date.now() - r.at > PR_CFG.oldHrs * 3600000;
+  return '<span class="' + (old ? 'prpt-old' : '') + '">' + (r.atApprox ? '~' : '') + esc(_prWhen(r.at)) + ' · ' + _aisAgoSpan('', r.at) + '</span>';
+}
+function _prChip(a, r) {
+  if (a && a.status !== 'notseen' && AIS_STATUS_LABEL[a.status]) return '<span class="ais-chip ais-st-' + a.status + '">' + AIS_STATUS_LABEL[a.status] + '</span>';
+  if (r && r.nav === 'At anchor') return '<span class="ais-chip ais-st-report">At anchor</span>';
+  if (r && r.nav === 'Moored') return '<span class="ais-chip ais-st-report">Moored</span>';
+  return '<span class="ais-chip ais-st-report">Last report</span>';
+}
+function _prExpectHtml(a, r) {
+  if (!a || a.status === 'notseen') return '';
+  if (a.status === 'stale') return '<span class="prpt-mute">report too old to estimate</span>';
+  // Worked out from an older report, the time can already be past: say so instead of showing it as news.
+  const past = function(d) { return d instanceof Date && d.getTime() < Date.now(); };
+  if (a.est && past(a.est)) return '<span class="prpt-old">~' + esc(_aisWhen(a.est)) + ' — already past, get a newer report</span>';
+  if (a.estSpeed && past(a.estSpeed)) return '<span class="prpt-old">~' + esc(_aisWhen(a.estSpeed)) + ' — already past, get a newer report</span>';
+  if (a.est) return '<b>~' + esc(_aisWhen(a.est)) + '</b> <span class="prpt-mute">at ' + esc(_aisKn(a.sog)) + '</span>';
+  if (a.estSpeed) return 'at current speed <b>~' + esc(_aisWhen(a.estSpeed)) + '</b>';
+  if (a.status === 'arrived') return 'arrived';
+  if (_aisCourseTxt(a)) return esc(_aisCourseTxt(a));
+  if (a.sog != null && a.sog < AIS_CFG.movingSog) return '<span class="prpt-mute">not moving</span>';
+  return '';
+}
+function _prCell(k, vHtml) { return vHtml ? '<div class="prpt-cell"><span class="prpt-k">' + esc(k) + '</span><span class="prpt-v">' + vHtml + '</span></div>' : ''; }
+function _prEtaHtml(t) {
+  if (t == null) return '';
+  return '<span title="The ship\'s own AIS ETA (sent in UTC), shown in your local time">' + esc(_prWhen(t)) + '</span>';
+}
+function _prGridHtml(v, r, a) {
+  const cells = [];
+  cells.push(_prCell('Last position', _prPosHtml(r)));
+  cells.push(_prCell('Status / speed', _prStatusTxt(r) ? esc(_prStatusTxt(r)) : '<span class="prpt-mute">—</span>'));
+  cells.push(_prCell('Heading to', r.dest ? esc(r.dest) : (r.arr ? 'arrived ' + esc(r.arr) + (r.arrAt != null ? ' ' + esc(_prWhen(r.arrAt)) : '') : '<span class="prpt-mute">—</span>')));
+  cells.push(_prCell('ETA', r.eta != null ? _prEtaHtml(r.eta) : '<span class="prpt-mute">—</span>'));
+  cells.push(_prCell('Reported', _prAgeHtml(r)));
+  if (a && a.distNm != null) cells.push(_prCell('Distance left', '<b>' + esc(_aisNm(a.distNm)) + '</b> to ' + esc(areaShort(a.ref.key))));
+  const ex = _prExpectHtml(a, r);
+  if (ex) cells.push(_prCell('Expected arrival', ex));
+  return '<div class="prpt-grid">' + cells.join('') + '</div>';
+}
+/* The card panel ('' = nothing to show). */
+function _prCardHtml(id) {
+  const v = _aisCardVessel(id);
+  if (!v || (!v.name && !_aisHasIds(v))) return '';
+  const sid = String(id).replace(/\D/g, '');
+  const r = _prGet(id);
+  const live = _aisActive() ? _aisMatch(v, _ais.positions) : null;
+  const liveT = live && _aisHasPos(live.pos) ? _aisPosTime(live.pos) : null;
+  if (!r) {
+    // A fresh live AIS position already answers "where is it": no prompt then.
+    if (liveT != null && Date.now() - liveT <= AIS_CFG.staleHrs * 3600000) return '';
+    return '<div class="prpt-hd"><span class="ais-lbl">Last known position</span><span class="prpt-mute">not added yet</span>' +
+      '<button type="button" class="prpt-btn" onclick="openPosReport(' + sid + ')" title="Free: copy the ship\'s page from MyShipTracking / VesselFinder / MarineTraffic and paste it here">+ Add from MyShipTracking / VesselFinder</button></div>';
+  }
+  const a = _prAssess(v, r);
+  const newer = liveT != null && r.at != null && liveT > r.at;
+  return '<div class="prpt-hd"><span class="ais-lbl">Last known position</span>' + _prChip(a, r) +
+    '<span class="prpt-src">from ' + esc(_prSrcName(r)) + '</span>' +
+    (newer ? '<span class="ais-note" title="The live AIS position above was received after this report">live AIS above is newer</span>' : '') +
+    '<button type="button" class="prpt-btn" onclick="openPosReport(' + sid + ')">Update</button></div>' +
+    _prGridHtml(v, r, a) +
+    (a.warn ? '<div class="ais-warn ' + a.warn.level + '" role="status">' + esc(a.warn.text) + '</div>' : '');
+}
+function _prRenderCard(id) {
+  const el = document.getElementById('v' + id + '-prpt');
+  if (!el) return;
+  let html = '';
+  try { html = _prCardHtml(id); } catch (e) { console.warn('FLOW: last known position failed', e); html = ''; }
+  const sig = _aisStaticSig(html);
+  if (el._prSig === sig) { _aisTickAgo(el); return; }
+  el._prSig = sig;
+  el.innerHTML = html;
+  el.classList.toggle('show', !!html);
+}
+function _prRenderCards() {
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) { _prRenderCard(card.id.replace('vessel-', '')); });
+}
+// Dashboard row facts for a vessel shown from its report.
+function _prDashFacts(x) {
+  const r = x.r, a = x.ra, v = x.v, facts = [];
+  facts.push(_prPosHtml(r));
+  if (a && a.distNm != null) facts.push('<span class="ais-fact"><b>' + _aisNm(a.distNm) + '</b> left to ' + esc(areaShort(a.ref.key)) + '</span>');
+  if (_prStatusTxt(r)) facts.push('<span class="ais-fact"><b>' + esc(_prStatusTxt(r)) + '</b></span>');
+  if (r.dest) facts.push('<span class="ais-fact ais-wrap">to ' + esc(r.dest) + '</span>');
+  const ex = _prExpectHtml(a, r), etaTxt = _aisEtaTxt(v);
+  if (ex || r.eta != null || etaTxt) facts.push('<span class="ais-fact">' + [ex ? 'expected ' + ex : '', r.eta != null ? 'ship ETA ' + esc(_prWhen(r.eta)) : '', etaTxt ? 'nominated ETA ' + esc(etaTxt) : ''].filter(Boolean).join(' · ') + '</span>');
+  facts.push('<span class="ais-fact">reported ' + _prAgeHtml(r) + ' · ' + esc(_prSrcName(r)) + '</span>');
+  return facts;
+}
+function _prDashBtn(cid, has) {
+  const sid = String(cid).replace(/\D/g, '');
+  return sid ? '<button type="button" class="prpt-link" onclick="openPosReport(' + sid + ')">' + (has ? 'Update position' : '+ Add last position') + '</button>' : '';
+}
+// One dashboard row from a report: x = {v, r, ra}.
+function _prDashRowHtml(x) {
+  const v = x.v, a = x.ra;
+  const facts = _prDashFacts(x);
+  facts.push(_aisLinks({ mmsi: _aisVesselIds(v).mmsi || _aisVesselIds(v).legacy || '', imo: _aisVesselIds(v).imo || '' }));
+  facts.push(_prDashBtn(v.cid, true));
+  return '<div class="ais-row" data-cid="' + esc(v.cid) + '" data-src="report" data-ais-status="' + esc(x.a ? x.a.status : 'notseen') + '">' +
+    '<div class="ais-row-main"><span class="ais-row-name">' + esc(v.name || _aisIdTxt(v)) + '</span>' + _prChip(a, x.r) + '<span class="prpt-tag" title="Not heard on live AIS — from a pasted position report">last known position</span></div>' +
+    '<div class="ais-row-facts">' + facts.join('') + '</div>' +
+    (a && a.warn ? '<div class="ais-warn ' + a.warn.level + '">' + esc(a.warn.text) + '</div>' : '') +
+    '</div>';
+}
+// Cards with a report (for the dashboard while AIS isn't live).
+function _prDashInfos() {
+  const out = [];
+  document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
+    const cid = card.id.replace('vessel-', '');
+    const r = _prGet(cid);
+    if (!r) return;
+    const v = _aisCardVessel(cid);
+    if (!v || (!v.name && !_aisHasIds(v))) return;
+    out.push({ v: v, r: r, ra: _prAssess(v, r), a: null });
+  });
+  return out;
+}
+function _prDashListHtml(list) {
+  if (!list || !list.length) return '';
+  const sorted = list.slice().sort(function(x, y) { return (x.ra.distNm == null ? 1e9 : x.ra.distNm) - (y.ra.distNm == null ? 1e9 : y.ra.distNm); });
+  return '<div class="ais-list prpt-dash">' + sorted.map(_prDashRowHtml).join('') + '</div>';
+}
+
+/* ── Look-up links (the ship's public page) ── */
+function _prLinks(v) {
+  const x = _aisVesselIds(v || {}), mmsi = x.mmsi || x.legacy || '', imo = x.imo || '';
+  const name = String((v && v.name) || '').trim();
+  const out = [];
+  // MyShipTracking's ship page needs the MMSI (VesselFinder's page shows it: "(IMO …, MMSI …)").
+  if (mmsi) out.push(['mst', 'MyShipTracking', 'https://www.myshiptracking.com/vessels/mmsi-' + mmsi + (imo ? '-imo-' + imo : '')]);
+  if (imo || mmsi) out.push(['vf', 'VesselFinder', 'https://www.vesselfinder.com/vessels/details/' + (imo || mmsi)]);
+  else if (name) out.push(['vf', 'VesselFinder (search)', 'https://www.vesselfinder.com/vessels?name=' + encodeURIComponent(name)]);
+  if (mmsi) out.push(['mt', 'MarineTraffic', 'https://www.marinetraffic.com/en/ais/details/ships/mmsi:' + mmsi]);
+  else if (imo) out.push(['mt', 'MarineTraffic', 'https://www.marinetraffic.com/en/ais/details/ships/imo:' + imo]);
+  return out;
+}
+
+/* ── The dialog ── */
+function _prFmtLocal(t) {
+  if (t == null || !isFinite(t)) return '';
+  const d = new Date(t);
+  return pad(d.getDate()) + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+function _prFmtCoord(x, axis) {
+  if (x == null || !isFinite(x)) return '';
+  return Math.abs(x).toFixed(5).replace(/0+$/, '').replace(/\.$/, '') + ' ' + (axis === 'lat' ? (x >= 0 ? 'N' : 'S') : (x >= 0 ? 'E' : 'W'));
+}
+function _prDlgEl(k) { return _prDlg ? _prDlg.ov.querySelector('[data-prd="' + k + '"]') : null; }
+function openPosReport(id) {
+  id = String(id);
+  const card = document.getElementById('vessel-' + id);
+  if (!card) return;
+  if (_prDlg) closePosReport();
+  const v = _aisCardVessel(id) || { name: '' };
+  const existing = _prGet(id);
+  const links = _prLinks(v);
+  const ov = document.createElement('div');
+  ov.className = 'prd-ov';
+  ov.setAttribute('data-prd-ov', id);
+  const navOpts = ['<option value="">—</option>'].concat(PR_NAV_LABELS.map(function(l) { return '<option value="' + esc(l) + '">' + esc(l) + '</option>'; })).join('');
+  const srcOpts = Object.keys(PR_SRC).map(function(k) { return '<option value="' + k + '">' + esc(PR_SRC[k]) + '</option>'; }).join('');
+  ov.innerHTML =
+    '<div class="prd" role="dialog" aria-modal="true" aria-labelledby="prd-title">' +
+      '<div class="prd-hd"><div><div class="prd-title" id="prd-title">Last known position — ' + esc(v.name || _aisIdTxt(v) || 'vessel') + '</div>' +
+        '<div class="prd-sub">Free: copy the ship\'s page from a tracking website and paste it here. FLOW reads the details — check them, then Save.</div></div>' +
+        '<button type="button" class="prd-x" data-prd="close" aria-label="Close">✕</button></div>' +
+      '<div class="prd-step"><span class="prd-n">1</span><div><b>Open the ship\'s page</b> ' +
+        (links.length ? '<span class="prd-links">' + links.map(function(l) { return '<a href="' + esc(l[2]) + '" target="_blank" rel="noopener" data-prd-link="' + l[0] + '">' + esc(l[1]) + '</a>'; }).join('') + '</span>' : '<span class="prpt-mute">add the IMO or MMSI on the card first</span>') +
+        '<div class="prd-hint">MyShipTracking gives the exact position and time; VesselFinder only the sea area.' + (links.length && !links.some(function(l) { return l[0] === 'mst'; }) ? ' Add the MMSI on the card to get the MyShipTracking link.' : '') + '</div></div></div>' +
+      '<div class="prd-step"><span class="prd-n">2</span><div style="flex:1;min-width:0"><b>Copy the whole page and paste it here</b>' +
+        '<div class="prd-hint">On the page press <kbd>Ctrl</kbd>+<kbd>A</kbd> then <kbd>Ctrl</kbd>+<kbd>C</kbd> (phone: Select all → Copy). A noon report or agent\'s message works too.</div>' +
+        '<textarea class="prd-text" data-prd="text" rows="4" placeholder="Paste here (Ctrl+V)…" spellcheck="false" aria-label="Pasted page or message"></textarea>' +
+        '<div class="prd-row"><button type="button" class="prpt-btn" data-prd="clip" hidden>Paste from clipboard</button><span class="prd-found" data-prd="found" aria-live="polite"></span></div>' +
+        '<div class="prd-warn" data-prd="warn" hidden></div></div></div>' +
+      '<div class="prd-step"><span class="prd-n">3</span><div style="flex:1;min-width:0"><b>Check the details</b> <span class="prd-hint">(or type them)</span>' +
+        '<div class="prd-grid">' +
+          '<label>Latitude<input type="text" data-prd="lat" placeholder="e.g. 19.27 N or 19°16\'N" autocomplete="off"></label>' +
+          '<label>Longitude<input type="text" data-prd="lon" placeholder="e.g. 65.06 E" autocomplete="off"></label>' +
+          '<label class="prd-wide">Sea area<input type="text" data-prd="area" maxlength="40" placeholder="e.g. Arabian Sea" autocomplete="off"></label>' +
+          '<label>Status<select data-prd="nav">' + navOpts + '</select></label>' +
+          '<label>Speed (kn)<input type="text" data-prd="sog" inputmode="decimal" placeholder="e.g. 11.5" autocomplete="off"></label>' +
+          '<label>Course (°)<input type="text" data-prd="cog" inputmode="decimal" placeholder="optional" autocomplete="off"></label>' +
+          '<label class="prd-wide">Heading to<input type="text" data-prd="dest" maxlength="80" placeholder="e.g. Fujairah" autocomplete="off"></label>' +
+          '<label><span>Ship\'s ETA <span class="prd-tz">· your time</span></span><input type="text" data-prd="eta" placeholder="e.g. 18 Oct 2026 23:00" autocomplete="off"></label>' +
+          '<label><span>Reported <span class="prd-tz">· your time</span></span><input type="text" data-prd="at" placeholder="e.g. 16 Oct 2026 14:05" autocomplete="off"></label>' +
+          '<label>Source<select data-prd="src">' + srcOpts + '</select></label>' +
+        '</div><div class="prd-note" data-prd="atnote" hidden></div>' +
+        '<div class="prd-calc" data-prd="calc" aria-live="polite"></div>' +
+        '<div class="prd-err" data-prd="err" role="alert" hidden></div></div></div>' +
+      '<div class="prd-ft">' + (existing ? '<button type="button" class="prd-rm" data-prd="remove">Remove report</button>' : '') +
+        '<span style="flex:1"></span><button type="button" class="prd-cancel" data-prd="cancel">Cancel</button><button type="button" class="prd-save" data-prd="save">Save</button></div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  _prDlg = { id: id, ov: ov, prevFocus: document.activeElement, parsed: null, existing: existing, t: null, approx: existing ? existing.atApprox : false };
+  if (existing) _prFillForm(existing);
+  else _prDlgEl('src').value = 'mst';
+  const text = _prDlgEl('text');
+  text.addEventListener('input', function() { clearTimeout(_prDlg && _prDlg.t); if (_prDlg) _prDlg.t = setTimeout(_prOnPaste, 120); });
+  text.addEventListener('paste', function() { setTimeout(_prOnPaste, 0); });
+  ['lat', 'lon', 'sog', 'cog', 'nav', 'eta', 'at', 'area', 'dest'].forEach(function(k) {
+    const el = _prDlgEl(k);
+    el.addEventListener(el.tagName === 'SELECT' ? 'change' : 'input', function() { if (k === 'at' && _prDlg) { _prDlg.approx = false; _prDlgEl('atnote').hidden = true; } _prCalc(); });
+  });
+  const clip = _prDlgEl('clip');
+  if (navigator.clipboard && typeof navigator.clipboard.readText === 'function') {
+    clip.hidden = false;
+    clip.addEventListener('click', function() {
+      navigator.clipboard.readText().then(function(t) { if (!_prDlg) return; _prDlgEl('text').value = String(t || ''); _prOnPaste(); })
+        .catch(function() { showToast('The browser did not allow reading the clipboard — paste into the box with Ctrl+V.', 'info', 5000); });
+    });
+  }
+  _prDlgEl('close').addEventListener('click', closePosReport);
+  _prDlgEl('cancel').addEventListener('click', closePosReport);
+  _prDlgEl('save').addEventListener('click', _prSave);
+  if (existing) _prDlgEl('remove').addEventListener('click', _prRemove);
+  ov.addEventListener('mousedown', function(e) { if (e.target === ov) closePosReport(); });
+  ov.addEventListener('keydown', _prKey);
+  _prCalc();
+  setTimeout(function() { if (_prDlg && _prDlg.ov === ov) text.focus(); }, 30);
+}
+function _prKey(e) {
+  if (!_prDlg) return;
+  if (e.key === 'Escape') { e.preventDefault(); closePosReport(); return; }
+  if (e.key === 'Tab') {
+    // Keep focus inside the dialog.
+    const f = Array.prototype.filter.call(_prDlg.ov.querySelectorAll('a[href],button:not([disabled]):not([hidden]),input,select,textarea'), function(x) { return x.offsetParent !== null; });
+    if (!f.length) return;
+    const first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+}
+function closePosReport() {
+  if (!_prDlg) return;
+  const d = _prDlg;
+  _prDlg = null;
+  clearTimeout(d.t);
+  if (d.ov && d.ov.parentNode) d.ov.parentNode.removeChild(d.ov);
+  if (d.prevFocus && typeof d.prevFocus.focus === 'function' && document.contains(d.prevFocus)) { try { d.prevFocus.focus(); } catch (e) {} }
+}
+function _prFillForm(r) {
+  const set = function(k, val) { const el = _prDlgEl(k); if (el) el.value = val == null ? '' : String(val); };
+  set('lat', _prFmtCoord(r.lat, 'lat')); set('lon', _prFmtCoord(r.lon, 'lon'));
+  set('area', r.area || ''); set('nav', r.nav || ''); set('sog', r.sog != null ? r.sog : ''); set('cog', r.cog != null ? r.cog : '');
+  set('dest', r.dest || (r.arr ? r.arr : '')); set('eta', _prFmtLocal(r.eta)); set('at', _prFmtLocal(r.at));
+  set('src', PR_SRC[r.src] ? r.src : 'other');
+  const note = _prDlgEl('atnote');
+  if (note) {
+    note.hidden = !r.atApprox;
+    note.textContent = r.atApprox ? 'Approximate — the page only said how long ago (e.g. “6 hours ago”).' : '';
+  }
+}
+function _prOnPaste() {
+  if (!_prDlg) return;
+  const raw = _prDlgEl('text').value;
+  const found = _prDlgEl('found'), warn = _prDlgEl('warn');
+  if (!String(raw).trim()) { found.textContent = ''; warn.hidden = true; return; }
+  const p = _prParse(raw, Date.now());
+  _prDlg.parsed = p;
+  const nothing = !p.found.length;
+  found.className = 'prd-found ' + (nothing ? 'bad' : 'ok');
+  found.textContent = nothing
+    ? 'Nothing recognised — paste the whole page (Ctrl+A, Ctrl+C), or type the details below.'
+    : 'Found ' + p.found.join(', ') + (p.src !== 'other' && p.src !== 'report' ? ' — from ' + PR_SRC[p.src] : '') + '.' + (p.lat == null && p.area ? ' No exact position on this page — the distance can\'t be worked out (MyShipTracking has it).' : '');
+  if (!nothing) {
+    _prFillForm({ lat: p.lat, lon: p.lon, area: p.area, nav: p.nav, sog: p.sog, cog: p.cog, dest: p.dest || (p.arr ? 'arrived ' + p.arr : ''), eta: p.eta, at: p.at, atApprox: p.atApprox, src: p.src });
+    if (p.at == null) _prDlgEl('at').value = '';
+    _prDlg.approx = p.atApprox;
+  }
+  // The right ship?
+  const v = _aisCardVessel(_prDlg.id) || {};
+  const ids = _aisVesselIds(v), myM = ids.mmsi || ids.legacy;
+  const msgs = [];
+  if (p.imo && ids.imo && p.imo !== ids.imo) msgs.push('This page is for IMO ' + p.imo + ' — the nomination has IMO ' + ids.imo + '.');
+  if (p.mmsi && myM && p.mmsi !== myM) msgs.push('This page is for MMSI ' + p.mmsi + ' — the nomination has MMSI ' + myM + '.');
+  if (!msgs.length && p.name && v.name && _aisNameKey(p.name) !== _aisNameKey(v.name) && !(p.imo && p.imo === ids.imo) && !(p.mmsi && p.mmsi === myM)) msgs.push('This page is for “' + p.name + '” — the nomination is “' + v.name + '”.');
+  warn.hidden = !msgs.length;
+  warn.textContent = msgs.length ? '⚠ ' + msgs.join(' ') + ' Check it is the right ship before saving.' : '';
+  _prCalc();
+}
+// The form → {r, err}: r = the report to save (not yet stamped).
+function _prReadForm() {
+  const g = function(k) { const el = _prDlgEl(k); return el ? String(el.value || '').trim() : ''; };
+  const latS = g('lat'), lonS = g('lon');
+  let lat = null, lon = null;
+  if (latS || lonS) {
+    lat = _prCoord1(latS, 'lat'); lon = _prCoord1(lonS, 'lon');
+    if (lat == null || lon == null) return { err: 'Latitude / longitude not understood — use e.g. 19.27 N and 65.06 E, or leave both empty.' };
+    if (lat === 0 && lon === 0) return { err: 'Position 0° / 0° is not a real position — leave both empty.' };
+  }
+  const num = function(s, lo, hi, what) {
+    if (!s) return { v: null };
+    const n = Number(s.replace(',', '.').replace(/\s*(?:kn|kts?|knots?|°)\s*$/i, ''));
+    return isFinite(n) && n >= lo && n <= hi ? { v: n } : { err: what };
+  };
+  const sog = num(g('sog'), 0, 40, 'Speed must be a number of knots (0–40).');
+  if (sog.err) return { err: sog.err };
+  const cog = num(g('cog'), 0, 360, 'Course must be 0–360°.');
+  if (cog.err) return { err: cog.err };
+  let eta = null;
+  if (g('eta')) { const d = parseDT(g('eta')); if (!d) return { err: 'Ship\'s ETA not understood — use e.g. 18 Oct 2026 23:00.' }; eta = d.getTime(); }
+  let at = null;
+  if (g('at')) { const d = parseDT(g('at')); if (!d) return { err: 'Reported time not understood — use e.g. 16 Oct 2026 14:05.' }; at = d.getTime(); if (at > Date.now() + 3600000) return { err: 'The reported time is in the future.' }; }
+  let dest = _prText(g('dest')), arr = '';
+  const am = /^arrived\s+(.+)$/i.exec(dest);
+  if (am) { arr = _prText(am[1]); dest = ''; }
+  const r = {
+    lat: lat, lon: lon, area: _prText(g('area'), 40) || (lat != null ? _aisSeaArea(lat, lon) : ''),
+    nav: PR_NAV_LABELS.indexOf(g('nav')) >= 0 ? g('nav') : '', sog: sog.v, cog: cog.v, dest: dest, eta: eta, at: at,
+    atApprox: !!(_prDlg && _prDlg.approx && at != null), arr: arr,
+    arrAt: arr && _prDlg && _prDlg.parsed && _prDlg.parsed.arr && _prDlg.parsed.arrAt != null ? _prDlg.parsed.arrAt : null,
+    src: PR_SRC[g('src')] ? g('src') : 'other',
+  };
+  if (r.lat == null && !r.area && !r.nav && !r.dest && !r.arr && r.sog == null) return { err: 'Nothing to save yet — paste the ship\'s page or type at least the position, sea area, status or destination.' };
+  return { r: r };
+}
+function _prCalc() {
+  if (!_prDlg) return;
+  const calc = _prDlgEl('calc'), errEl = _prDlgEl('err');
+  errEl.hidden = true;
+  const res = _prReadForm();
+  if (!res.r) { calc.innerHTML = ''; return; }
+  const r = Object.assign({}, res.r, { at: res.r.at != null ? res.r.at : Date.now() });
+  const v = _aisCardVessel(_prDlg.id) || {};
+  const a = _prAssess(v, r);
+  const parts = [];
+  if (a.distNm != null) parts.push('<b>' + esc(_aisNm(a.distNm)) + '</b> left to ' + esc(areaShort(a.ref.key)));
+  const ex = _prExpectHtml(a, r);
+  if (ex) parts.push('expected arrival ' + ex);
+  if (a.warn) parts.push('<span class="prd-wtxt">' + esc(a.warn.text) + '</span>');
+  calc.innerHTML = parts.length ? '→ ' + parts.join(' · ') : (r.lat == null ? '<span class="prpt-mute">Add the position (latitude / longitude) to see the distance left and the expected arrival.</span>' : '');
+}
+async function _prSave() {
+  if (!_prDlg) return;
+  const d = _prDlg;
+  const res = _prReadForm();
+  const errEl = _prDlgEl('err');
+  if (!res.r) { errEl.hidden = false; errEl.textContent = res.err; return; }
+  const r = res.r;
+  let approxNow = false;
+  if (r.at == null) { r.at = Date.now(); r.atApprox = true; approxNow = true; }
+  let by = '';
+  try {
+    if (supabaseClient && supabaseClient.auth && typeof supabaseClient.auth.getSession === 'function') {
+      const s = await supabaseClient.auth.getSession();
+      by = (s && s.data && s.data.session && s.data.session.user && s.data.session.user.email) || '';
+    }
+  } catch (e) { by = ''; }
+  if (_prDlg !== d) return; // closed meanwhile
+  const stored = { src: r.src };
+  if (r.lat != null) { stored.lat = r.lat; stored.lon = r.lon; }
+  if (r.area) stored.area = r.area;
+  if (r.nav) stored.nav = r.nav;
+  if (r.sog != null) stored.sog = r.sog;
+  if (r.cog != null) stored.cog = r.cog;
+  if (r.dest) stored.dest = r.dest;
+  if (r.eta != null) stored.eta = _prIso(r.eta);
+  stored.at = _prIso(r.at);
+  if (r.atApprox) stored.atApprox = true;
+  if (r.arr) stored.arr = r.arr;
+  if (r.arrAt != null) stored.arrAt = _prIso(r.arrAt);
+  if (by) stored.by = _prText(by, 60);
+  stored.updatedAt = Date.now();
+  const ids = _prSameShipCards(d.id);
+  ids.forEach(function(cid) { _prByCard[cid] = stored; });
+  closePosReport();
+  _prRenderCards();
+  try { renderDashAis(); } catch (e) {}
+  if (typeof saveSharedState === 'function') saveSharedState();
+  showToast('Last known position saved' + (ids.length > 1 ? ' (also on ' + (ids.length - 1) + ' other nomination' + (ids.length > 2 ? 's' : '') + ' for the same ship)' : '') + (approxNow ? ' — reported time set to now' : '') + '.', 'success', 4500);
+}
+function _prRemove() {
+  if (!_prDlg) return;
+  const d = _prDlg;
+  if (!confirm('Remove the last known position from this nomination?')) return;
+  // The same report was saved on every card for this ship: remove it there too (same stamp).
+  const mine = _prByCard[d.id], stamp = mine && mine.updatedAt;
+  _prSameShipCards(d.id).forEach(function(cid) {
+    const o = _prByCard[cid];
+    if (cid === d.id || (o && stamp && o.updatedAt === stamp)) delete _prByCard[cid];
+  });
+  closePosReport();
+  _prRenderCards();
+  try { renderDashAis(); } catch (e) {}
+  if (typeof saveSharedState === 'function') saveSharedState();
+  showToast('Last known position removed.', 'info', 3500);
 }
 </script>
 
