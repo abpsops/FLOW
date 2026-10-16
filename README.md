@@ -119,7 +119,7 @@ yet" on the dashboard and traders see nothing.
    (it needs both `pg_cron` and `pg_net` enabled under Database → Extensions).
 6. **Check it works — both ways in:**
    - *By hand:* open FLOW as an operator → Dashboard → **Vessel Positions
-     (AIS)** → **Refresh now**. After about 1 minute you get "Live positions
+     (AIS)** → **Refresh now**. After about 1½ minutes you get "Live positions
      updated — X of Y nominated vessels seen" and the list fills; each
      nomination card shows a "Live position (AIS)" line.
    - *The schedule:* this is a separate path, so check it too. **Don't press
@@ -151,7 +151,7 @@ yet" on the dashboard and traders see nothing.
   the speed and the expected arrival: **AIS arrival ~…** when the ship is
   heading for the port, or **at current speed ~…** when it is more than
   150 nm out and its course doesn't point at the port yet (no warnings are
-  raised from that one). Each run takes about 1 minute; with MMSIs known
+  raised from that one). Each run takes about 1½ minutes and runs every 2 minutes (schedule `*/2 * * * *`), so the stream is listened to almost all the time; with MMSIs known
   most of it is spent searching worldwide, so ships far from Fujairah are
   found too (wherever aisstream.io has coverage).
 - **Matching:** each nomination card has an **IMO** box and an **MMSI** box

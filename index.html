@@ -24661,7 +24661,7 @@ const AIS_CFG = {
   cronLateMin: 25,     // operators warned when the last scheduled run is older than this
   pollMs: 120000,      // re-read the tables every 2 min while visible
   refreshPollMs: 10000,     // after "Refresh now": check ais_status every 10 s …
-  refreshTimeoutMs: 120000, // … for up to 2 min
+  refreshTimeoutMs: 150000, // … for up to 2½ min
 };
 const AIS_NAME_LEN = 20; // AIS carries at most 20 characters of a ship's name
 const AIS_STATUS_LABEL = { arrived: 'Arrived', approaching: 'Approaching', underway: 'Underway', stale: 'Stale', notseen: 'Not seen' };
@@ -25135,7 +25135,7 @@ function renderDashAis() {
   if (!show) { body.innerHTML = ''; sub.textContent = ''; return; }
   if (_ais.state === 'loading') { sub.textContent = 'Loading live positions…'; body.innerHTML = ''; return; }
   const st = _ais.status || {};
-  const refreshing = _ais.refresh ? 'Refreshing… (about 1 minute)' : '';
+  const refreshing = _ais.refresh ? 'Refreshing… (about 1½ minutes)' : '';
   if (!configured) {
     sub.textContent = refreshing || 'Live AIS positions of nominated vessels';
     body.innerHTML = _ais.state === 'error'
@@ -25432,7 +25432,7 @@ async function aisRefreshNow() {
     return;
   }
   if (data.started || data.running) {
-    showToast(data.running ? 'A live position update is already running — the list updates when it finishes.' : 'Fetching live positions — this takes about 1 minute. The list updates by itself.', 'info', 6000);
+    showToast(data.running ? 'A live position update is already running — the list updates when it finishes.' : 'Fetching live positions — this takes about 1½ minutes. The list updates by itself.', 'info', 6000);
     _aisRefreshWait();
     return;
   }

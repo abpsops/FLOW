@@ -232,9 +232,9 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
       JSON.stringify(b.BoundingBoxes) === '[[[-90,-180],[90,180]]]' && b.FiltersShipMMSI.length === 50 && b.FiltersShipMMSI.every(x => typeof x === 'string') && b.FiltersShipMMSI[0] === '200000000', b.FiltersShipMMSI.length);
     // time budget (worker age): phase B is cut first, then phase A
     const D = AIS.DEFAULTS, P = (left) => AIS.planPhases(D, left);
-    const fresh = P(140000 - 8000), age80 = P(140000 - 8000 - 80000), age100 = P(140000 - 8000 - 100000);
-    check('E2 phases planned against the worker\'s age: fresh 40+15 s (~1 min run); 80 s old → phase B shortened to 12 s; 100 s old → phase A only (32 s)',
-      fresh.a === 40000 && fresh.b === 15000 && age80.a === 40000 && age80.b === 12000 && age100.a === 32000 && age100.b === 0, { fresh, age80, age100 });
+    const fresh = P(140000 - 8000), age60 = P(140000 - 8000 - 60000), age120 = P(140000 - 8000 - 120000);
+    check('E2 phases planned against the worker\'s age: fresh 20+70 s (~1½ min run); 60 s old → phase B shortened to 52 s; 120 s old → phase A only (12 s)',
+      fresh.a === 20000 && fresh.b === 70000 && age60.a === 20000 && age60.b === 52000 && age120.a === 12000 && age120.b === 0, { fresh, age60, age120 });
     // adaptive split: no MMSIs → all regional; all known → short regional + worldwide; mixed → 15 s regional
     {
       const T = D.phaseAms + D.phaseBms;
@@ -242,8 +242,8 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
       const all = AIS.adaptPhases(D, AIS.buildContext([{ key: 'mmsi:636012345', mmsi: '636012345', name: 'Y' }], []));
       const mix = AIS.adaptPhases(D, AIS.buildContext([{ key: 'mmsi:636012345', mmsi: '636012345', name: 'Y' }, { key: 'imo:9000001', imo: '9000001', name: 'X' }], []));
       const off = AIS.adaptPhases(Object.assign({}, D, { adaptivePhases: false }), AIS.buildContext([], []));
-      check('E2 adaptive split keeps a ~1 min run: none known (normal split; learned MMSIs still get phase B) → ' + none.phaseAms + '+' + none.phaseBms + ', all known → ' + all.phaseAms + '+' + all.phaseBms + ', mixed → ' + mix.phaseAms + '+' + mix.phaseBms,
-        T === 55000 && none.phaseAms === D.phaseAms && none.phaseBms === D.phaseBms && all.phaseAms === 5000 && all.phaseBms === 50000 && mix.phaseAms === 15000 && mix.phaseBms === 40000 && off.phaseAms === D.phaseAms, { none, all, mix });
+      check('E2 adaptive split keeps a ~1½ min run: none known (normal split; learned MMSIs still get phase B) → ' + none.phaseAms + '+' + none.phaseBms + ', all known → ' + all.phaseAms + '+' + all.phaseBms + ', mixed → ' + mix.phaseAms + '+' + mix.phaseBms,
+        T === 90000 && none.phaseAms === D.phaseAms && none.phaseBms === D.phaseBms && all.phaseAms === 5000 && all.phaseBms === 85000 && mix.phaseAms === 15000 && mix.phaseBms === 75000 && off.phaseAms === D.phaseAms, { none, all, mix });
     }
     // prefilter
     const ctx = AIS.buildContext(tr, [{ mmsi: MMSI.echo, imo: '9000005', name: 'ECHO SCHED' }]);
@@ -422,11 +422,11 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
       upserts.length === 2 && upserts.every(u => u.opts.onConflict === 'mmsi') && upserts[0].rows.some(r => r.mmsi === MMSI.alpha) && !upserts[0].rows.some(r => r.mmsi === MMSI.bravo) && upserts[1].rows.some(r => r.mmsi === MMSI.bravo), upserts.map(u => u.rows.map(r => r.mmsi)));
     check('E3 the workspace is only read, never written', fake.log.filter(o => o.table === 'abps_workspace' && o.action !== 'select').length === 0);
 
-    // 3b — throttle: a successful run < 2 min ago → cached status, no connection
+    // 3b — throttle: a successful run < 20 s ago → cached status, no connection
     const n0 = srv.connections.length;
     const r2 = await call(fake, { Authorization: 'Bearer jwt-operator' });
     const b2 = await r2.json();
-    check('E3 throttle: a second call within 2 min returns the cached status without connecting',
+    check('E3 throttle: a second call within 20 s returns the cached status without connecting',
       r2.status === 200 && b2.throttled === true && b2.status && b2.status.found === 4 && srv.connections.length === n0, b2);
     const lc0 = fake.status().last_cron_at;
     await sleep(20);

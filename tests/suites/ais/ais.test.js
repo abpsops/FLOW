@@ -561,7 +561,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
       db.invokeLog.length === 1 && db.invokeLog[0].name === 'ais-poll' && db.invokeLog[0].uid === 'user-operator' && during.disabled && during.text === 'Refreshing…' && /^Refreshing…/.test(during.sub), [db.invokeLog, during]);
     await page.evaluate(() => document.getElementById('ais-refresh-btn').click());
     check('A4 a second click while running does nothing', db.invokeLog.length === 1);
-    check('A4 202 started → "Fetching live positions…" toast', await page.evaluate(() => __toasts().some(t => /^Fetching live positions — this takes about 1 minute/.test(t))));
+    check('A4 202 started → "Fetching live positions…" toast', await page.evaluate(() => __toasts().some(t => /^Fetching live positions — this takes about 1½ minutes/.test(t))));
     const dt = await until(page, () => __toasts().some(t => /^Live positions updated — 6 of 6 nominated vessels seen\.$/.test(t)), null, 6000);
     const after = await btnState();
     check('A4 picks up the result when ais_status.last_run_at changes (' + dt + ' ms), button back', dt >= 0 && !after.disabled && after.text === 'Refresh now', after);
