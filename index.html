@@ -25583,7 +25583,8 @@ const PR_UNIT_MS = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 7 * 86400000
 // "… ago" units as the sites write them ("1 m ago" on MyShipTracking is a minute).
 const PR_AGO_UNIT = '(?:s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mos?|months?|y|yrs?|years?)';
 // An optional time zone after a time: "(UTC)", "UTC", "GMT+4", "LT", "local".
-const PR_TZ_RE = '\\s*\\(?\\s*(?:(LT|LMT|local|UTC|GMT|Z)\\b(?: ?([+-]\\d{1,2}(?::?\\d{2})?)(?!\\d)(?!\\s*(?:hrs?|h|hours?|days?)\\b))?)?\\s*\\)?';
+// An offset right after UTC / GMT ("GMT+4", "UTC + 4", "(GMT+4 hrs)") — not "UTC -12 hrs notice", not "UTC - 19 Oct" (> 14 h).
+const PR_TZ_RE = '\\s*\\(?\\s*(?:(LT|LMT|local|UTC|GMT|Z)\\b(?:\\s?([+-]\\s?\\d{1,2}(?::?\\d{2})?)(?!\\d)(?!\\s*(?:hrs?|h|hours?)\\.?\\s+(?:notice|prior|before|in advance|advance)\\b)(?!\\s*days?\\b)(?:\\s*(?:hrs?|h|hours?)\\b)?)?)?\\s*\\)?';
 // Words that are not a place after "ETA" ("ETA abt 18th Oct", "ETA revised from …").
 const PR_FILLER = /^(?:abt|about|approx\.?|approximately|revised|changed|amended|updated|from|expected|latest|agw|wp|tba|tbc|tbn|is|will|be|at|to|on|for|eta|now|est\.?|estimated)$/i;
 let _prByCard = {};   // card id → the saved posRpt object as it came (written back unchanged)
@@ -25742,8 +25743,10 @@ function _prNearYear(mon, day, h, mi, now, tz, dflt) {
   return best;
 }
 // A phrase used in the present ("anchored at OPL"), not "will be anchored" / "was anchored".
-// Said of another craft in the same clause ("Barge now proceeding alongside") → not the ship's status.
-const PR_CRAFT = /\b(?:barges?|launch(?:es)?|tugs?|pilots?|boats?|surveyors?|lighters?|crew)\b/i;
+// Said of another craft ("Barge now proceeding alongside") → not the ship's status. Only the subject
+// counts: in "Barge cast off 1400 LT and vessel now underway" the vessel is underway.
+const PR_CRAFT = /\b(?:barges?|launch(?:es)?|tugs?|pilots?|boats?|surveyors?|lighters?)\b/i;
+const PR_SUBJECT_SPLIT = /\b(?:and|while|whilst|then)\b|\b(?:vessel|vsl|ship|she|mv|m\/v|m\.v\.|mt|m\/t)\b/i;
 function _prNowPhrase(flat, re) {
   const g = new RegExp(re.source, 'gi');
   let x;
@@ -25751,7 +25754,7 @@ function _prNowPhrase(flat, re) {
     const pre = flat.slice(Math.max(0, x.index - 26), x.index);
     if (/\b(?:will|shall|to be|expected to(?: be)?|was|were|had been|until|before|after|prior to|once|on arrival)\s+(?:be\s+)?$/i.test(pre)) continue;
     const head = flat.slice(0, x.index), cut = Math.max(head.lastIndexOf('. '), head.lastIndexOf('; '), head.lastIndexOf(', '), head.lastIndexOf('! '), head.lastIndexOf('? '), head.lastIndexOf(' - '));
-    if (PR_CRAFT.test(head.slice(cut + 1))) continue;
+    if (PR_CRAFT.test(head.slice(cut + 1).split(PR_SUBJECT_SPLIT).pop())) continue;
     return true;
   }
   return false;
@@ -25792,7 +25795,7 @@ function _prParse(raw, now) {
     // an average / vessel / SOG speed first, any other plain "speed" next, "current speed" last.
     // Line breaks kept: "WIND: NW 4" on the line before "SPEED: 11.5 KTS" is another field.
     const lined = text.replace(/[ \t]+/g, ' ');
-    const reSp = /\b(speed|sog|spd)\b([^0-9\n]{0,15}?)(\d{1,2}(?:\.\d+)?)\s*(?:knots?|kts?|kn)\b/gi;
+    const reSp = /\b(speed|sog|spd)\b([^0-9]{0,15}?)(\d{1,2}(?:\.\d+)?)\s*(?:knots?|kts?|kn)\b/gi;
     const NOT_SHIP = /\b(?:wind|winds|gust|gusts|tidal|max(?:imum)?|min(?:imum)?|ordered|instructed|required|c\/?p|charter(?:ed)?|warranted|service|design|eco(?:nomical)?|full)\b/i;
     let best = null, weak = null;
     while ((m = reSp.exec(lined))) {
@@ -25817,11 +25820,13 @@ function _prParse(raw, now) {
   if (!out.nav && flat.length <= 1500) {
     // A short message (noon report / agent): the words themselves, in the present —
     // "will be anchored at OPL" / "was anchored at Sohar, now underway" are not "At anchor".
-    const uwNow = _prNowPhrase(flat, /\b(?:now|currently|presently)\s+(?:under\s*way|underway|steaming|proceeding|sailing|en route)\b/);
-    if (!uwNow && _prNowPhrase(flat, /\b(?:at anchor|anchored)\b/)) out.nav = 'At anchor';
-    else if (!uwNow && _prNowPhrase(flat, /\bdrifting\b/)) out.nav = 'Drifting';
-    else if (!uwNow && _prNowPhrase(flat, /\b(?:moored|alongside|berthed)\b/)) out.nav = 'Moored';
-    else if (uwNow || _prNowPhrase(flat, /\b(?:under\s*way|underway|steaming|proceeding)\b/)) out.nav = 'Under way';
+    // (line breaks end a clause: "Bunker barge: TBA\nVessel currently drifting")
+    const flatS = text.replace(/[ \t]*\n\s*/g, '. ').replace(/\s+/g, ' ');
+    const uwNow = _prNowPhrase(flatS, /\b(?:now|currently|presently)\s+(?:under\s*way|underway|steaming|proceeding|sailing|en route)\b/);
+    if (!uwNow && _prNowPhrase(flatS, /\b(?:at anchor|anchored)\b/)) out.nav = 'At anchor';
+    else if (!uwNow && _prNowPhrase(flatS, /\bdrifting\b/)) out.nav = 'Drifting';
+    else if (!uwNow && _prNowPhrase(flatS, /\b(?:moored|alongside|berthed)\b/)) out.nav = 'Moored';
+    else if (uwNow || _prNowPhrase(flatS, /\b(?:under\s*way|underway|steaming|proceeding)\b/)) out.nav = 'Under way';
   }
 
   // Destination ("heading to")
@@ -25833,23 +25838,27 @@ function _prParse(raw, now) {
 
   // The ship's AIS ETA. The tracking sites show it in UTC; a noon report / agent's message
   // without a zone means local time ("2300 LT"). A zone written after the time wins.
-  // (A copied fragment of a site page may not name the site: its own labels still mean UTC.)
-  const siteLabels = /\bETA\*|\bReported ETA\b|\bPredicted ETA\b|\bATD:|\bATA:/i.test(flat);
-  const looksReport = /\b(?:noon|pos(?:n|ition)?|dear|regards|kindly|pls|please|master|agents?|LT|local time)\b/i.test(flat);
-  const dfltZ = (out.src === 'report' || out.src === 'other') && looksReport && !siteLabels ? 'local' : 'utc';
+  // A copied fragment of a site page may not name the site: its own labels still mean UTC
+  // (VesselFinder writes "ATA: -" / "ATA: Apr 12, 14:29 UTC"; an agent's "ATD: 16th Oct 1200" is not that).
+  const siteLabels = /\bETA\*|\bReported ETA\b|\bPredicted ETA\b|\bAT[AD]:\s*(?:-|[A-Z][a-z]{2} \d{1,2}, \d{2}:\d{2})/.test(flat);
+  const siteSrc = out.src === 'mst' || out.src === 'vf' || out.src === 'mt';
+  // ISO "ETA: 2026-10-18 23:00": UTC on the sites, local time in a message.
+  const dfltZ = siteSrc || siteLabels ? 'utc' : 'local';
   let eta = null, etaDay = false;
   if ((m = new RegExp('\\bETA\\*?\\s*:?\\s*(\\d{4})-(\\d{2})-(\\d{2})[ T]+(\\d{2}):(\\d{2})' + PR_TZ_RE, 'i').exec(flat))) eta = _prAt(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], _prTz(m[6], m[7]), dfltZ);
   if (eta == null && (m = /expected to arrive there on ([A-Z][a-z]{2}) (\d{1,2}), (\d{2}):(\d{2})/.exec(flat))) eta = _prNearYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, null, 'utc');
-  if (eta == null && (m = new RegExp('\\bETA\\s*:?\\s*([A-Z][a-z]{2}) (\\d{1,2}),? (\\d{2}):(\\d{2})' + PR_TZ_RE).exec(flat))) eta = _prNearYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, _prTz(m[5], m[6]), dfltZ);
+  // VesselFinder's "ETA: Oct 18, 23:00" (UTC unless a zone is written)
+  if (eta == null && (m = new RegExp('\\bETA\\s*:?\\s*([A-Z][a-z]{2}) (\\d{1,2}),? (\\d{2}):(\\d{2})' + PR_TZ_RE).exec(flat))) eta = _prNearYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, _prTz(m[5], m[6]), 'utc');
   if (eta == null && out.src === 'report') {
     // Noon report / agent: "ETA FUJAIRAH 18TH OCT 2300LT", "ETA 18 Oct 2026 23:00 UTC", "ETA 18/2300 LT",
     // "ETA 18th Oct 2026" (date only). "ETA revised from 15th Oct … to 18th Oct …" → the new one.
     let scan = flat;
-    const rv = /\bETA\b[^.\n]{0,40}?\b(?:revised|changed|amended|updated|postponed|advanced|brought forward)\b[^.\n]{0,15}?\bfrom\b[^.\n]{0,40}?\bto\s+(?=\d)/i.exec(flat);
+    const rv = /\bETA\b[^.\n]{0,60}?\b(?:revised|changed|amended|updated|postponed|advanced|brought forward)\b[^.\n]{0,40}?\bto\s+(?:(?:abt|about|approx\.?|approximately|on|the|[a-z]+day)\s+)*(?=\d)/i.exec(flat);
     if (rv) scan = 'ETA ' + flat.slice(rv.index + rv[0].length);
     // Up to 30 non-digits after "ETA" — but not into another time ("ETA: TBA, ETD Sohar 16th Oct 1200").
+    // Never into another time: ETD / ATD / ATA / ATB / ETC, "NOR tendered", a placeholder (TBA…).
     // ("ETA/ETB Fujairah: 18th Oct …" and "ETA OPL (for NOR) …" are still this ETA.)
-    const GAP = '(?:(?![,;.]\\s*(?:ETD|ETB|ETC|ATD|ATA|ATB)\\b)(?!\\s*(?:TBA|TBC|TBN)\\b)[^0-9]){0,30}?';
+    const GAP = '(?:(?![,;.]\\s*ETB\\b)(?!\\b(?:ETD|ETC|ATD|ATA|ATB)\\b)(?!\\bNOR\\s+(?:tendered|accepted|retendered)\\b)(?!\\s*(?:TBA|TBC|TBN)\\b)[^0-9]){0,30}?';
     const TIME = '(?:\\s*(?:,|\\/|@|at\\b)?\\s*([01]\\d|2[0-3])[:.h]?([0-5]\\d)(?!\\d)\\s*(?:hrs?\\b|h\\b)?' + PR_TZ_RE + ')?';
     // A year only when it is last / this / next year ("18 Oct 2300" is a time, "18 Oct 2026 AGW" a date).
     const ny = new Date(now).getFullYear();
@@ -25867,12 +25876,13 @@ function _prParse(raw, now) {
       if (h == null) { etaDay = true; h = 0; mi = 0; tz = { local: true }; }
       const base = new Date(now);
       let t;
+      // A noon report / agent's message without a zone means local time.
       if (mo == null) {
         // "18/2300": the next 18th from now (a few days back allowed)
         const yy = base.getFullYear(), mm = base.getMonth();
-        t = _prAt(yy, mm, d, h, mi, tz, dfltZ);
-        if (t != null && t < now - 5 * 86400000) t = _prAt(mm === 11 ? yy + 1 : yy, (mm + 1) % 12, d, h, mi, tz, dfltZ);
-      } else t = y != null ? _prAt(y, mo, d, h, mi, tz, dfltZ) : _prNearYear(mo, d, h, mi, now, tz, dfltZ);
+        t = _prAt(yy, mm, d, h, mi, tz, 'local');
+        if (t != null && t < now - 5 * 86400000) t = _prAt(mm === 11 ? yy + 1 : yy, (mm + 1) % 12, d, h, mi, tz, 'local');
+      } else t = y != null ? _prAt(y, mo, d, h, mi, tz, 'local') : _prNearYear(mo, d, h, mi, now, tz, 'local');
       eta = t;
       if (eta == null) etaDay = false;
     }
@@ -25880,7 +25890,7 @@ function _prParse(raw, now) {
       // "ETA FUJ 18/2300" → FUJ; filler words around the place are dropped ("ETA abt …", "ETA Fujairah revised from …").
       const words = m[1].trim().split(/\s+/);
       while (words.length && PR_FILLER.test(words[0])) words.shift();
-      while (words.length && PR_FILLER.test(words[words.length - 1])) words.pop();
+      while (words.length && (PR_FILLER.test(words[words.length - 1]) || /^(?:the|new)$/i.test(words[words.length - 1]))) words.pop();
       const place = words.join(' ');
       if (place && !/^(?:new|the)$/i.test(place) && PR_MON[place.toLowerCase().slice(0, 3)] == null) out.dest = _prPlace(place);
     }

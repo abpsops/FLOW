@@ -492,6 +492,33 @@ async function scrollTo(page, sel, off) {
         vfFrag: P('Destination  Fujairah, United Arab Emirates (UAE)   ATA: -   |   ETA: Oct 18, 23:00'),
         mtFrag: P('Destination: FUJAIRAH\nReported ETA: 2026-10-18 23:00\nSpeed/Course: 11.5 kn / 213°'),
         newPort: P('Pos 19-16N 065-03E. ETA New Mangalore 18th Oct 2300 LT'),
+        // round 3
+        castOff: P('Vessel anchored at Fujairah OPL for bunkers. Barge cast off 1400 LT and vessel now underway to Sohar.'),
+        pilotBoarded: P('Vessel anchored at Fujairah OPL 0600 LT. NOR tendered 0618 LT. Pilot boarded 1000 LT and vessel now proceeding to berth.'),
+        tugFast: P('Vessel at anchor. Tug made fast 0900 LT and vessel now underway to berth.'),
+        crewChange: P('Crew change completed and vessel now proceeding to Fujairah'),
+        bargeTug: P('MV X at anchor Fujairah OPL. Barge and tug now proceeding alongside.'),
+        lines1: P('MV SEA VALIANT\nETA Fujairah OPL: 18th Oct 2300 LT\nBunker barge: TBA\nVessel currently drifting off Fujairah'),
+        lines2: P('NOON REPORT\nMV SEA VALIANT\nPOS: 19-16N 065-03E\nALL CREW WELL\nVESSEL PROCEEDING TO FUJAIRAH'),
+        lines3: P('Vessel: MV SEA VALIANT\nBarge: ABC 1\nStatus: Vessel anchored at Fujairah OPL'),
+        speedNext: P('MarineTraffic\nSEA VALIANT\nNavigational status\nUnder way using engine\nSpeed\n11.5 kn\nCourse\n213 °\nLatitude / Longitude\n19.27129° / 65.06209°\nPosition Received\n2 hours ago'),
+        speedNext2: P('NOON REPORT 16/10\nPOSITION\n19-16N 065-03E\nSPEED\n11.5 KTS'),
+        agentNoTz: P('Good day, MV SEA VALIANT ETA Fujairah 18th Oct 2300 hrs. Vessel currently underway at 12 kts.'),
+        agentNoTz2: P('MV SEA VALIANT ETA FUJ 18/2300 HRS, speed 12 kts'),
+        agentAtd: P('Dear Sirs,\nMV SEA VALIANT\nATD: 16th Oct 1200 hrs\nETA Fujairah: 18th Oct 2300 hrs\nBest regards'),
+        agentIso: P('Vessel underway, ETA: 2026-10-18 23:00'),
+        noonAtd: P('NOON REPORT\nPOSITION: 19-16N 065-03E\nATD: 15th Oct 1200 LT\nETA: 18th Oct 2300'),
+        revisedTo: P('Pos 19-16N 065-03E. ETA Fujairah 15th Oct 1200 LT revised to 18th Oct 2300 LT due to weather'),
+        revisedTo2: P('ETA 15/1200 LT has been revised to 18/2300 LT'),
+        revisedAbt: P('Pos 19-16N 065-03E. ETA revised from 15th Oct 1200 LT to abt 18th Oct 2300 LT'),
+        revisedDay: P('ETA revised from 15th Oct 1200 LT to Sunday 18th Oct 2300 LT'),
+        tbaLine: P('Pos 19-16N 065-03E\nETA: to be advised\nETD Sohar: 16th Oct 1200 LT'),
+        agwEtd: P('NOON REPORT\nPOSITION: 19-16N 065-03E\nETA FUJAIRAH: AGW WP\nETD SOHAR: 16th Oct 1200 LT'),
+        norTendered: P('Vessel arrived Fujairah OPL. ETA berth awaited. NOR tendered 15th Oct 1200 LT'),
+        gmtSpaced: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2300 hrs GMT + 4'),
+        gmtHrs: P('Noon pos 19-16N 065-03E, ETA Fujairah 18th Oct 2300 hrs (GMT+4 hrs)'),
+        utc4h: P('ETA Fujairah 18th Oct 2300 UTC+4h'),
+        onThe: P('Pos 19-16N 065-03E. ETA Fujairah on the 18th Oct 2300 LT'),
       };
     }, now);
     check('R6 ship speed, not the wind\'s / current\'s / max / ordered speed', r.wind.sog === 9.5 && r.windDir.sog === 11.2 && r.current.sog === 10.8 && r.maxAvg.sog === 11.2 && r.ordered.sog === 10.8 && r.onlyMax.sog === null, [r.wind.sog, r.windDir.sog, r.current.sog, r.maxAvg.sog, r.ordered.sog, r.onlyMax.sog]);
@@ -525,6 +552,17 @@ async function scrollTo(page, sel, off) {
     check('R6b "UTC - 19 Oct" (a window) and "UTC -12 hrs notice" are not time-zone offsets', r.window.eta === '2026-10-18T23:00:00.000Z' && r.notice.eta === '2026-10-18T23:00:00.000Z', [r.window.eta, r.notice.eta]);
     check('R6b copied fragments of VesselFinder / MarineTraffic pages keep their ETA in UTC', r.vfFrag.eta === '2026-10-18T23:00:00.000Z' && r.mtFrag.eta === '2026-10-18T23:00:00.000Z', [r.vfFrag.eta, r.mtFrag.eta]);
     check('R6b "ETA New Mangalore" keeps the whole port name', r.newPort.dest === 'New Mangalore', r.newPort.dest);
+    const L = '2026-10-18T19:00:00.000Z';
+    check('R6c the vessel is the subject: "Barge cast off … and vessel now underway", "Pilot boarded … and vessel now proceeding", "Tug made fast … and vessel now underway", "Crew change completed and vessel now proceeding" → Under way; "Barge and tug now proceeding alongside" → still At anchor',
+      r.castOff.nav === 'Under way' && r.pilotBoarded.nav === 'Under way' && r.tugFast.nav === 'Under way' && r.crewChange.nav === 'Under way' && r.bargeTug.nav === 'At anchor', [r.castOff.nav, r.pilotBoarded.nav, r.tugFast.nav, r.crewChange.nav, r.bargeTug.nav]);
+    check('R6c line-per-field messages: a line break ends the clause', r.lines1.nav === 'Drifting' && r.lines2.nav === 'Under way' && r.lines3.nav === 'At anchor', [r.lines1.nav, r.lines2.nav, r.lines3.nav]);
+    check('R6c the speed value on the line after its label', r.speedNext.sog === 11.5 && r.speedNext2.sog === 11.5, [r.speedNext.sog, r.speedNext2.sog]);
+    check('R6c messages without a time zone mean local time (incl. an agent\'s "ATD:" line and ISO dates in a message)',
+      [r.agentNoTz, r.agentNoTz2, r.agentAtd, r.agentIso, r.noonAtd].every(x => x.eta === L), [r.agentNoTz.eta, r.agentNoTz2.eta, r.agentAtd.eta, r.agentIso.eta, r.noonAtd.eta]);
+    check('R6c revised ETAs take the new time ("revised to", "has been revised to", "to abt", "to Sunday")', [r.revisedTo, r.revisedTo2, r.revisedAbt, r.revisedDay].every(x => x.eta === L), [r.revisedTo.eta, r.revisedTo2.eta, r.revisedAbt.eta, r.revisedDay.eta]);
+    check('R6c an undated ETA never takes the next ETD / NOR line', r.tbaLine.eta === null && r.agwEtd.eta === null && r.norTendered.eta === null, [r.tbaLine.eta, r.agwEtd.eta, r.norTendered.eta]);
+    check('R6c "GMT + 4", "(GMT+4 hrs)", "UTC+4h" are offsets', [r.gmtSpaced, r.gmtHrs, r.utc4h].every(x => x.eta === L), [r.gmtSpaced.eta, r.gmtHrs.eta, r.utc4h.eta]);
+    check('R6c "ETA Fujairah on the 18th" → Fujairah', r.onThe.dest === 'Fujairah' && r.onThe.eta === L, r.onThe);
   });
 
   /* 7 — dialog review cases: card re-numbered by a sync, removed nomination, keyboard, backdrop, arrived re-save, IMO conflict */
