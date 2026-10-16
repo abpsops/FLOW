@@ -1,8 +1,8 @@
 /* Vessel identifiers on nominations — IMO number + MMSI.
    A nomination card has an IMO box (vessel.imo, as before) and an MMSI box
    (vessel.mmsi — stored only when filled, so older vessels stay
-   byte-identical). At least ONE valid identifier is wanted (live position
-   tracking finds a ship by its MMSI / IMO) but nothing is ever blocked:
+   byte-identical). At least ONE valid identifier is wanted but nothing is
+   ever blocked:
    IMO = 7 digits with a valid check digit, MMSI = 9 digits starting 2–7.
    Covers: the rules, the card (labels, red / amber states, messages, badge,
    auto-move between the boxes, Look up links), legacy 9-digit MMSIs saved in
@@ -134,9 +134,9 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
       return { st: __st(id), lbl: lbl.textContent.replace(/\s+/g, ' ').trim(), title: lbl.title, stars: document.querySelectorAll('#vessel-' + id + ' .vid-req').length, inHdr: hdr.contains(document.getElementById('v' + id + '-idbadge')),
         aria: [document.getElementById('v' + id + '-imo').getAttribute('aria-label'), document.getElementById('v' + id + '-mmsi').getAttribute('aria-label')], next: document.getElementById('v' + id + '-imo').closest('.vid-pair').contains(document.getElementById('v' + id + '-mmsi')), cap: __cap(id) };
     }, id);
-    check('V2 one label for the pair: "IMO Number / MMSI * — at least one" (boxes not starred separately), hint "needed for live position tracking"', r0.lbl === 'IMO Number / MMSI * — at least one' && r0.stars === 1 && /needed for live position tracking/.test(r0.title) && r0.next && /^IMO number/.test(r0.aria[0]) && /^MMSI/.test(r0.aria[1]), r0);
-    check('V2 empty: amber "Add an IMO or MMSI so FLOW can track the vessel", both boxes amber, badge "ID missing" in the card header',
-      JSON.stringify(r0.st.amber) === JSON.stringify(['Add an IMO or MMSI so FLOW can track the vessel']) && !r0.st.red.length && /vid-miss/.test(r0.st.imoCls) && /vid-miss/.test(r0.st.mmsiCls) && r0.st.badge === 'ID missing' && /miss/.test(r0.st.badgeCls) && r0.inHdr, r0.st);
+    check('V2 one label for the pair: "IMO Number / MMSI * — at least one" (boxes not starred separately), title "At least one of the two is required"', r0.lbl === 'IMO Number / MMSI * — at least one' && r0.stars === 1 && /At least one of the two is required/.test(r0.title) && r0.next && /^IMO number/.test(r0.aria[0]) && /^MMSI/.test(r0.aria[1]), r0);
+    check('V2 empty: amber "Add an IMO or MMSI number", both boxes amber, badge "ID missing" in the card header',
+      JSON.stringify(r0.st.amber) === JSON.stringify(['Add an IMO or MMSI number']) && !r0.st.red.length && /vid-miss/.test(r0.st.imoCls) && /vid-miss/.test(r0.st.mmsiCls) && r0.st.badge === 'ID missing' && /miss/.test(r0.st.badgeCls) && r0.inHdr, r0.st);
     check('V2 a card without an MMSI stores no mmsi key; imo stays as before', r0.cap && !('mmsi' in r0.cap) && r0.cap.imo === '', r0.cap);
     await shot(page.locator('#vessel-' + id), '01-card-missing-ids-harbour.png');
 
@@ -147,7 +147,7 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     await shot(page.locator('#vessel-' + id), '03b-card-invalid-imo.png');
     // "IMO 9321483" accepted; normalised to digits when the box is left
     s = await page.evaluate(id => { __set(id, 'imo', 'IMO 9321483'); const a = __st(id); document.getElementById('v' + id + '-imo').dispatchEvent(new Event('change', { bubbles: true })); return { typed: a, left: __st(id) }; }, id);
-    check('V2 "IMO 9321483" is valid as typed and normalised to 9321483 on leaving the box; badge "IMO ✓", hint shown', s.typed.badge === 'IMO ✓' && !s.typed.red.length && s.left.imo === '9321483' && s.left.badge === 'IMO ✓' && /ok/.test(s.left.badgeCls) && /needed for live position tracking/.test(s.left.hint.join()), s);
+    check('V2 "IMO 9321483" is valid as typed and normalised to 9321483 on leaving the box; badge "IMO ✓", hint shown', s.typed.badge === 'IMO ✓' && !s.typed.red.length && s.left.imo === '9321483' && s.left.badge === 'IMO ✓' && /ok/.test(s.left.badgeCls) && /At least one is required/.test(s.left.hint.join()), s);
     check('V2 a valid IMO alone is complete: no amber / red, the boxes are not amber', !s.left.amber.length && !s.left.red.length && /vid-ok/.test(s.left.imoCls) && !/vid-miss/.test(s.left.imoCls + s.left.mmsiCls), s.left);
     await shot(page.locator('#vessel-' + id), '02-card-valid-imo-only-harbour.png');
     // invalid MMSI next to a valid IMO: red for the MMSI, but the nomination is complete
@@ -506,7 +506,7 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
       const d = __vessel({ name: 'BOTH LEGACY', imo: '538009876', mmsi: '538009876' });
       const out = {
         a: { box: box(a), cap: pair(__cap(a)), badge: __st(a).badge, mail: _vidEmailIds(__cap(a)) },
-        b: { box: box(b), cap: pair(__cap(b)), badge: __st(b).badge, mail: _vidEmailIds(__cap(b)), ais: _aisVesselIds(_aisCardVessel(b)) },
+        b: { box: box(b), cap: pair(__cap(b)), badge: __st(b).badge, mail: _vidEmailIds(__cap(b)) },
         c: { box: box(c), cap: pair(__cap(c)) },
         d: { box: box(d), cap: pair(__cap(d)) },
       };
@@ -526,8 +526,8 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     });
     check('V7b legacy 9-digit IMO: shown in the MMSI box, saved back as imo "538009876" with no mmsi key; badge / e-mail use the MMSI',
       JSON.stringify(r.a.box) === '["","538009876"]' && r.a.cap.imo === '538009876' && !r.a.cap.has && r.a.badge === 'MMSI ✓' && r.a.mail === ' (MMSI 538009876)', r.a);
-    check('V7b "IMO No. 9321483": shown as 9321483 (badge IMO ✓, AIS matches it by IMO), saved back as typed until edited',
-      JSON.stringify(r.b.box) === '["9321483",""]' && r.b.cap.imo === 'IMO No. 9321483' && !r.b.cap.has && r.b.badge === 'IMO ✓' && r.b.mail === ' (IMO 9321483)' && r.b.ais.imo === '9321483', r.b);
+    check('V7b "IMO No. 9321483": shown as 9321483 (badge IMO ✓), saved back as typed until edited',
+      JSON.stringify(r.b.box) === '["9321483",""]' && r.b.cap.imo === 'IMO No. 9321483' && !r.b.cap.has && r.b.badge === 'IMO ✓' && r.b.mail === ' (IMO 9321483)', r.b);
     check('V7b "636 012 345" in the MMSI box shown as digits, saved back as it was; imo + equal mmsi kept as both', JSON.stringify(r.c.box) === '["","636012345"]' && r.c.cap.mmsi === '636 012 345' && JSON.stringify(r.d.box) === '["","538009876"]' && r.d.cap.imo === '538009876' && r.d.cap.mmsi === '538009876', [r.c, r.d]);
     check('V7b trash + restore of an untouched legacy card keeps the saved pair', r.trash.def.imo === '538009876' && !r.trash.def.has && JSON.stringify(r.trash.box) === '["","538009876"]' && r.trash.cap.imo === '538009876' && !r.trash.cap.has, r.trash);
     check('V7b editing the ID boxes saves what they show (IMO added → imo + mmsi; MMSI changed → imo "" + new mmsi)',

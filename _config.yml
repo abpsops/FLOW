@@ -4,5 +4,4 @@ exclude:
   - tests/
   - .github/
   - node_modules/
-  - supabase/
   - README.md
