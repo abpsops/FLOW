@@ -467,6 +467,31 @@ async function scrollTo(page, sel, off) {
         newYear: P('The current position of X is at Arabian Sea reported 3 hours ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 12.1 knots and expected to arrive there on Dec 30, 21:30.', Date.parse('2027-01-03T08:00:00Z')),
         newYear2: P('The current position of X is at Arabian Sea reported 3 hours ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 12.1 knots and expected to arrive there on Jan 2, 06:00.', Date.parse('2026-12-30T08:00:00Z')),
         bigBlank: (() => { const t0 = performance.now(); _prParse('Destination' + '\n'.repeat(20000) + 'x', now); return performance.now() - t0; })(),
+        // round 2
+        barge1: P('MV SEA VALIANT anchored at Fujairah OPL, pos 25 10.2N 056 27.6E. Barge now proceeding alongside.'),
+        barge2: P('Vessel at anchor Fujairah OPL since 0800 LT. Bunker barge currently underway to vessel.'),
+        barge3: P('Vessel drifting off Fujairah. Barge now en route.'),
+        barge4: P('Vessel berthed at Sohar. Pilot now proceeding to vessel.'),
+        timePos: P('Position at 08:00 25 10.2 N 056 27.6 E'),
+        datePos: P('16/10 12:00 19 16N 065 03E'),
+        datePos2: P('MV SEA VALIANT - NOON 16/10 - 19 16N 065 03E - SPD 11.5 KTS'),
+        dotDate: P('NOON 16.10 19 16N 065 03E'),
+        dueTo: P('Pos 19-16N 065-03E. ETA amended 18th Oct 2300 LT owing to late departure from Sohar 16th Oct 1200 LT'),
+        dueTo2: P('Pos 19-16N 065-03E. ETA revised 18th Oct 2300 LT due to bad weather.'),
+        dueTo3: P('Pos 19-16N 065-03E. ETA Fujairah 18th Oct 2300 LT, revised from 15th Oct due to weather.'),
+        asTo: P('Pos 19-16N 065-03E. ETA FUJ 18/2300 LT, will keep you updated as to any change'),
+        windLine: P('NOON REPORT\nPOSITION: 19-16N 065-03E\nCOURSE: 300\nWIND: NW 4\nSPEED: 11.5 KTS\nETA FUJAIRAH 18/2300 LT'),
+        windLine2: P('NOON REPORT\nPOSITION: 19-16N 065-03E\nWIND: NW/22 KTS\nSPEED: 11.5 KTS'),
+        windSent: P('Pos 19-16N 065-03E. Wind NE 3. Speed 11 kts.'),
+        seaOrdered: P('Pos: 19-16N 065-03E\nSea state: 3\nSpeed: 11.5 kts\nSpeed ordered: 12 kts'),
+        etb: P('Pos 19-16N 065-03E. ETA/ETB Fujairah: 18th Oct 2300 LT'),
+        etb2: P('Pos 19-16N 065-03E. ETA / ETB 18/2300 LT'),
+        nor: P('Pos 19-16N 065-03E. ETA OPL (for NOR) 18th Oct 2300 LT'),
+        window: P('Pos 19-16N 065-03E. ETA Fujairah 18 Oct 2300 UTC - 19 Oct 0300 UTC'),
+        notice: P('Pos 19-16N 065-03E. ETA Fujairah 18/2300 UTC -12 hrs notice'),
+        vfFrag: P('Destination  Fujairah, United Arab Emirates (UAE)   ATA: -   |   ETA: Oct 18, 23:00'),
+        mtFrag: P('Destination: FUJAIRAH\nReported ETA: 2026-10-18 23:00\nSpeed/Course: 11.5 kn / 213°'),
+        newPort: P('Pos 19-16N 065-03E. ETA New Mangalore 18th Oct 2300 LT'),
       };
     }, now);
     check('R6 ship speed, not the wind\'s / current\'s / max / ordered speed', r.wind.sog === 9.5 && r.windDir.sog === 11.2 && r.current.sog === 10.8 && r.maxAvg.sog === 11.2 && r.ordered.sog === 10.8 && r.onlyMax.sog === null, [r.wind.sog, r.windDir.sog, r.current.sog, r.maxAvg.sog, r.ordered.sog, r.onlyMax.sog]);
@@ -488,6 +513,18 @@ async function scrollTo(page, sel, off) {
     check('R6 an ETA without a year around New Year: nearest year (30 Dec seen on 3 Jan → last year; 2 Jan seen on 30 Dec → next year)',
       r.newYear.eta === '2026-12-30T21:30:00.000Z' && r.newYear2.eta === '2027-01-02T06:00:00.000Z', [r.newYear.eta, r.newYear2.eta]);
     check('R6 a paste with thousands of blank lines parses quickly', r.bigBlank < 500, r.bigBlank);
+    check('R6b a barge / pilot "now proceeding" does not make the anchored / drifting / berthed ship "Under way"',
+      r.barge1.nav === 'At anchor' && r.barge2.nav === 'At anchor' && r.barge3.nav === 'Drifting' && r.barge4.nav === 'Moored' && r.wasAnchor.nav === 'Under way' && r.willAnchor.nav === 'Under way', [r.barge1.nav, r.barge2.nav, r.barge3.nav, r.barge4.nav]);
+    check('R6b a time or date just before the position is not read as part of it',
+      r.timePos.lat === 25.17 && r.timePos.lon === 56.46 && r.datePos.lat === 19.26667 && r.datePos.lon === 65.05 && r.datePos2.lat === 19.26667 && r.datePos2.sog === 11.5 && r.dotDate.lat === 19.26667, [r.timePos, r.datePos, r.datePos2, r.dotDate]);
+    check('R6b "due to" / "owing to" / "as to" after an ETA keep that ETA (only "revised from X to Y" takes Y)',
+      [r.dueTo, r.dueTo2, r.dueTo3, r.asTo].every(x => x.eta === '2026-10-18T19:00:00.000Z'), [r.dueTo.eta, r.dueTo2.eta, r.dueTo3.eta, r.asTo.eta]);
+    check('R6b speed in line-per-field reports: a WIND / Sea state line before SPEED, and "Speed ordered" after it',
+      r.windLine.sog === 11.5 && r.windLine2.sog === 11.5 && r.windSent.sog === 11 && r.seaOrdered.sog === 11.5, [r.windLine.sog, r.windLine2.sog, r.windSent.sog, r.seaOrdered.sog]);
+    check('R6b "ETA/ETB …", "ETA / ETB …" and "ETA OPL (for NOR) …" are read', [r.etb, r.etb2, r.nor].every(x => x.eta === '2026-10-18T19:00:00.000Z'), [r.etb.eta, r.etb2.eta, r.nor.eta]);
+    check('R6b "UTC - 19 Oct" (a window) and "UTC -12 hrs notice" are not time-zone offsets', r.window.eta === '2026-10-18T23:00:00.000Z' && r.notice.eta === '2026-10-18T23:00:00.000Z', [r.window.eta, r.notice.eta]);
+    check('R6b copied fragments of VesselFinder / MarineTraffic pages keep their ETA in UTC', r.vfFrag.eta === '2026-10-18T23:00:00.000Z' && r.mtFrag.eta === '2026-10-18T23:00:00.000Z', [r.vfFrag.eta, r.mtFrag.eta]);
+    check('R6b "ETA New Mangalore" keeps the whole port name', r.newPort.dest === 'New Mangalore', r.newPort.dest);
   });
 
   /* 7 — dialog review cases: card re-numbered by a sync, removed nomination, keyboard, backdrop, arrived re-save, IMO conflict */
@@ -599,6 +636,10 @@ async function scrollTo(page, sel, off) {
     await page.evaluate(t => { __panel('n1').querySelector('.prpt-btn').click(); return new Promise(r => setTimeout(r, 100)).then(() => __paste(t)).then(() => __dlg('save').click()); }, mstPage(now));
     await sleep(700);
     check('R8 a card with the same MMSI but another IMO is another ship: not given the report', vOf(db, 'n1').posRpt && vOf(db, 'n3').posRpt && !vOf(db, 'n2').posRpt, [!!vOf(db, 'n2').posRpt]);
+    // n3 (SEA VALIANT, IMO only) gets an MMSI and loses its IMO; saving from it: MMSI matches n1 (IMO 9420629) and n2 (IMO 9448827) → ambiguous
+    await page.evaluate(() => { const id = __cid('n3'); document.getElementById('v' + id + '-imo').value = ''; document.getElementById('v' + id + '-mmsi').value = '538009850'; });
+    const grp = await page.evaluate(() => _prSameShipCards(__cid('n3')).map(c => document.getElementById('vessel-' + c).dataset.nomUid));
+    check('R8 from a card without an IMO whose MMSI matches two different IMOs: only that card', JSON.stringify(grp) === '["n3"]', grp);
     await page.evaluate(() => { showPage('dashboard'); renderDashAis(); });
     await sleep(300);
     const row = await page.evaluate(() => { const r = [...document.querySelectorAll('#dash-ais-body .ais-row')].find(x => x.querySelector('.ais-row-name').textContent === 'OCEAN PEARL'); return r ? { src: r.dataset.src || 'ais', txt: r.textContent } : null; });

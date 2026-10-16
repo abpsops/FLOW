@@ -25583,9 +25583,9 @@ const PR_UNIT_MS = { s: 1000, m: 60000, h: 3600000, d: 86400000, w: 7 * 86400000
 // "… ago" units as the sites write them ("1 m ago" on MyShipTracking is a minute).
 const PR_AGO_UNIT = '(?:s|secs?|seconds?|m|mins?|minutes?|h|hrs?|hours?|d|days?|w|wks?|weeks?|mos?|months?|y|yrs?|years?)';
 // An optional time zone after a time: "(UTC)", "UTC", "GMT+4", "LT", "local".
-const PR_TZ_RE = '\\s*\\(?\\s*(?:(LT|LMT|local|UTC|GMT|Z)\\b)?\\s*([+-]\\s*\\d{1,2}(?::?\\d{2})?)?\\s*\\)?';
+const PR_TZ_RE = '\\s*\\(?\\s*(?:(LT|LMT|local|UTC|GMT|Z)\\b(?: ?([+-]\\d{1,2}(?::?\\d{2})?)(?!\\d)(?!\\s*(?:hrs?|h|hours?|days?)\\b))?)?\\s*\\)?';
 // Words that are not a place after "ETA" ("ETA abt 18th Oct", "ETA revised from …").
-const PR_FILLER = /^(?:abt|about|approx\.?|approximately|revised|changed|amended|updated|from|expected|latest|agw|wp|tba|tbc|tbn|is|will|be|at|to|on|for|eta|the|now|new|est\.?|estimated)$/i;
+const PR_FILLER = /^(?:abt|about|approx\.?|approximately|revised|changed|amended|updated|from|expected|latest|agw|wp|tba|tbc|tbn|is|will|be|at|to|on|for|eta|now|est\.?|estimated)$/i;
 let _prByCard = {};   // card id → the saved posRpt object as it came (written back unchanged)
 let _prDlg = null;    // the open dialog: {id, ov, prevFocus, parsed, existing, t}
 
@@ -25666,10 +25666,13 @@ function _prFindPos(flat) {
   // degrees [minutes [seconds]] — seconds with or without the " mark ("25 10 30N", "25°10'30N")
   const part = '(\\d{1,3}(?:\\.\\d+)?(?:\\s*(?:°\\s*|-\\s*|\\s+)\\d{1,2}(?:\\.\\d+)?\\s*\'?(?:\\s*(?:-\\s*)?\\d{1,2}(?:\\.\\d+)?\\s*"?)?)?)\\s*°?\\s*';
   const re = new RegExp('(?:^|[^\\d.])' + part + '([NS])\\b[\\s,;\\/]*' + part + '([EW])\\b', 'gi');
-  const flat2 = flat.replace(/[′’`´]/g, "'").replace(/[″”“]/g, '"');
+  // Times ("08:00") and dates ("16/10", "16/10/2026") next to a position are not part of it.
+  const flat2 = flat.replace(/[′’`´]/g, "'").replace(/[″”“]/g, '"')
+    .replace(/\b\d{1,2}:\d{2}(?::\d{2})?\b/g, ' ; ').replace(/\b\d{1,2}\/\d{1,2}(?:\/\d{2,4})?\b/g, ' ; ');
   while ((m = re.exec(flat2))) {
     const p = _prPair(_prCoord1(m[1] + ' ' + m[2], 'lat'), _prCoord1(m[3] + ' ' + m[4], 'lon'));
     if (p) return p;
+    re.lastIndex = m.index + 1; // not a position read this way ("16.10 19 16N"): try from the next start
   }
   // Compact DDMM: "1916N 06503E"
   if ((m = /(?:^|[^\d.])(\d{4}(?:\.\d+)?)\s*([NS])\s*[,\/]?\s*(\d{5}(?:\.\d+)?)\s*([EW])\b/i.exec(flat))) {
@@ -25717,7 +25720,8 @@ function _prTz(word, off) {
   if (!w) return null;
   if (/^(LT|LMT|LOCAL)$/.test(w)) return { local: true, offMin: 0 };
   const o = /^([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(String(off || '').replace(/\s+/g, ''));
-  return { local: false, offMin: o ? (o[1] === '-' ? -1 : 1) * (+o[2] * 60 + (o[3] ? +o[3] : 0)) : 0 };
+  const offMin = o ? (o[1] === '-' ? -1 : 1) * (+o[2] * 60 + (o[3] ? +o[3] : 0)) : 0;
+  return { local: false, offMin: Math.abs(offMin) <= 14 * 60 ? offMin : 0 };
 }
 // A wall-clock time in zone tz (null → dflt: 'utc' | 'local') → ms or null.
 function _prAt(y, mo, d, h, mi, tz, dflt) {
@@ -25738,12 +25742,16 @@ function _prNearYear(mon, day, h, mi, now, tz, dflt) {
   return best;
 }
 // A phrase used in the present ("anchored at OPL"), not "will be anchored" / "was anchored".
+// Said of another craft in the same clause ("Barge now proceeding alongside") → not the ship's status.
+const PR_CRAFT = /\b(?:barges?|launch(?:es)?|tugs?|pilots?|boats?|surveyors?|lighters?|crew)\b/i;
 function _prNowPhrase(flat, re) {
   const g = new RegExp(re.source, 'gi');
   let x;
   while ((x = g.exec(flat))) {
     const pre = flat.slice(Math.max(0, x.index - 26), x.index);
     if (/\b(?:will|shall|to be|expected to(?: be)?|was|were|had been|until|before|after|prior to|once|on arrival)\s+(?:be\s+)?$/i.test(pre)) continue;
+    const head = flat.slice(0, x.index), cut = Math.max(head.lastIndexOf('. '), head.lastIndexOf('; '), head.lastIndexOf(', '), head.lastIndexOf('! '), head.lastIndexOf('? '), head.lastIndexOf(' - '));
+    if (PR_CRAFT.test(head.slice(cut + 1))) continue;
     return true;
   }
   return false;
@@ -25782,14 +25790,19 @@ function _prParse(raw, now) {
   if (out.sog == null) {
     // Free text: the SHIP's speed — never the wind's, the current's, a max / ordered / design speed;
     // an average / vessel / SOG speed first, any other plain "speed" next, "current speed" last.
-    const reSp = /\b(speed|sog|spd)\b[^0-9]{0,15}?(\d{1,2}(?:\.\d+)?)\s*(?:knots?|kts?|kn)\b/gi;
+    // Line breaks kept: "WIND: NW 4" on the line before "SPEED: 11.5 KTS" is another field.
+    const lined = text.replace(/[ \t]+/g, ' ');
+    const reSp = /\b(speed|sog|spd)\b([^0-9\n]{0,15}?)(\d{1,2}(?:\.\d+)?)\s*(?:knots?|kts?|kn)\b/gi;
+    const NOT_SHIP = /\b(?:wind|winds|gust|gusts|tidal|max(?:imum)?|min(?:imum)?|ordered|instructed|required|c\/?p|charter(?:ed)?|warranted|service|design|eco(?:nomical)?|full)\b/i;
     let best = null, weak = null;
-    while ((m = reSp.exec(flat))) {
-      const pre = flat.slice(Math.max(0, m.index - 20), m.index);
-      if (/\b(?:wind|winds|gust|gusts|tidal|max(?:imum)?|min(?:imum)?|ordered|instructed|required|c\/?p|charter(?:ed)?|warranted|service|design|eco(?:nomical)?|full)\b[\s\w\/:.\-]*$/i.test(pre)) continue;
-      if (/\b(?:current|ocean|sea)\b[\s\w\/:.\-]*$/i.test(pre)) { if (weak == null) weak = +m[2]; continue; }
-      if (/^sog$/i.test(m[1]) || /\b(?:avg|ave|average|mean|vessel|ship'?s?|actual|present|over ground)\b[\s\w\/:.\-]*$/i.test(pre)) { best = +m[2]; break; }
-      if (best == null) best = +m[2];
+    while ((m = reSp.exec(lined))) {
+      let pre = lined.slice(Math.max(0, m.index - 20), m.index);
+      const cut = Math.max(pre.lastIndexOf('\n'), pre.lastIndexOf('. '), pre.lastIndexOf(','), pre.lastIndexOf(';'), pre.lastIndexOf('|'));
+      if (cut >= 0) pre = pre.slice(cut + 1);
+      if (NOT_SHIP.test(pre) || NOT_SHIP.test(m[2])) continue;
+      if (/\b(?:current|ocean|sea)\b/i.test(pre)) { if (weak == null) weak = +m[3]; continue; }
+      if (/^sog$/i.test(m[1]) || /\b(?:avg|ave|average|mean|vessel|ship'?s?|actual|present|over ground)\b/i.test(pre)) { best = +m[3]; break; }
+      if (best == null) best = +m[3];
     }
     if (best != null) out.sog = best;
     else if (weak != null) out.sog = weak;
@@ -25804,7 +25817,7 @@ function _prParse(raw, now) {
   if (!out.nav && flat.length <= 1500) {
     // A short message (noon report / agent): the words themselves, in the present —
     // "will be anchored at OPL" / "was anchored at Sohar, now underway" are not "At anchor".
-    const uwNow = /\b(?:now|currently|presently)\s+(?:under\s*way|underway|steaming|proceeding|sailing|en route)\b/i.test(flat);
+    const uwNow = _prNowPhrase(flat, /\b(?:now|currently|presently)\s+(?:under\s*way|underway|steaming|proceeding|sailing|en route)\b/);
     if (!uwNow && _prNowPhrase(flat, /\b(?:at anchor|anchored)\b/)) out.nav = 'At anchor';
     else if (!uwNow && _prNowPhrase(flat, /\bdrifting\b/)) out.nav = 'Drifting';
     else if (!uwNow && _prNowPhrase(flat, /\b(?:moored|alongside|berthed)\b/)) out.nav = 'Moored';
@@ -25820,7 +25833,10 @@ function _prParse(raw, now) {
 
   // The ship's AIS ETA. The tracking sites show it in UTC; a noon report / agent's message
   // without a zone means local time ("2300 LT"). A zone written after the time wins.
-  const dfltZ = out.src === 'report' || out.src === 'other' ? 'local' : 'utc';
+  // (A copied fragment of a site page may not name the site: its own labels still mean UTC.)
+  const siteLabels = /\bETA\*|\bReported ETA\b|\bPredicted ETA\b|\bATD:|\bATA:/i.test(flat);
+  const looksReport = /\b(?:noon|pos(?:n|ition)?|dear|regards|kindly|pls|please|master|agents?|LT|local time)\b/i.test(flat);
+  const dfltZ = (out.src === 'report' || out.src === 'other') && looksReport && !siteLabels ? 'local' : 'utc';
   let eta = null, etaDay = false;
   if ((m = new RegExp('\\bETA\\*?\\s*:?\\s*(\\d{4})-(\\d{2})-(\\d{2})[ T]+(\\d{2}):(\\d{2})' + PR_TZ_RE, 'i').exec(flat))) eta = _prAt(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], _prTz(m[6], m[7]), dfltZ);
   if (eta == null && (m = /expected to arrive there on ([A-Z][a-z]{2}) (\d{1,2}), (\d{2}):(\d{2})/.exec(flat))) eta = _prNearYear(PR_MON[m[1].toLowerCase()], +m[2], +m[3], +m[4], now, null, 'utc');
@@ -25829,10 +25845,11 @@ function _prParse(raw, now) {
     // Noon report / agent: "ETA FUJAIRAH 18TH OCT 2300LT", "ETA 18 Oct 2026 23:00 UTC", "ETA 18/2300 LT",
     // "ETA 18th Oct 2026" (date only). "ETA revised from 15th Oct … to 18th Oct …" → the new one.
     let scan = flat;
-    const rv = /\bETA\b[^.\n]{0,40}?\b(?:revised|changed|amended|updated|postponed|advanced|brought forward)\b[^.\n]{0,40}?\bto\b/i.exec(flat);
+    const rv = /\bETA\b[^.\n]{0,40}?\b(?:revised|changed|amended|updated|postponed|advanced|brought forward)\b[^.\n]{0,15}?\bfrom\b[^.\n]{0,40}?\bto\s+(?=\d)/i.exec(flat);
     if (rv) scan = 'ETA ' + flat.slice(rv.index + rv[0].length);
     // Up to 30 non-digits after "ETA" — but not into another time ("ETA: TBA, ETD Sohar 16th Oct 1200").
-    const GAP = '(?:(?!\\b(?:ETD|ETB|ETC|ATD|ATA|ATB|TBA|TBC|TBN|NOR)\\b)[^0-9]){0,30}?';
+    // ("ETA/ETB Fujairah: 18th Oct …" and "ETA OPL (for NOR) …" are still this ETA.)
+    const GAP = '(?:(?![,;.]\\s*(?:ETD|ETB|ETC|ATD|ATA|ATB)\\b)(?!\\s*(?:TBA|TBC|TBN)\\b)[^0-9]){0,30}?';
     const TIME = '(?:\\s*(?:,|\\/|@|at\\b)?\\s*([01]\\d|2[0-3])[:.h]?([0-5]\\d)(?!\\d)\\s*(?:hrs?\\b|h\\b)?' + PR_TZ_RE + ')?';
     // A year only when it is last / this / next year ("18 Oct 2300" is a time, "18 Oct 2026 AGW" a date).
     const ny = new Date(now).getFullYear();
@@ -25865,7 +25882,7 @@ function _prParse(raw, now) {
       while (words.length && PR_FILLER.test(words[0])) words.shift();
       while (words.length && PR_FILLER.test(words[words.length - 1])) words.pop();
       const place = words.join(' ');
-      if (place && PR_MON[place.toLowerCase().slice(0, 3)] == null) out.dest = _prPlace(place);
+      if (place && !/^(?:new|the)$/i.test(place) && PR_MON[place.toLowerCase().slice(0, 3)] == null) out.dest = _prPlace(place);
     }
   }
   out.eta = eta; out.etaDay = etaDay;
@@ -25963,9 +25980,14 @@ function _prSameShipCards(id) {
     if (!o) return;
     const x = _aisVesselIds(o), oM = x.mmsi || x.legacy;
     if (myI && x.imo && x.imo !== myI) return; // two different IMOs are two ships (an MMSI can be re-issued)
-    if ((myI && x.imo === myI) || (myM && oM === myM)) out.push(cid);
+    if ((myI && x.imo === myI) || (myM && oM === myM)) out.push({ cid: cid, imo: x.imo });
   });
-  return out;
+  // Started from a card without an IMO: if the MMSI matches carry two different IMOs, the MMSI
+  // is ambiguous — keep only the cards without an IMO.
+  const imos = {};
+  out.slice(1).forEach(function(o) { if (o.imo) imos[o.imo] = 1; });
+  const mixed = !myI && Object.keys(imos).length > 1;
+  return [out[0]].concat(out.slice(1).filter(function(o) { return !mixed || !o.imo; }).map(function(o) { return o.cid; }));
 }
 
 /* ── Formatting ── */
