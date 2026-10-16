@@ -85,6 +85,12 @@ alter table public.ais_status add column if not exists running_since timestamptz
 -- Added later: re-running this file adds it to an existing install (the function
 -- and the app also work without it — they just can't tell scheduled runs apart).
 alter table public.ais_status add column if not exists last_cron_at timestamptz;
+-- Listen almost all the time (recommended): run the job every 2 minutes. Re-running
+-- cron.schedule with the same name replaces the job (replace the project ref / secret):
+--   select cron.schedule('ais-poll', '*/2 * * * *', $$ select net.http_post(
+--     url := 'https://<project-ref>.supabase.co/functions/v1/ais-poll',
+--     headers := jsonb_build_object('Content-Type','application/json','x-cron-secret','<AIS_CRON_SECRET>'),
+--     body := '{}'::jsonb, timeout_milliseconds := 5000); $$);
 -- Coverage check: what aisstream delivered in the last run, and what was searched for.
 alter table public.ais_status add column if not exists heard_count integer;  -- different ships heard in the last run
 alter table public.ais_status add column if not exists heard jsonb;          -- details of the first 25 ships heard

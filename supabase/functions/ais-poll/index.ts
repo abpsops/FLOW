@@ -8,7 +8,7 @@
    FLOW app only ever READS those two tables — the aisstream API key
    never reaches the browser.
 
-   HOW ONE RUN WORKS (~1 min, one WebSocket connection)
+   HOW ONE RUN WORKS (~1½ min, one WebSocket connection; scheduled every 2 minutes)
      Phase A (up to ~55 s; ~5–15 s once MMSIs are known): a box over the Gulf of Oman / Strait of Hormuz
        approaches, no MMSI filter. Learns IMO → MMSI from ShipStaticData
        and catches positions of tracked ships near Fujairah/Khor Fakkan.
@@ -66,7 +66,7 @@
      AISSTREAM_API_KEY  your aisstream.io key
      AIS_CRON_SECRET    any long random string, also put in the cron job
      SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY are provided automatically.
-     Optional tuning: AIS_PHASE_A_SECONDS (40), AIS_PHASE_B_SECONDS (15),
+     Optional tuning: AIS_PHASE_A_SECONDS (20), AIS_PHASE_B_SECONDS (70), AIS_THROTTLE_SECONDS (20),
      AIS_REGION_BOX ("22,54,27.5,60.5" = latMin,lonMin,latMax,lonMax).
 
    TESTS: everything between the AIS-PURE-START / AIS-PURE-END markers
@@ -85,10 +85,10 @@ const DEFAULTS = {
   url: 'wss://stream.aisstream.io/v0/stream',
   // [[latMin, lonMin], [latMax, lonMax]] — Gulf of Oman + Strait of Hormuz approaches
   regionBox: [[22.0, 54.0], [27.5, 60.5]],
-  phaseAms: 40000,       // ~1 minute per run in total (phase A + B + connect/save)
-  phaseBms: 15000,
+  phaseAms: 20000,       // ~1½ minutes per run (phase A + B + connect/save); scheduled every 2 minutes,
+  phaseBms: 70000,       // so the stream is listened to almost all the time
   openTimeoutMs: 10000,
-  throttleMs: 120000,     // a successful run less than 2 min ago → return the cached status
+  throttleMs: 20000,      // a successful run less than 20 s ago → return the cached status (no double runs)
   lockStaleMs: 180000,    // a run "in progress" for more than 3 min is considered dead
   wallBudgetMs: 140000,   // collecting + saving must end this long after the WORKER booted (limit 150 s)
   reserveMs: 8000,        // kept free at the end for the final database writes
@@ -786,6 +786,7 @@ function makeConfig(env, over) {
   const n = (k) => { const v = env(k); if (v == null || v === '') return null; const x = Number(v); return isFinite(x) && x >= 0 ? x : null; };
   if (n('AIS_PHASE_A_SECONDS') != null) c.phaseAms = n('AIS_PHASE_A_SECONDS') * 1000;
   if (n('AIS_PHASE_B_SECONDS') != null) c.phaseBms = n('AIS_PHASE_B_SECONDS') * 1000;
+  if (n('AIS_THROTTLE_SECONDS') != null) c.throttleMs = n('AIS_THROTTLE_SECONDS') * 1000;
   const box = parseBox(env('AIS_REGION_BOX'));
   if (box) c.regionBox = box;
   if (env('AIS_STREAM_URL')) c.url = env('AIS_STREAM_URL');
