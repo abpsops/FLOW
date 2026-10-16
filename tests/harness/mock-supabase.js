@@ -105,6 +105,20 @@
           };
         }
       },
+      // functions.invoke → harness handleInvoke (db.functions[name]). A non-2xx
+      // answer comes back as a FunctionsHttpError whose context mimics the
+      // Response (status + json()), like supabase-js.
+      functions: {
+        invoke: function (name, opts) {
+          return call({ uid: uid, action: 'invoke', name: name, body: opts && opts.body !== undefined ? opts.body : null }).then(function (r) {
+            if (r && r.error && r.error.context) {
+              var c = r.error.context, body = c.body;
+              r.error.context = { status: c.status, json: function () { return body == null ? Promise.reject(new Error('no body')) : Promise.resolve(body); } };
+            }
+            return r;
+          });
+        }
+      },
       channel: function (name) { return makeChannel(name); },
       removeChannel: function (c) { return c && c.unsubscribe ? c.unsubscribe() : Promise.resolve('ok'); },
       getChannels: function () { return RT.channels.slice(); }
