@@ -768,7 +768,7 @@ const shot = async (locOrPage, file) => { if (!SHOTS) return; fs.mkdirSync(SHOTS
     await sleep(300);
     const o = await op.page.evaluate(() => ({ note: document.getElementById('dash-ais-body').textContent.trim(), lines: document.querySelectorAll('.ais-line.show').length, alerts: computeGlobalAlerts().filter(a => /^ais\|/.test(a.key)).length, btn: document.getElementById('ais-refresh-btn').style.display, rows: document.querySelectorAll('#dash-ais .ais-row').length }));
     check('A9 no successful update for 30 h → one note for operators ("AIS feed not updating since …", last error), Refresh offered',
-      /^AIS feed not updating since \d+ \w{3} \d\d:\d\d — no successful update for 30 h\. Vessel positions are hidden until it runs again/.test(o.note) && /Last error: aisstream\.io: Api Key Is Not Valid/.test(o.note) && o.btn === '' && o.rows === 0, o);
+      /^AIS feed not updating since \d+ \w{3} \d\d:\d\d — no successful update for 30 h\. Live AIS positions are hidden until it runs again/.test(o.note) && /Last error: aisstream\.io: Api Key Is Not Valid/.test(o.note) && o.btn === '' && o.rows === 0, o);
     check('A9 …and no stale per-vessel lines or warnings', o.lines === 0 && o.alerts === 0, o);
     if (SHOTS) { await op.page.evaluate(() => document.querySelectorAll('#toast-stack .toast').forEach(t => t.remove())); await shot(op.page.locator('#dash-ais'), 'ais-feed-stopped-operator.png'); }
     const tr = await openT(db, 'user-trader');
