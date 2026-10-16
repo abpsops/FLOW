@@ -413,6 +413,10 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
     check('E3 ais_status: ok, tracked 5, found 4, messages, duration, last_ok_at, lock released; last_cron_at = when the scheduled call ARRIVED',
       st.ok === true && st.tracked === 5 && st.found === 4 && st.messages === 348 && st.duration_ms > 1000 && st.last_ok_at === st.last_run_at && st.running_since === null && st.error === null &&
       Date.parse(st.last_cron_at) >= t0 && Date.parse(st.last_cron_at) < Date.parse(st.last_run_at) - 1000, st);
+    check('E3 coverage check saved: heard_count of different ships, details of the first ones (MMSI, name, position), and what was searched for',
+      st.heard_count >= 5 && Array.isArray(st.heard) && st.heard.length >= 5 && st.heard.length <= 25 && st.heard.every(h => /^\d{9}$/.test(h.mmsi)) &&
+      st.heard.some(h => h.name && h.lat != null && h.lon != null && h.time) && Array.isArray(st.searched) && st.searched.length === 5 && st.searched.some(x => x.mmsi || x.imo) && st.searched.every(x => 'name' in x),
+      { heard_count: st.heard_count, heard: (st.heard || []).slice(0, 3), searched: st.searched });
     const upserts = fake.log.filter(o => o.table === 'ais_positions' && o.action === 'upsert');
     check('E3 phase A saved at the switch (checkpoint), then everything at the end — upserts on mmsi',
       upserts.length === 2 && upserts.every(u => u.opts.onConflict === 'mmsi') && upserts[0].rows.some(r => r.mmsi === MMSI.alpha) && !upserts[0].rows.some(r => r.mmsi === MMSI.bravo) && upserts[1].rows.some(r => r.mmsi === MMSI.bravo), upserts.map(u => u.rows.map(r => r.mmsi)));
@@ -635,6 +639,13 @@ const MMSI = { alpha: '311000001', bravo: '538000002', sea: '477000003', echo: '
     const r = await call(fake, CRON);
     const st = fake.status();
     check('E9 without the new last_cron_at column the scheduled call still runs and the status is saved', r.status === 200 && st.ok === true && st.found === 1 && !('last_cron_at' in st) && (await r.json()).status_error === null, st);
+  }
+  {
+    script = (conn) => conn.on('message', () => send(conn, [[posMsg(MMSI.sea, 'SEA BREEZE', 25.2, 56.4, Date.now() - 60000), false]]));
+    const fake = makeFakeDb({ payload: { state: { vessels: [{ name: 'Sea Breeze' }] } }, status: {}, noColumns: ['heard', 'heard_count', 'searched'] });
+    const r = await call(fake, CRON);
+    const st = fake.status();
+    check('E9 without the coverage-check columns the run still saves its status', r.status === 200 && st.ok === true && st.found === 1 && !('heard' in st) && (await r.json()).status_error === null, st);
   }
 
   // 3i — error paths write ais_status.ok = false

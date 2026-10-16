@@ -100,6 +100,8 @@ const DEFAULTS = {
   maxReconnects: 1,       // aisstream dropped us mid-run → reconnect once if there is time
   reconnectMinMs: 8000,
   maxMmsiFilter: 50,      // aisstream limit for FiltersShipMMSI
+  heardMax: 25,           // coverage check: details of the first N ships heard in a run are saved (ais_status.heard)
+  heardCountMax: 5000,    // … and the number of different ships heard (ais_status.heard_count), counted up to this
   pruneDays: 30,          // rows not updated for this long are deleted (unless still tracked)
   bufferMax: 20000,       // ships whose last raw position text is kept (unparsed) until identified (~15 MB max)
   binaryType: 'arraybuffer',
@@ -321,6 +323,39 @@ function prefilter(raw, ctx) {
   return (!isStatic && mmsi) ? mmsi : false;
 }
 
+// A number right after "key": in the raw text (no JSON.parse) — coverage check only.
+function scanNum(raw, key) {
+  const i = raw.indexOf(key);
+  if (i < 0) return null;
+  let j = i + key.length;
+  while (raw.charCodeAt(j) === 32) j++;
+  const st = j;
+  while (j < raw.length) { const c = raw[j]; if ((c >= '0' && c <= '9') || c === '-' || c === '.' || c === 'e' || c === 'E' || c === '+') j++; else break; }
+  if (j === st) return null;
+  const n = Number(raw.slice(st, j));
+  return isFinite(n) ? n : null;
+}
+/* Coverage check: remember who aisstream actually delivered (cheap raw scans,
+   details only for the first cfg.heardMax different ships). */
+function noteHeard(heard, heardSet, raw, cfg, phase) {
+  const mmsi = scanDigits(raw, '"MMSI":');
+  if (!mmsi) return;
+  if (heardSet.size < (cfg.heardCountMax || 5000)) heardSet.add(mmsi);
+  if (heard.has(mmsi) || heard.size >= (cfg.heardMax || 25)) return;
+  const lat = scanNum(raw, '"latitude":'), lon = scanNum(raw, '"longitude":');
+  const sn = scanString(raw, '"ShipName":');
+  const t = scanString(raw, '"time_utc":');
+  const sog = scanNum(raw, '"Sog":');
+  heard.set(mmsi, {
+    mmsi, name: cleanText(sn || '').slice(0, 40) || null,
+    lat: (lat != null && Math.abs(lat) <= 90) ? Math.round(lat * 10000) / 10000 : null,
+    lon: (lon != null && Math.abs(lon) <= 180) ? Math.round(lon * 10000) / 10000 : null,
+    sog: (sog != null && sog >= 0 && sog < 102.2) ? round1(sog) : null,
+    time: t ? new Date(parseAisTime(t, Date.now())).toISOString() : null,
+    phase,
+  });
+}
+
 /* ── Parsing (only for messages that passed the prefilter) ── */
 function num(x) { if (x === null || x === undefined || x === '') return null; const n = Number(x); return isFinite(n) ? n : null; }
 function pad2(n) { return String(n).padStart(2, '0'); }
@@ -475,6 +510,7 @@ function collect(o) {
   const deadline = typeof cfg.deadline === 'number' ? cfg.deadline : Infinity;
   const decoder = new TextDecoder();
   const obs = new Map(), buffer = new Map();
+  const heard = new Map(), heardSet = new Set(); // coverage check
   const pc = adaptPhases(cfg, ctx); // this run's split between the regional and worldwide phases
   const stats = { messages: 0, parsed: 0, buffered: 0, learned: 0, phase: 'connecting', subscriptions: [], phaseBMmsi: 0, connections: 0, reconnects: 0, warnings: [], plannedA: null, plannedB: null };
   return new Promise((resolve) => {
@@ -490,7 +526,7 @@ function collect(o) {
       timers.forEach(clearTimeout);
       const s = ws; ws = null;
       try { if (s) s.close(); } catch (_) { /* already closed */ }
-      Promise.allSettled([...pending]).then(() => resolve({ obs, stats, error, interrupted }));
+      Promise.allSettled([...pending]).then(() => { stats.heard = [...heard.values()]; stats.heardCount = heardSet.size; resolve({ obs, stats, error, interrupted }); });
     };
     if (o.control) o.control.stop = () => finish('Interrupted by the runtime (' + (o.control.reason || 'shutdown') + ')', 'interrupted');
     const currentSub = () => stats.phase === 'B'
@@ -542,6 +578,7 @@ function collect(o) {
     };
     const handleRaw = (raw) => {
       if (done || typeof raw !== 'string' || !raw) return;
+      try { noteHeard(heard, heardSet, raw, cfg, stats.phase); } catch (_) { /* diagnostics only */ }
       const d = prefilter(raw, ctx);
       if (d === false) return;
       if (typeof d === 'string') {
@@ -629,7 +666,7 @@ async function runPoll(db, cfg, deps, via) {
   const t0 = now();
   const run = { reason: null, stop: null, interrupt(reason) { if (this.reason) return; this.reason = String(reason || 'shutdown'); if (this.stop) this.stop(); } };
   ACTIVE_RUNS.add(run);
-  let tracked = [], found = 0, messages = 0, parsed = 0, ok = false, complete = false, error = null, plannedA = null, plannedB = null;
+  let tracked = [], found = 0, messages = 0, parsed = 0, ok = false, complete = false, error = null, plannedA = null, plannedB = null, heard = [], heardCount = 0;
   try {
     const checkInterrupted = () => { if (run.reason) throw new Error('Interrupted by the runtime (' + run.reason + ')'); };
     if (!cfg.apiKey) throw new Error('The AISSTREAM_API_KEY secret is not set (Edge Functions → Secrets)');
@@ -653,6 +690,7 @@ async function runPoll(db, cfg, deps, via) {
       };
       const res = await collect({ cfg, ctx, apiKey: cfg.apiKey, WebSocketImpl: deps.WebSocketImpl, now, control: run, onCheckpoint: save });
       messages = res.stats.messages; parsed = res.stats.parsed; plannedA = res.stats.plannedA; plannedB = res.stats.plannedB;
+      heard = res.stats.heard || []; heardCount = res.stats.heardCount || 0;
       found = countFound(res.obs);
       const saveErr = await save(res.obs);
       if (saveErr) throw new Error('Could not save positions: ' + saveErr);
@@ -676,9 +714,17 @@ async function runPoll(db, cfg, deps, via) {
   const t1 = now();
   const st = { id: 1, running_since: null, last_run_at: new Date(t1).toISOString(), ok, tracked: tracked.length, found, messages, error, duration_ms: t1 - t0 };
   if (ok && complete) st.last_ok_at = st.last_run_at;   // a partial run does not block a retry (throttle)
+  // Coverage check (columns added by supabase_ais_setup.sql; the run still saves without them):
+  // who aisstream actually delivered, and what this run searched for.
+  const extra = {
+    heard_count: heardCount,
+    heard,
+    searched: tracked.slice(0, 50).map((t) => ({ name: t.name || null, imo: t.imo || null, mmsi: t.mmsi || null })),
+  };
   let statusError = null;
   try {
-    const r = await db.from('ais_status').upsert(st, { onConflict: 'id' });
+    let r = await db.from('ais_status').upsert(Object.assign({}, st, extra), { onConflict: 'id' });
+    if (r && r.error && /heard|searched|column|schema cache/i.test(r.error.message || '')) r = await db.from('ais_status').upsert(st, { onConflict: 'id' });
     if (r && r.error) statusError = r.error.message;
   } catch (e) { statusError = errMsg(e); }
   const summary = { ok, complete: ok && complete, tracked: tracked.length, found, messages, parsed, duration_ms: t1 - t0, error, status_error: statusError, phases: { a: plannedA, b: plannedB } };
@@ -810,7 +856,7 @@ async function handleRequest(req, deps) {
 const AIS = {
   DEFAULTS, WORLD_BOX, CORS, POSITION_TYPES, PHASE_A_TYPES, PHASE_B_TYPES, ROW_COLUMNS, AIS_NAME_LEN, ACTIVE_RUNS,
   normName, nameKey, normId, classifyId, vesselIds, trackedFromPayload, buildContext, buildSubscription, pickPhaseBMmsis, planPhases,
-  scanDigits, scanString, prefilter, parseAisTime, parsePosition, parseStatic, formatAisEta,
+  scanDigits, scanString, scanNum, noteHeard, prefilter, parseAisTime, parsePosition, parseStatic, formatAisEta,
   observe, mergeRow, pruneList, messageText, countFound, collect, runPoll, interruptRuns, safeEqual, authorize, claimRun, markCronCall,
   parseBox, makeConfig, handleRequest, adaptPhases
 };
