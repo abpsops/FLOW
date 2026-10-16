@@ -427,6 +427,186 @@ async function scrollTo(page, sel, off) {
     check('R5 an unknown status / source is dropped; a bad latitude drops the position (kept: area)', !/onerror/.test(r.n2['Status / speed']) && /from Other/.test(await page.evaluate(() => __panel('n2').textContent)) && /📍 A \(no exact position\)/.test(r.n3), r);
   });
 
+  /* 6 — parser cases from the review (noon reports / agents / time zones / New Year) */
+  await scenario(browser, 'R6 parser review cases', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: [] }) });
+    const { page } = await openT(db, 'user-operator');
+    const now = Date.parse('2026-10-16T08:00:00Z');
+    const r = await page.evaluate(now => {
+      const P = (t, n) => { const p = _prParse(t, n == null ? now : n); return { sog: p.sog, eta: p.eta == null ? null : new Date(p.eta).toISOString(), etaDay: p.etaDay, at: p.at == null ? null : new Date(p.at).toISOString(), approx: p.atApprox, unread: p.agoUnread, dest: p.dest, nav: p.nav, lat: p.lat, lon: p.lon }; };
+      return {
+        wind: P('Good day. Noon position 16 Oct: 19-16N 065-03E. Wind speed 25 kts NW, sea rough. Vessel speed reduced to 9.5 kts. ETA Fujairah 18th Oct 2300 LT.'),
+        windDir: P('NOON REPORT\nPOSN: 19-16N 065-03E\nWIND DIR/SPEED: NW/22 KTS\nAVG SPEED: 11.2 KTS\nETA FUJAIRAH 18/2300 LT'),
+        current: P('Pos 19-16N 065-03E. Ocean current speed is 1.5 knots against. Avg speed 10.8 kts.'),
+        maxAvg: P('Pos 19-16N 065-03E max speed 14 kts, average speed 11.2 kts'),
+        ordered: P('Pos 19-16N 065-03E. Ordered speed 12.5 kts. Speed 10.8 kts'),
+        onlyMax: P('Pos 19-16N 065-03E max speed 14 kts'),
+        yearNoTime: P('Noon pos 19-16N 065-03E, ETA Fujairah 18th Oct 2026 AGW WP'),
+        yearTime: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2026 at 2300 LT'),
+        yearSlash: P('Noon pos 19-16N 065-03E, ETA 18 Oct 2026 / 2300LT'),
+        yearAsTime: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2030'),
+        utcParen: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2300 (UTC)'),
+        utcPlus4: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2300 UTC+4'),
+        gmtPlus4: P('Noon pos 19-16N 065-03E, ETA Fujairah 18 Oct 2300 hrs GMT+4'),
+        isoLT: P('MV SEA VALIANT position 19.27N 065.06E speed 11 kts ETA: 2026-10-18 23:00 LT'),
+        monLT: P('MV SEA VALIANT position 19.27N 065.06E speed 11 kts ETA: Oct 18, 23:00 LT'),
+        siteUtc: P('MyShipTracking ETA* 2026-10-18 23:00 (UTC)'),
+        dms: P('Vessel anchored Fujairah OPL, pos 25 10 30N 056 27E'),
+        dms2: P("Pos 25°10'30N 056°27'E"),
+        willAnchor: P('Dear all, MV ABC ETA Fujairah 18th Oct 2300 LT, will be anchored at OPL on arrival. Currently underway at 12 kts.'),
+        wasAnchor: P('Vessel was anchored at Sohar, now underway to Fujairah. pos 24-30N 056-50E'),
+        hasBeen: P('Vessel has been anchored at Fujairah OPL since 15th Oct 0800 hrs, position 25 10.2N 056 27.6E'),
+        destined: P('MV X anchored, destined for Fujairah, pos 25 10.2N 056 27.6E'),
+        abt: P('MV X pos 19-16N 065-03E ETA abt 18th Oct 2300 LT'),
+        revised: P('MV X pos 19-16N 065-03E ETA revised from 15th Oct 1200 LT to 18th Oct 2300 LT'),
+        tba: P('MV SEA VALIANT pos 19-16N 065-03E. ETA Fujairah: TBA, ETD Sohar 16th Oct 1200 LT'),
+        month: P('MarineTraffic\nLatitude / Longitude: 19.27129° / 65.06209°\nPosition Received: a month ago'),
+        compound: P('MarineTraffic\nLatitude / Longitude: 19.27129° / 65.06209°\nPosition Received: 1 hour 20 minutes ago'),
+        weeks: P('The current position of X is at Arabian Sea reported 2 weeks ago by AIS.'),
+        unread: P('The current position of X is at Arabian Sea reported quite some time ago by AIS.'),
+        newYear: P('The current position of X is at Arabian Sea reported 3 hours ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 12.1 knots and expected to arrive there on Dec 30, 21:30.', Date.parse('2027-01-03T08:00:00Z')),
+        newYear2: P('The current position of X is at Arabian Sea reported 3 hours ago by AIS. The vessel is en route to the port of Fujairah, United Arab Emirates (UAE), sailing at a speed of 12.1 knots and expected to arrive there on Jan 2, 06:00.', Date.parse('2026-12-30T08:00:00Z')),
+        bigBlank: (() => { const t0 = performance.now(); _prParse('Destination' + '\n'.repeat(20000) + 'x', now); return performance.now() - t0; })(),
+      };
+    }, now);
+    check('R6 ship speed, not the wind\'s / current\'s / max / ordered speed', r.wind.sog === 9.5 && r.windDir.sog === 11.2 && r.current.sog === 10.8 && r.maxAvg.sog === 11.2 && r.ordered.sog === 10.8 && r.onlyMax.sog === null, [r.wind.sog, r.windDir.sog, r.current.sog, r.maxAvg.sog, r.ordered.sog, r.onlyMax.sog]);
+    // the page runs in Asia/Dubai (UTC+4): 23:00 LT = 19:00Z
+    check('R6 ETA with a year: never the year as a time; date only when no time is given', r.yearNoTime.eta === '2026-10-17T20:00:00.000Z' && r.yearNoTime.etaDay === true && r.yearTime.eta === '2026-10-18T19:00:00.000Z' && !r.yearTime.etaDay && r.yearSlash.eta === '2026-10-18T19:00:00.000Z' && r.yearAsTime.eta === '2026-10-18T16:30:00.000Z',
+      [r.yearNoTime, r.yearTime.eta, r.yearSlash.eta, r.yearAsTime.eta]);
+    check('R6 ETA time zones: "(UTC)", "UTC+4", "hrs GMT+4", ISO / "Oct 18, 23:00" with LT; site ETA stays UTC',
+      r.utcParen.eta === '2026-10-18T23:00:00.000Z' && r.utcPlus4.eta === '2026-10-18T19:00:00.000Z' && r.gmtPlus4.eta === '2026-10-18T19:00:00.000Z' && r.isoLT.eta === '2026-10-18T19:00:00.000Z' && r.monLT.eta === '2026-10-18T19:00:00.000Z' && r.siteUtc.eta === '2026-10-18T23:00:00.000Z',
+      [r.utcParen.eta, r.utcPlus4.eta, r.gmtPlus4.eta, r.isoLT.eta, r.monLT.eta, r.siteUtc.eta]);
+    check('R6 degrees-minutes-seconds without a seconds mark', r.dms.lat === 25.175 && r.dms.lon === 56.45 && r.dms2.lat === 25.175 && r.dms2.lon === 56.45, [r.dms, r.dms2]);
+    check('R6 status in the present only: "will be anchored … currently underway" / "was anchored, now underway" → Under way; "has been anchored" → At anchor',
+      r.willAnchor.nav === 'Under way' && r.wasAnchor.nav === 'Under way' && r.hasBeen.nav === 'At anchor', [r.willAnchor.nav, r.wasAnchor.nav, r.hasBeen.nav]);
+    check('R6 no junk destinations ("destined for", "ETA abt", "ETA revised from"); a revised ETA takes the new time; "ETA: TBA, ETD …" is no ETA',
+      r.destined.dest === '' && r.abt.dest === '' && r.abt.eta === '2026-10-18T19:00:00.000Z' && r.revised.dest === '' && r.revised.eta === '2026-10-18T19:00:00.000Z' && r.tba.eta === null,
+      [r.destined.dest, r.abt, r.revised, r.tba.eta]);
+    check('R6 "a month ago", "1 hour 20 minutes ago", "2 weeks ago"; an unreadable "… ago" is flagged (no silent now)',
+      r.month.at === new Date(now - 30 * 86400000).toISOString() && r.month.approx && r.compound.at === new Date(now - 80 * 60000).toISOString() && r.weeks.at === new Date(now - 14 * 86400000).toISOString() && r.unread.at === null && r.unread.unread === true && r.month.unread === false,
+      [r.month, r.compound.at, r.weeks.at, r.unread]);
+    check('R6 an ETA without a year around New Year: nearest year (30 Dec seen on 3 Jan → last year; 2 Jan seen on 30 Dec → next year)',
+      r.newYear.eta === '2026-12-30T21:30:00.000Z' && r.newYear2.eta === '2027-01-02T06:00:00.000Z', [r.newYear.eta, r.newYear2.eta]);
+    check('R6 a paste with thousands of blank lines parses quickly', r.bigBlank < 500, r.bigBlank);
+  });
+
+  /* 7 — dialog review cases: card re-numbered by a sync, removed nomination, keyboard, backdrop, arrived re-save, IMO conflict */
+  await scenario(browser, 'R7 dialog review cases', async (openT) => {
+    const now = Date.now();
+    const vs = scene(now);
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: vs }), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const page = A.page;
+    await page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    // A opens CMA CGM DAKAR (n2), goes to copy the page; meanwhile a colleague removes SEA VALIANT (n1) → cards re-numbered
+    await page.evaluate(() => __panel('n2').querySelector('.prpt-btn').click());
+    await sleep(120);
+    const idBefore = await page.evaluate(() => __cid('n2'));
+    {
+      const row = U.row(db), p = clone(row.payload), ver = Date.now();
+      p.state.vessels = p.state.vessels.filter(v => v.nomUid !== 'n1');
+      p.version = ver; p.state.version = ver; row.payload = p; row.version = ver;
+    }
+    await page.evaluate(() => { document.activeElement && document.activeElement.blur(); return _pollOnce(true); });
+    await sleep(800);
+    const ren = await page.evaluate(() => ({ id: __cid('n2'), n1: __cid('n1'), dlg: !!document.querySelector('.prd-ov') }));
+    await page.evaluate(t => __paste(t), VF_TEXT);
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(700);
+    const after = { n2: vOf(db, 'n2').posRpt, n3: vOf(db, 'n3').posRpt, n4: vOf(db, 'n4').posRpt };
+    check('R7 a sync re-numbers the cards while the box is open → the report still goes to ITS nomination (CMA CGM DAKAR), no other card', ren.id !== idBefore && ren.n1 === null && ren.dlg && after.n2 && after.n2.src === 'vf' && !after.n3 && !after.n4, { idBefore, ren, after });
+    // the nomination itself removed while the box is open → nothing saved, says why
+    await page.evaluate(() => __panel('n4').querySelector('.prpt-btn').click());
+    await sleep(120);
+    {
+      const row = U.row(db), p = clone(row.payload), ver = Date.now();
+      p.state.vessels = p.state.vessels.filter(v => v.nomUid !== 'n4');
+      p.version = ver; p.state.version = ver; row.payload = p; row.version = ver;
+    }
+    await page.evaluate(() => { document.activeElement && document.activeElement.blur(); return _pollOnce(true); });
+    await sleep(800);
+    await page.evaluate(t => __paste(t), mstPage(now));
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(400);
+    const gone = await page.evaluate(() => ({ err: __dlg('err').textContent, open: !!document.querySelector('.prd-ov') }));
+    check('R7 its nomination removed meanwhile → "removed or changed by a colleague … nothing was saved", box stays open', gone.open && /removed or changed by a colleague/.test(gone.err) && !U.row(db).payload.state.vessels.some(v => v.posRpt && v.posRpt.src === 'mst'), gone);
+    // keyboard: click on the title (focus leaves the inputs), Esc still closes
+    await page.click('#prd-title');
+    await page.keyboard.press('Escape');
+    check('R7 Esc closes the box after a click on its text', await page.evaluate(() => !document.querySelector('.prd-ov')));
+    await page.evaluate(() => __panel('n3').querySelector('.prpt-btn').click());
+    await sleep(120);
+    await page.evaluate(() => document.body.focus());
+    await page.evaluate(() => document.activeElement && document.activeElement.blur());
+    await page.keyboard.press('Tab');
+    check('R7 Tab with focus outside the box goes into the box', await page.evaluate(() => document.querySelector('.prd-ov').contains(document.activeElement)));
+    // backdrop: press on the backdrop and release inside the box → stays open; a click on the backdrop closes
+    const box = await page.evaluate(() => { const r = document.querySelector('.prd').getBoundingClientRect(); return { x: r.left + 40, y: r.top + 40, bx: Math.max(5, r.left - 6), by: r.top + 60 }; });
+    await page.mouse.move(box.bx, box.by); await page.mouse.down(); await page.mouse.move(box.x, box.y); await page.mouse.up();
+    const stays = await page.evaluate(() => !!document.querySelector('.prd-ov'));
+    await page.mouse.click(box.bx, box.by);
+    const closed = await page.evaluate(() => !document.querySelector('.prd-ov'));
+    check('R7 a drag that starts on the backdrop does not close the box; a click on the backdrop does', stays && closed, { stays, closed });
+    // arrived report: re-saved unchanged keeps "arrived" + its time
+    await page.evaluate(() => __panel('n3').querySelector('.prpt-btn').click());
+    await sleep(120);
+    await page.evaluate(t => __paste(t), 'VesselFinder The current position of SEA VALIANT is at Gulf of Oman reported 3 hours ago by AIS. The vessel arrived at the port of Fujairah, United Arab Emirates (UAE) on Oct 15, 19:32 UTC. (IMO 9420629, MMSI 538009850)');
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(600);
+    const a1 = clone(vOf(db, 'n3').posRpt);
+    await page.evaluate(() => __panel('n3').querySelector('.prpt-btn').click());
+    await sleep(120);
+    const destBox = await page.evaluate(() => __dlg('dest').value);
+    await page.evaluate(() => __dlg('save').click());
+    await sleep(600);
+    const a2 = vOf(db, 'n3').posRpt;
+    const focusOk = await page.evaluate(() => document.activeElement && document.activeElement.classList.contains('prpt-btn') && __panel('n3').contains(document.activeElement));
+    check('R7 an "arrived" report re-saved unchanged keeps the arrival and its time ("arrived Fujairah" in the box)', a1.arr === 'Fujairah' && a1.arrAt && destBox === 'arrived Fujairah' && a2.arr === 'Fujairah' && a2.arrAt === a1.arrAt && !a2.dest, { a1, destBox, a2 });
+    check('R7 after Save, focus is on the card\'s new Update button', focusOk);
+    // date-only ETA from a noon report shows as a date
+    await page.evaluate(() => __panel('n5').querySelector('.prpt-btn').click());
+    await sleep(120);
+    await page.evaluate(t => __paste(t), 'Noon pos 19-16N 065-03E, speed 11 kts, ETA Fujairah 18th Oct ' + new Date().getFullYear() + ' AGW WP');
+    const etaBox = await page.evaluate(() => __dlg('eta').value);
+    await page.evaluate(() => { __setF('at', _prFmtLocal(Date.now() - 3600000)); __dlg('save').click(); });
+    await sleep(600);
+    const c5 = await page.evaluate(() => __cells('n5'));
+    check('R7 a date-only ETA: date in the box, "18 Oct (date only)" on the card, stored with etaDay', /^18 Oct \d{4}$/.test(etaBox) && c5['ETA'] === '18 Oct (date only)' && vOf(db, 'n5').posRpt.etaDay === true, { etaBox, c5 });
+    // unreadable "… ago" → must type the time
+    await page.evaluate(() => __panel('n5').querySelector('.prpt-btn').click());
+    await sleep(120);
+    await page.evaluate(t => __paste(t), 'The current position of REIMEI is at Gulf of Oman reported quite some time ago by AIS.');
+    await page.evaluate(() => { __setF('at', ''); __dlg('save').click(); });
+    const unr = await page.evaluate(() => __dlg('err').textContent);
+    check('R7 page says "… ago" but FLOW cannot read it → asks for the Reported time (not set to now)', /could not read it — type the Reported time/.test(unr), unr);
+    await page.keyboard.press('Escape');
+  });
+
+  /* 8 — same ship only when the IMOs agree; stale AIS row with a report says "Update position"; absurd synced times */
+  await scenario(browser, 'R8 same ship + stale AIS', async (openT) => {
+    const now = Date.now();
+    const vs = scene(now);
+    vs[1].mmsi = '538009850'; vs[1].imo = '9448827';        // CMA CGM DAKAR typed with SEA VALIANT's MMSI by mistake
+    vs[3].posRpt = { src: 'mst', lat: 24.9, lon: 57.2, sog: 9, at: iso(now - 20 * HR), updatedAt: now - 20 * HR };     // OCEAN PEARL: report older than its stale AIS fix
+    vs[4].posRpt = { src: 'mst', lat: 24.9, lon: 57.2, at: 1e20, eta: -5, updatedAt: 1 };                            // absurd synced times
+    const ais = aisData(now);
+    ais.positions[0].position_time = iso(now - 8 * HR);
+    const db = H.createDb({ workspace: U.seedPayload({ vessels: vs }), ais, realtime: false });
+    const { page } = await openT(db, 'user-operator', { settleMs: 800 });
+    await page.evaluate(() => { try { flowWelcomeGo('nominations'); } catch (e) {} showPage('nominations'); });
+    await sleep(300);
+    await page.evaluate(t => { __panel('n1').querySelector('.prpt-btn').click(); return new Promise(r => setTimeout(r, 100)).then(() => __paste(t)).then(() => __dlg('save').click()); }, mstPage(now));
+    await sleep(700);
+    check('R8 a card with the same MMSI but another IMO is another ship: not given the report', vOf(db, 'n1').posRpt && vOf(db, 'n3').posRpt && !vOf(db, 'n2').posRpt, [!!vOf(db, 'n2').posRpt]);
+    await page.evaluate(() => { showPage('dashboard'); renderDashAis(); });
+    await sleep(300);
+    const row = await page.evaluate(() => { const r = [...document.querySelectorAll('#dash-ais-body .ais-row')].find(x => x.querySelector('.ais-row-name').textContent === 'OCEAN PEARL'); return r ? { src: r.dataset.src || 'ais', txt: r.textContent } : null; });
+    check('R8 stale live AIS newer than the report: AIS row, button says "Update position" (a report exists)', row && row.src === 'ais' && /Update position/.test(row.txt) && !/\+ Add last position/.test(row.txt), row);
+    const n5 = await page.evaluate(() => { showPage('nominations'); return __cells('n5'); });
+    check('R8 absurd synced times are ignored (no crash): no reported time, no ETA', n5['Reported'] === 'time not given' && n5['ETA'] === '—', n5);
+  });
+
   await browser.close();
   console.log('Last known position: ' + pass + ' passed, ' + fail + ' failed');
   process.exitCode = fail ? 1 : 0;
