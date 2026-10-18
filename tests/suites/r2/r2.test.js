@@ -4,7 +4,9 @@ const appDir = process.argv[2] || H.APP_DIR;
 const XSS = '<img src=x onerror="window.__xss=1">';
 let fails = 0;
 function ok(cond, msg) { console.log((cond ? 'PASS ' : 'FAIL ') + msg); if (!cond) fails++; }
-function todayISO() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+// Today in the app's timezone (the harness runs pages in Asia/Dubai, UTC+4) — the runner's clock is
+// a day behind between 20:00 and 24:00 UTC.
+function todayISO() { return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Dubai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); }
 const realErrors = errs => errs.filter(e => !/capacitorExports/.test(e));
 
 (async () => {
