@@ -7529,10 +7529,69 @@ function _mergePayloads(base, local, remote) {
     merged = _mergeDoc(_deepClone(remote));
     merged.state.vessels = _merge3((_mergeDoc(base).state.vessels) || [], _mergeDoc(local).state.vessels || [], merged.state.vessels || [], 'vessels', ctx, 'vessels');
   } else {
-    merged = _merge3(_mergeDoc(base), _mergeDoc(local), _mergeDoc(remote), '', ctx, '');
+    const bd = _mergeDoc(base), ld = _mergeDoc(local), rd = _mergeDoc(remote);
+    merged = _mergeBakes(bd, ld, rd, _merge3(bd, ld, rd, '', ctx, ''), ctx);
   }
   merged.state.version = (remote && remote.version) || (remote && remote.state && remote.state.version) || 0;
   return { merged: merged, conflicts: ctx.conflicts };
+}
+/* A barge's opening ROB and the supplies / reloads already folded into it (bakedSupplyIds)
+   belong together: live ROB = opening − every supply not yet baked (computeLiveROB, with the
+   manual overrides, their atIds and the clamp at 0). When both sides baked something
+   different, the plain merge keeps this device's baked list (the clash rule), so the
+   colleague's newly baked supplies are unbaked again: computeLiveROB deducts them once and
+   the next save bakes them (and strips the overrides). But a grade only the colleague
+   changed takes THEIR opening, which already holds those supplies — they were deducted
+   twice. For such a grade the opening gets their quantities back (reloads taken off).
+   Returns `m` with new objects — never mutates the inputs. */
+function _mergeBakes(b, l, r, m, ctx) {
+  const bakedOf = function(d) { return _isPlainObj(d && d.state && d.state.bakedSupplyIds) ? d.state.bakedSupplyIds : {}; };
+  const bB = bakedOf(b), lB = bakedOf(l), rB = bakedOf(r), mB = bakedOf(m);
+  const bids = Array.from(new Set(Object.keys(lB).concat(Object.keys(rB))));
+  if (!bids.length || !m || !m.state || !Array.isArray(m.state.barges)) return m;
+  const list = function(o, k) { return (Array.isArray(o[k]) ? o[k] : []).map(String); };
+  const key = function(a) { return JSON.stringify(a.slice().sort()); };
+  const bargeOf = function(d, id) { return ((d && d.state && d.state.barges) || []).find(function(x) { return x && String(x.id) === String(id); }); };
+  const recs = Array.isArray(m.records) ? m.records : [], reloads = Array.isArray(m.state.bargeReloads) ? m.state.bargeReloads : [];
+  // What computeLiveROB will take off (supplies) or add (reloads) for these ids, now unbaked
+  // again, on this barge — same matching as computeLiveROB and the bake: a record by barge
+  // name (blank = the only barge), with an actual; a reload by bargeId. An id it will not
+  // count here (e.g. a record since moved to another barge) gets nothing back.
+  const onlyBarge = m.state.barges.length === 1;
+  const effect = function(idList, actKey, rlKey, bid, bargeName) {
+    return idList.reduce(function(t, id) {
+      const rec = recs.find(function(x) { return x && String(x.id) === id; });
+      if (rec) {
+        const aV = parseFloat(rec.vlsfoAct) || 0, aM = parseFloat(rec.mgoAct) || 0, rb = String(rec.barge || '').trim();
+        if ((aV === 0 && aM === 0) || !(rb === '' ? onlyBarge : rb === bargeName)) return t;
+        return t - (parseFloat(rec[actKey]) || 0);
+      }
+      const rl = reloads.find(function(x) { return x && String(x.id) === id; });
+      return rl && String(rl.bargeId) === String(bid) ? t + (parseFloat(rl[rlKey]) || 0) : t;
+    }, 0);
+  };
+  const barges = m.state.barges.slice();
+  let changed = false;
+  const resolved = {};
+  bids.forEach(function(bid) {
+    const bs = list(bB, bid), ls = list(lB, bid), rs = list(rB, bid);
+    if (key(ls) === key(bs) || key(rs) === key(bs) || key(ls) === key(rs)) return; // one side baked (or both alike): consistent as merged
+    resolved['state.bakedSupplyIds.' + bid] = 1; // the clash kept this device's list — handled here, not a conflict to report
+    const inM = new Set(list(mB, bid));
+    const unbaked = rs.filter(function(id) { return !inM.has(id); }); // the colleague's bakes the merged list drops
+    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid), i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
+    if (!unbaked.length || !bb || !lb || !rb || i < 0) return;
+    let mb = null;
+    [['vrob', 'vlsfoAct', 'v'], ['mrob', 'mgoAct', 'm']].forEach(function(g) {
+      const vb = parseFloat(bb[g[0]]) || 0, vl = parseFloat(lb[g[0]]) || 0, vr = parseFloat(rb[g[0]]) || 0;
+      if (vr === vb || vl !== vb) return; // only a grade the colleague alone changed has their baked opening
+      mb = mb || Object.assign({}, barges[i]);
+      mb[g[0]] = Math.max(0, Math.round(vr - effect(unbaked, g[1], g[2], bid, barges[i].name)));
+    });
+    if (mb) { barges[i] = mb; changed = true; }
+  });
+  if (ctx && Array.isArray(ctx.conflicts) && Object.keys(resolved).length) ctx.conflicts = ctx.conflicts.filter(function(p) { return !resolved[p]; });
+  return changed ? Object.assign({}, m, { state: Object.assign({}, m.state, { barges: barges }) }) : m;
 }
 
 /* ── Local snapshot persistence ── */
@@ -7635,7 +7694,7 @@ function _applyPayload(payload, replaceUnions) {
     if (_isPlainObj(st.fuelingInitiated)) _fuelingInitiated = _deepClone(st.fuelingInitiated);
     if (_isPlainObj(st.bakedSupplyIds)) _bakedSupplyIds = _deepClone(st.bakedSupplyIds);
   }
-  applyState(st);
+  applyState(st, !!replaceUnions); // a merge result or the cloud row itself: no zero-ROB guard
   if (Array.isArray(st.loadingRecords)) _saveLoadingToLocal();
   _manualROB = _isPlainObj(st.manualROB) ? _deepClone(st.manualROB) : {};
   try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB)); } catch(e) {}
@@ -9361,7 +9420,7 @@ function _guardAgainstZeroROBReset(incomingBarges, incomingVersion) {
   });
 }
 
-function applyState(state) {
+function applyState(state, trusted) {
   if (!state) return;
 
   // Clear current UI
@@ -9375,7 +9434,9 @@ function applyState(state) {
 
   // Restore barges
   if (state.barges && state.barges.length) {
-    const guardedBarges = _guardAgainstZeroROBReset(state.barges, state.version);
+    // (A merge's version is the remote row's, older than this device's last save: the
+    // guard would put back the stock of a barge a supply in the merge just emptied.)
+    const guardedBarges = trusted ? state.barges : _guardAgainstZeroROBReset(state.barges, state.version);
     guardedBarges.forEach(b => {
       // Backward compat: old saves had single 'buf' field
       if (b.buf !== undefined && b.vbuf === undefined) { b.vbuf = b.buf; b.mbuf = Math.round(b.buf * 0.3); }
