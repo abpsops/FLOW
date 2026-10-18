@@ -7536,26 +7536,24 @@ function _mergePayloads(base, local, remote) {
   return { merged: merged, conflicts: ctx.conflicts };
 }
 /* A barge's opening ROB and the supplies / reloads already folded into it (bakedSupplyIds)
-   are ONE value: live ROB = opening − every supply not yet baked (computeLiveROB). The baked
-   list is per barge, the opening per grade, so when both sides baked something different
-   they are rebuilt together:
-   - baked list: both sides' ids (a set merge);
-   - each grade: the opening of the side that changed it (both changed it → this device's,
-     as before), minus what the OTHER side baked that this opening does not hold yet (its
-     supplies' quantities of that grade; its reloads added), never below 0.
-   A grade only the colleague changed (an opening edit, a dip folded in by their bake) keeps
-   their figure; a supply is deducted once. Both changes being nothing but bakes is no clash
-   to report. Returns `m` with new objects — never mutates the inputs. */
+   belong together: live ROB = opening − every supply not yet baked (computeLiveROB, with the
+   manual overrides, their atIds and the clamp at 0). When both sides baked something
+   different, the plain merge keeps this device's baked list (the clash rule), so the
+   colleague's newly baked supplies are unbaked again: computeLiveROB deducts them once and
+   the next save bakes them (and strips the overrides). But a grade only the colleague
+   changed takes THEIR opening, which already holds those supplies — they were deducted
+   twice. For such a grade the opening gets their quantities back (reloads taken off).
+   Returns `m` with new objects — never mutates the inputs. */
 function _mergeBakes(b, l, r, m, ctx) {
   const bakedOf = function(d) { return _isPlainObj(d && d.state && d.state.bakedSupplyIds) ? d.state.bakedSupplyIds : {}; };
-  const bB = bakedOf(b), lB = bakedOf(l), rB = bakedOf(r);
+  const bB = bakedOf(b), lB = bakedOf(l), rB = bakedOf(r), mB = bakedOf(m);
   const bids = Array.from(new Set(Object.keys(lB).concat(Object.keys(rB))));
-  if (!bids.length || !m || !m.state) return m;
+  if (!bids.length || !m || !m.state || !Array.isArray(m.state.barges)) return m;
   const list = function(o, k) { return (Array.isArray(o[k]) ? o[k] : []).map(String); };
   const key = function(a) { return JSON.stringify(a.slice().sort()); };
   const bargeOf = function(d, id) { return ((d && d.state && d.state.barges) || []).find(function(x) { return x && String(x.id) === String(id); }); };
   const recs = Array.isArray(m.records) ? m.records : [], reloads = Array.isArray(m.state.bargeReloads) ? m.state.bargeReloads : [];
-  // what baking these ids does to a grade's opening: supplies deduct, reloads add
+  // what baking these ids did to a grade's opening: supplies deducted, reloads added
   const effect = function(idList, actKey, rlKey) {
     return idList.reduce(function(t, id) {
       const rec = recs.find(function(x) { return x && String(x.id) === id; });
@@ -7564,33 +7562,28 @@ function _mergeBakes(b, l, r, m, ctx) {
       return rl ? t + (parseFloat(rl[rlKey]) || 0) : t;
     }, 0);
   };
-  const baked = Object.assign({}, bakedOf(m));
-  const barges = Array.isArray(m.state.barges) ? m.state.barges.slice() : null;
+  const barges = m.state.barges.slice();
+  let changed = false;
   const resolved = {};
   bids.forEach(function(bid) {
     const bs = list(bB, bid), ls = list(lB, bid), rs = list(rB, bid);
-    if (key(ls) === key(bs) || key(rs) === key(bs) || key(ls) === key(rs)) return; // one side baked (or both alike): the plain merge keeps them together
-    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid);
-    const i = barges ? barges.findIndex(function(x) { return x && String(x.id) === String(bid); }) : -1;
-    if (!bb || !lb || !rb || i < 0) return;
-    baked[bid] = _mergeSet(bB[bid] || [], lB[bid] || [], rB[bid] || []);
-    resolved['state.bakedSupplyIds.' + bid] = 1;
-    const inB = new Set(bs), inL = new Set(ls), inR = new Set(rs);
-    const lNew = ls.filter(function(id) { return !inB.has(id); }), rNew = rs.filter(function(id) { return !inB.has(id); });
-    const onlyR = rs.filter(function(id) { return !inL.has(id); }), onlyL = ls.filter(function(id) { return !inR.has(id); });
-    const mb = Object.assign({}, barges[i]);
+    if (key(ls) === key(bs) || key(rs) === key(bs) || key(ls) === key(rs)) return; // one side baked (or both alike): consistent as merged
+    resolved['state.bakedSupplyIds.' + bid] = 1; // the clash kept this device's list — handled here, not a conflict to report
+    const inM = new Set(list(mB, bid));
+    const unbaked = rs.filter(function(id) { return !inM.has(id); }); // the colleague's bakes the merged list drops
+    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid), i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
+    if (!unbaked.length || !bb || !lb || !rb || i < 0) return;
+    let mb = null;
     [['vrob', 'vlsfoAct', 'v'], ['mrob', 'mgoAct', 'm']].forEach(function(g) {
       const vb = parseFloat(bb[g[0]]) || 0, vl = parseFloat(lb[g[0]]) || 0, vr = parseFloat(rb[g[0]]) || 0;
-      const fromRemote = vl === vb && vr !== vb;
-      mb[g[0]] = Math.max(0, Math.round((fromRemote ? vr : vl) + effect(fromRemote ? onlyL : onlyR, g[1], g[2])));
-      const pure = function(v, ids) { return Math.abs((v - vb) - effect(ids, g[1], g[2])) < 1; };
-      if (vl !== vb && vr !== vb && pure(vl, lNew) && pure(vr, rNew)) resolved['state.barges[' + bid + '].' + g[0]] = 1;
+      if (vr === vb || vl !== vb) return; // only a grade the colleague alone changed has their baked opening
+      mb = mb || Object.assign({}, barges[i]);
+      mb[g[0]] = Math.max(0, Math.round(vr - effect(unbaked, g[1], g[2])));
     });
-    barges[i] = mb;
+    if (mb) { barges[i] = mb; changed = true; }
   });
-  if (!Object.keys(resolved).length) return m;
-  if (ctx && Array.isArray(ctx.conflicts)) ctx.conflicts = ctx.conflicts.filter(function(p) { return !resolved[p]; });
-  return Object.assign({}, m, { state: Object.assign({}, m.state, { bakedSupplyIds: baked, barges: barges }) });
+  if (ctx && Array.isArray(ctx.conflicts) && Object.keys(resolved).length) ctx.conflicts = ctx.conflicts.filter(function(p) { return !resolved[p]; });
+  return changed ? Object.assign({}, m, { state: Object.assign({}, m.state, { barges: barges }) }) : m;
 }
 
 /* ── Local snapshot persistence ── */
