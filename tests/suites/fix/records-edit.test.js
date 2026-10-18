@@ -206,9 +206,11 @@ async function editRecord(p, id, fields) {
     await sleep(400);
     check('Remove Duplicates keeps two different ALPHA calls that share the old uid', U.row(db).payload.records.length === 2, U.row(db).payload.records.map(r => r.id));
     const dropped = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', nomUid: 'n9', vessel: 'ALPHA', supplyDate: new Date().toISOString() }));
-    check('saving a new ALPHA call from a reused old checklist row never deletes the archived September delivery', dropped === 0 && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, dropped);
-    const same = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-11T06:00:00.000Z' }));
-    check('…but a re-save of that same September call (same ship, within 3 days) replaces its archived copy', same === 1, same);
+    check('saving a new ALPHA call from a reused old checklist row never deletes the archived September delivery', dropped.length === 0 && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, dropped);
+    const near = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-12T06:00:00.000Z' }));
+    check('…nor one two days later (a ship can call again within days: no date-window guessing)', near.length === 0 && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, near);
+    const same = await page.evaluate(() => _dropArchivedCopies({ id: 'v_alpha_new', checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-10T06:00:00.000Z' }));
+    check('…but a re-save of that same September call (same ship, same supply time) replaces its archived copy, and names it', JSON.stringify(same) === JSON.stringify(['v_alpha_1757500000000']), same);
     // double click on Save: no false "someone else changed"
     await page.evaluate(() => { showPage('records'); openEditRecord('v_alpha_3000'); document.getElementById('er-vlsfo-act').value = '500'; window.__dialogs = []; });
     await page.evaluate(() => Promise.all([saveEditRecord(), saveEditRecord()]));
@@ -325,6 +327,98 @@ async function editRecord(p, id, fields) {
     await sleep(300);
     const fresh = await p2.evaluate(([y, k, m]) => ({ rows: _archives[y][k].records.map(r => r.id).sort(), rep: getMonthlyRows(m, y).map(r => [r.name, r.mQ]) }), [pmYr, pmKey, pm.getMonth()]);
     check('…and on a device that opens an archive already holding both copies: once, the newest', JSON.stringify(fresh.rows) === JSON.stringify(['cp_2000', 'o_1000']) && fresh.rep.filter(r => r[0] === 'CHILE PROSPERITY').length === 1 && fresh.rep.find(r => r[0] === 'CHILE PROSPERITY')[1] === 150.5, fresh);
+  });
+
+  /* 9 — older checklist rows ('v_<vessel>', no nomUid): two real calls of one ship a few days apart are two deliveries */
+  await scenario('E9 two legacy calls days apart', async (openT) => {
+    const n = new Date();
+    const lastOfPrev = new Date(n.getFullYear(), n.getMonth(), 0, 10, 0), prevKey = MO[lastOfPrev.getMonth()], prevYr = lastOfPrev.getFullYear();
+    const pp = new Date(n.getFullYear(), n.getMonth() - 1, 0, 10, 0), ppKey = MO[pp.getMonth()], ppYr = pp.getFullYear();   // last day of the month before
+    const firstOfPrev = new Date(n.getFullYear(), n.getMonth() - 1, 2, 10, 0);                                              // 2nd of last month
+    const second = new Date(n.getFullYear(), n.getMonth(), 2, 10, 0);                                                       // 2nd of this month
+    const leg = (id, d, v, m, bdn) => ({ id: id, checklistUid: 'v_alpha', vessel: 'ALPHA', area: AREA['FUJ-A'], areaCode: 'FUJ-A', dateStr: 'x', supplyDate: d.toISOString(), vlsfoAct: v, mgoAct: m, bdnV: v ? bdn : '', bdnM: m ? bdn : '', barge: 'Barge 1', supplied: true, savedAt: d.toISOString() });
+    const a1 = leg('v_alpha_a1', pp, 500, 0, 'BDN-A1'), a2 = leg('v_alpha_a2', firstOfPrev, 0, 120, 'BDN-A2');  // both archived, 2 days apart over a month end
+    const b1 = leg('v_alpha_b1', lastOfPrev, 300, 0, 'BDN-B1'), b2 = leg('v_alpha_b2', second, 0, 80, 'BDN-B2'); // b1 archived, b2 live
+    const seed = U.seedPayload({ vessels: [] });
+    seed.records = [b2];
+    seed.state.archives = {};
+    const put = (y, k, m, recs) => { seed.state.archives[y] = seed.state.archives[y] || {}; const a = seed.state.archives[y][k]; if (a) a.records.push(...recs); else seed.state.archives[y][k] = { records: recs, archivedAt: '2026-10-01T00:00:00.000Z', month: m, year: y }; };
+    put(ppYr, ppKey, pp.getMonth(), [a1]); put(prevYr, prevKey, lastOfPrev.getMonth(), [a2, b1]);
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const { page } = await openT(db);
+    await sleep(300);
+    const ids = () => page.evaluate(() => _liveArchiveEntries().flatMap(e => e.arch.records.map(r => r.id)).sort());
+    const rep = () => page.evaluate(([a, b, c]) => [].concat(getMonthlyRows(a[0], a[1]), getMonthlyRows(b[0], b[1]), getMonthlyRows(c[0], c[1])).map(r => [r.vQ, r.mQ]), [[pp.getMonth(), ppYr], [lastOfPrev.getMonth(), prevYr], [n.getMonth(), n.getFullYear()]]);
+    const all4 = JSON.stringify([[500, 0], [0, 120], [300, 0], [0, 80]]);
+    check('on load: both archived calls (2 days apart, over a month end) are kept, and each counts', JSON.stringify(await ids()) === JSON.stringify(['v_alpha_a1', 'v_alpha_a2', 'v_alpha_b1']) && JSON.stringify(await rep()) === all4, [await ids(), await rep()]);
+    await page.evaluate(seed => { _mergeArchives(JSON.parse(JSON.stringify(seed.state.archives))); }, seed);
+    check('…after a cloud merge too', JSON.stringify(await ids()) === JSON.stringify(['v_alpha_a1', 'v_alpha_a2', 'v_alpha_b1']));
+    await editRecord(page, 'v_alpha_b2', { 'er-date': second.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' 16:00' });
+    await editRecord(page, 'v_alpha_b2', { 'er-vessel': 'ALPHA I' });
+    check('editing the live call\'s time or vessel name never deletes the archived call of the day before', JSON.stringify(await ids()) === JSON.stringify(['v_alpha_a1', 'v_alpha_a2', 'v_alpha_b1']) && JSON.stringify(await rep()) === all4, [await ids(), await rep()]);
+    await page.evaluate(() => { const n = new Date(); archiveMonth(n.getMonth(), n.getFullYear()); });
+    await sleep(300);
+    const afterArch = await ids();
+    check('archiving this month keeps all four calls', JSON.stringify(afterArch) === JSON.stringify(['v_alpha_a1', 'v_alpha_a2', 'v_alpha_b1', 'v_alpha_b2']) && JSON.stringify(await rep()) === all4, [afterArch, await rep()]);
+    await sleep(400);
+    const cloud = U.row(db).payload.state.archives;
+    const cloudIds = Object.values(cloud).flatMap(y => Object.values(y)).flatMap(a => (a.records || []).map(r => r.id)).sort();
+    check('…and the cloud keeps them all', JSON.stringify(cloudIds) === JSON.stringify(['v_alpha_a1', 'v_alpha_a2', 'v_alpha_b1', 'v_alpha_b2']), cloudIds);
+  });
+
+  /* 10 — a copy dropped by an edit, synced back from a colleague's device that still had it */
+  await scenario('E10 dropped copy synced back', async (openT) => {
+    const n = new Date();
+    const seed = U.seedPayload({ vessels: [] });
+    const live = rec({ uid: 'v_delta', ts: 2000, vessel: 'DELTA STAR', vAct: 400, extra: { nomUid: undefined } });
+    const twin = rec({ uid: 'v_delta', ts: 1000, vessel: 'DELTA STAR', vAct: 400, extra: { nomUid: undefined } });
+    const other = rec({ uid: 'o', ts: 1000, vessel: 'OMEGA', vAct: 300 });
+    seed.records = [live, other];
+    seed.state.archives = { [n.getFullYear()]: { [MO[n.getMonth()]]: { records: [twin], archivedAt: '2026-10-01T00:00:00.000Z', month: n.getMonth(), year: n.getFullYear() } } };
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const C = await openT(db, 'user-operator2');   // has the archive (with the old copy) cached
+    await sleep(300);
+    const A = await openT(db, 'user-operator');
+    const names = p => p.evaluate(() => { const n = new Date(); return getMonthlyRows(n.getMonth(), n.getFullYear()).map(r => r.name + ' ' + r.vQ).sort(); });
+    await editRecord(A.page, 'v_delta_2000', { 'er-vessel': 'DELTA STAR II' });
+    check('after the rename: once', JSON.stringify(await names(A.page)) === JSON.stringify(['DELTA STAR II 400', 'OMEGA 300']), await names(A.page));
+    // C opens again later (its cached archive still has the old copy) and saves something unrelated
+    await C.page.reload(); await sleep(1500);
+    await C.page.evaluate(() => { window.confirm = () => true; window.alert = () => {}; });
+    await editRecord(C.page, 'o_1000', { 'er-notes': 'checked' });
+    await A.page.evaluate(() => { document.activeElement && document.activeElement.blur(); return _pollOnce(true); });
+    await sleep(500);
+    const fresh = await openT(db, 'user-operator');
+    await sleep(300);
+    const r = [await names(C.page), await names(A.page), await names(fresh.page)];
+    check('the old copy coming back from that device is still not counted — on that device, on ours, on a fresh one', r.every(x => JSON.stringify(x) === JSON.stringify(['DELTA STAR II 400', 'OMEGA 300'])), r);
+  });
+
+  /* 11 — a change made while a save is on the network, when that save meets a colleague's */
+  await scenario('E11 change during a conflicting save', async (openT) => {
+    const seed = U.seedPayload({ vessels: [] });
+    seed.records = [rec({ uid: 'a', vessel: 'ALPHA', vAct: 400, mAct: 50 }), rec({ uid: 'cp', vessel: 'CHILE PROSPERITY', vAct: 498.5, mAct: 99.2 }), rec({ uid: 'om', vessel: 'OMEGA', vAct: 300 })];
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const A = await openT(db, 'user-operator');
+    const B = await openT(db, 'user-operator2');
+    await editRecord(B.page, 'om_1000', { 'er-notes': 'checked by B' });   // not yet pulled by A
+    await A.page.evaluate(() => {
+      const o = window.__mockDb;
+      window.__mockDb = async function(q) { await new Promise(r => setTimeout(r, 600)); const r = await o(q); await new Promise(r2 => setTimeout(r2, 600)); return r; };
+    });
+    await A.page.evaluate(async () => {
+      showPage('records'); openEditRecord('a_1000'); document.getElementById('er-mgo-act').value = '60';
+      const p1 = saveEditRecord();
+      await new Promise(r => setTimeout(r, 300));
+      closeEditRecord(); openEditRecord('cp_1000'); document.getElementById('er-mgo-act').value = '150.5';
+      const p2 = saveEditRecord();
+      await Promise.all([p1, p2]);
+    });
+    await sleep(7000);
+    const cloud = U.row(db).payload.records;
+    const local = await A.page.evaluate(() => _savedSupplies.map(r => [r.id, r.mgoAct, r.notes || '']));
+    const g = (id, k) => cloud.find(r => r.id === id)[k];
+    check('both edits made during the slow, conflicting save reach the cloud and stay on this device; the colleague\'s note too', g('a_1000', 'mgoAct') === 60 && g('cp_1000', 'mgoAct') === 150.5 && g('om_1000', 'notes') === 'checked by B' && local.find(r => r[0] === 'cp_1000')[1] === 150.5, [cloud.map(r => [r.id, r.mgoAct, r.notes]), local]);
   });
 
   await browser.close();

@@ -7851,7 +7851,10 @@ async function _doSaveSharedState() {
       // database refused it (row-level security), it isn't a conflict.
       throw new Error('Save was rejected by the database (row-level security) — this account may not have operator write access');
     }
-    const { merged, conflicts } = _mergePayloads(base, payload, row.payload);
+    // Merge what this device has NOW, not `payload`: a change made while this save was
+    // on the network (another record saved, a delete) is only there, and applying the
+    // merge replaces local state. `base` still fits — pulls don't run under a save.
+    const { merged, conflicts } = _mergePayloads(base, _buildSavePayload(), row.payload);
     _applyPayload(merged, true);
     _adoptBase(row, false);
     _toastMerged(conflicts);
@@ -19126,11 +19129,14 @@ async function saveChecklistRecord(uid) {
   // Replace existing saved record for this exact checklist entry (stable uid),
   // never by vessel+date — date formatting can shift between schedule runs and
   // previously caused duplicate Saved Supply rows for the same checklist record.
+  const _replaced = _savedSupplies.filter(r => r.checklistUid === uid);
   _savedSupplies = _savedSupplies.filter(r => r.checklistUid !== uid);
   _savedSupplies.push(supplyRec);
   // …and so does an archived copy of the same checklist row (it would come back in
   // the reports as a second delivery as soon as one of the two copies is edited).
-  if (typeof _dropArchivedCopies === 'function' && _dropArchivedCopies(supplyRec)) { try { saveArchives(); } catch (e) {} }
+  const _gone = typeof _dropArchivedCopies === 'function' ? _dropArchivedCopies(supplyRec) : [];
+  _withSupersedes(supplyRec, Array.from(_supersededIds(_replaced)).concat(_gone));
+  if (_gone.length) { try { saveArchives(); } catch (e) {} }
 
   // Delivery Log — automatic Timely/Delayed classification + Dispute
   // capture from Remarks, exactly at the moment this supply is saved.
@@ -19766,33 +19772,51 @@ function _mergeArchiveRecords(existing, incoming) {
   return { records: out, added: added, replaced: replaced };
 }
 /* Two supply records are the SAME delivery: same checklist row AND provably the same
-   call — same nomination (nomUid), or, without nomUids, the same vessel supplied
-   within 3 days. (Checklist rows made before nomUids existed were named 'v_<vessel>',
-   so different calls of one ship share that checklistUid.) */
+   call — same nomination (nomUid), or, without nomUids, the same vessel at the same
+   supply time (to the minute). Checklist rows made before nomUids existed were named
+   'v_<vessel>', so different calls of one ship share that checklistUid — and two calls
+   can be a day or two apart: never guess from a date window (this decides deletions). */
 function _sameDelivery(a, b) {
   if (!a || !b || !a.checklistUid || a.checklistUid !== b.checklistUid) return false;
   if (a.nomUid && b.nomUid) return a.nomUid === b.nomUid;
   const ta = a.supplyDate ? _parseDateLocal(a.supplyDate).getTime() : NaN, tb = b.supplyDate ? _parseDateLocal(b.supplyDate).getTime() : NaN;
   const nv = function(r) { return String((r && (r.vessel || r.name)) || '').trim().toLowerCase().replace(/\s+/g, ' '); };
-  return !isNaN(ta) && !isNaN(tb) && Math.abs(ta - tb) < 3 * 86400000 && nv(a) === nv(b);
+  return !isNaN(ta) && !isNaN(tb) && Math.floor(ta / 60000) === Math.floor(tb / 60000) && nv(a) === nv(b);
 }
-// Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns how many.
+// Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns their ids
+// — the caller lists them in the record's `supersedes`, so a copy another device still has
+// (archives merge as a union) stays out of the reports when it syncs back.
 // A row with supplyRec's own id is left to _mergeArchiveRecords (the newer copy wins).
 function _dropArchivedCopies(supplyRec) {
   const checklistUid = supplyRec && supplyRec.checklistUid;
-  if (!checklistUid || typeof _archives !== 'object' || !_archives) return 0;
-  let n = 0;
+  if (!checklistUid || typeof _archives !== 'object' || !_archives) return [];
+  const gone = [];
   Object.keys(_archives).forEach(function(yr) {
     const y = _archives[yr];
     if (!y || typeof y !== 'object') return;
     Object.keys(y).forEach(function(mon) {
       const a = y[mon];
       if (!_isLiveArchive(a) || !Array.isArray(a.records)) return;
-      const keep = a.records.filter(function(r) { return !_sameDelivery(supplyRec, r) || (r && r.id && r.id === supplyRec.id); });
-      if (keep.length !== a.records.length) { n += a.records.length - keep.length; y[mon] = Object.assign({}, a, { records: keep }); }
+      const keep = a.records.filter(function(r) {
+        if (!_sameDelivery(supplyRec, r) || (r && r.id && r.id === supplyRec.id)) return true;
+        if (r && r.id) gone.push(r.id);
+        return false;
+      });
+      if (keep.length !== a.records.length) y[mon] = Object.assign({}, a, { records: keep });
     });
   });
-  return n;
+  return gone;
+}
+// Ids of archived copies the records `recs` replaced (see _dropArchivedCopies).
+function _supersededIds(recs) {
+  const out = new Set();
+  (recs || []).forEach(function(r) { if (r && Array.isArray(r.supersedes)) r.supersedes.forEach(function(id) { if (id) out.add(id); }); });
+  return out;
+}
+function _withSupersedes(rec, ids) {
+  const all = Array.from(new Set([].concat(Array.isArray(rec.supersedes) ? rec.supersedes : [], ids || [])));
+  if (all.length) rec.supersedes = all;
+  return rec;
 }
 // Archived copies of one delivery (_sameDelivery) — re-saved or edited after its month was
 // archived, or an old copy another device still had (archives merge as a union, so a copy
@@ -19806,12 +19830,15 @@ function _collapseArchiveCopies() {
     });
   });
   const drop = new Set();
+  // a copy a record replaced (re-save / edit) — synced back from a device that still had it
+  const sup = _supersededIds([].concat.apply(typeof _savedSupplies !== 'undefined' && Array.isArray(_savedSupplies) ? _savedSupplies : [], _liveArchiveEntries().map(function(e) { return e.arch.records; })));
+  if (sup.size) _liveArchiveEntries().forEach(function(e) { e.arch.records.forEach(function(r) { if (r && r.id && sup.has(r.id)) drop.add(r); }); });
   byCl.forEach(function(list) {
     if (list.length < 2) return;
     const t = function(x) { return Date.parse((x.r && x.r.savedAt) || '') || 0; };
     list.sort(function(a, b) { return t(b) - t(a) || b.i - a.i; });
     const kept = [];
-    list.forEach(function(x) { if (kept.some(function(k) { return _sameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
+    list.forEach(function(x) { if (drop.has(x.r)) return; if (kept.some(function(k) { return _sameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
   });
   if (!drop.size) return 0;
   _liveArchiveEntries().forEach(function(e) {
@@ -20495,7 +20522,8 @@ async function _saveEditRecord(s) {
   const saved = _savedSupplies[idx] = Object.assign({}, cur, upd, { savedAt: new Date().toISOString() });
   // A new date or vessel name can stop an archived copy of this delivery matching it
   // (_sameDelivery), and the reports would count that copy again: drop such copies now.
-  if ((upd.supplyDate || upd.vessel) && _dropArchivedCopies(cur)) { try { saveArchives(); } catch (e) {} }
+  const gone = (upd.supplyDate || upd.vessel) ? _dropArchivedCopies(cur) : [];
+  if (gone.length) { _withSupersedes(saved, gone); try { saveArchives(); } catch (e) {} }
   // The checklist row this supply was saved from keeps the same BDN numbers
   // (the checklist Excel export reads them from there). A 'v_<vessel>' row is shared by
   // the ship's calls: only when it is still this call's row.
@@ -20907,8 +20935,10 @@ function _getAllReportRecords() {
   // record's. Two live records (or two archived ones) are never collapsed —
   // that silently dropped genuine split / repeat deliveries from reports.
   const liveKeys = new Set(base.map(r => _recordDedupeKey(r)));
+  const supIds = _supersededIds(base.concat(archRows)); // copies a re-saved / edited record replaced
   const combined = [...base, ...archRows.filter(r => {
     if (r.id && liveIds.has(r.id)) return false;
+    if (r.id && supIds.has(r.id)) return false;
     if (r.checklistUid && liveByCl.has(r.checklistUid) && liveByCl.get(r.checklistUid).some(l => _sameDelivery(l, r))) return false;
     const key = _recordDedupeKey(r);
     return !(key.replace(/\|/g, '') && liveKeys.has(key));
