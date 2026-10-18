@@ -119,6 +119,31 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
     }, /saveSharedState failed: Error: Failed to fetch/); // the network failure this test injects
   }
 
+  // B changes the MGO figure (Barge Fleet opening edit, or a dip in ROB Update), then logs BRAVO 50 VLSFO;
+  // A (not pulled yet) logs ALPHA 100 VLSFO → VLSFO 3850, and B's MGO figure stays.
+  for (const [tag, wantM] of [['opening edit', 1000], ['ROB Update dip', 700]]) {
+    await scenario(`R5 colleague's ${tag} on the other grade, then both log supplies`, async (openT) => {
+      const db = H.createDb({ workspace: twoSupplies('VLSFO'), realtime: false });
+      const A = await openT(db, 'user-operator');
+      const B = await openT(db, 'user-operator2');
+      await generate(A.page);
+      await generate(B.page);
+      const okEdit = tag === 'opening edit'
+        ? await B.page.evaluate(async () => { const el = document.getElementById('b1-mrob'); if (!el) return 'no b1-mrob'; el.value = '1000'; el.dispatchEvent(new Event('input', { bubbles: true })); saveBargeEdit(1); await _waitForSaveIdle(); return 'ok'; })
+        : await B.page.evaluate(async () => { renderLiveROBDashboard(); const v = document.getElementById('rob-sum-v-1'), m = document.getElementById('rob-sum-m-1'); if (!v || !m) return 'no rob-sum inputs'; v.value = '4000'; m.value = '700'; const rr = document.getElementById('rob-sum-reason-1'); if (rr) rr.value = 'dip'; await saveROBSumEdit(1); await _waitForSaveIdle(); return 'ok'; });
+      const okB = await logSupply(B.page, 'n2', 50, 0);
+      await slow(A.page);
+      const okA = await logSupply(A.page, 'n1', 100, 0);
+      await sleep(800);
+      await B.page.evaluate(() => _pollOnce(true)); await sleep(600);
+      const F = await openT(db, 'user-operator');
+      await sleep(600);
+      const want = [3850, wantM];
+      const r = { okEdit, okA, okB, cloud: cloudBarge(db), A: await live(A.page), B: await live(B.page), fresh: await live(F.page) };
+      check(`VLSFO 4000 − 50 − 100 = 3850, and the colleague's MGO ${wantM} is kept — everywhere`, okEdit === 'ok' && okA === 'ok' && okB === 'ok' && [r.cloud, r.A, r.B, r.fresh].every(x => JSON.stringify(x) === JSON.stringify(want)), r);
+    });
+  }
+
   // Barge 1: 100 VLSFO. B logs ALPHA 100 MT (barge empty); A (not pulled) saves a remark.
   await scenario('R2 a supply that empties the barge, then a colleague\'s conflicting save', async (openT) => {
     const seed = twoSupplies('MGO');
@@ -162,8 +187,8 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       res.untouched = JSON.stringify(r) === rCopy && JSON.stringify(l) === lCopy;
       return res;
     });
-    check('both sides baked different supplies: this device\'s opening and baked list are kept together, no conflict reported', JSON.stringify(out.diffGrades) === JSON.stringify([3900, 800, ['s1'], []]), out.diffGrades);
-    check('…so the colleague\'s supply is deducted once by the live ROB: 3900 / 750', JSON.stringify(out.diffGradesLive) === JSON.stringify([3900, 750]), out.diffGradesLive);
+    check('both sides baked different supplies: each grade from the side that changed it, both baked, no conflict reported', JSON.stringify(out.diffGrades) === JSON.stringify([3900, 750, ['s1', 's2'], []]), out.diffGrades);
+    check('…and the live ROB deducts nothing again: 3900 / 750', JSON.stringify(out.diffGradesLive) === JSON.stringify([3900, 750]), out.diffGradesLive);
     check('same grade, one supply baked on both sides plus one more locally: 4000 − 100 − 30 = 3870, both baked', JSON.stringify(out.bothBakedOne) === JSON.stringify([3870, ['s1', 's3']]), out.bothBakedOne);
     check('a reload baked on both sides is added once: 4000 + 200 − 30 = 4170', JSON.stringify(out.reloadBoth) === JSON.stringify([4170]), out.reloadBoth);
     check('only one side baked: its opening and list, as before', JSON.stringify(out.oneSided) === JSON.stringify([3900, ['s0', 's1']]), out.oneSided);
