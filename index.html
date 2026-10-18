@@ -92,6 +92,21 @@ function _isScheduleItemCompleted(item) {
     var r = cl[k];
     if (r && (r.supplied || r.state === 'saved' || r.state === 'completed') && _recordMatchesScheduleItem(r, item)) return true;
   }
+  // Archived (month moved to an archive): still supplied — never offered as Pending again.
+  if (typeof _liveArchiveEntries === 'function') {
+    var ents = _liveArchiveEntries();
+    for (var e = 0; e < ents.length; e++) {
+      var recs = (ents[e].arch && ents[e].arch.records) || [];
+      for (var j = 0; j < recs.length; j++) {
+        var ar = recs[j];
+        if (!ar || ar.supplied === false) continue;
+        if (ar.nomUid && item.nomUid) { if (ar.nomUid === item.nomUid) return true; continue; }
+        // without a nomUid only a dated match counts (an undated old row must not hide a new call)
+        var at = ar.supplyDate ? new Date(ar.supplyDate).getTime() : NaN, st = (item.bargeStart || item.eta) ? new Date(item.bargeStart || item.eta).getTime() : NaN;
+        if (!isNaN(at) && !isNaN(st) && String(ar.vessel || '').trim().toLowerCase() === String(item.name || '').trim().toLowerCase() && Math.abs(at - st) < 3 * 86400000) return true;
+      }
+    }
+  }
   return false;
 }
 /* Chart.js renders to <canvas>, so it can't read our CSS variables directly —
@@ -4653,9 +4668,9 @@ function copyAllAgentEmails(btn) {
     </div>
     <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">Quantities (MT)</div>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:18px">
-      <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Nom. VLSFO</label><input type="number" id="er-vlsfo-nom" min="0" step="1" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface2);color:var(--muted)"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Nom. VLSFO</label><input type="number" id="er-vlsfo-nom" min="0" step="1" readonly tabindex="-1" title="Nominated quantity — for reference only; reports use the Actual" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface2);color:var(--muted)"></div>
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Actual VLSFO</label><input type="number" id="er-vlsfo-act" min="0" step="1" oninput="updateEditDiff()" style="font-size:14px;padding:9px 12px;border:2px solid var(--fuel-v);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-v-lt);font-weight:600;color:var(--ink)"></div>
-      <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Nom. MGO</label><input type="number" id="er-mgo-nom" min="0" step="1" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface2);color:var(--muted)"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Nom. MGO</label><input type="number" id="er-mgo-nom" min="0" step="1" readonly tabindex="-1" title="Nominated quantity — for reference only; reports use the Actual" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface2);color:var(--muted)"></div>
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Actual LSMGO</label><input type="number" id="er-mgo-act" min="0" step="1" oninput="updateEditDiff()" style="font-size:14px;padding:9px 12px;border:2px solid var(--fuel-m);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-m-lt);font-weight:600;color:var(--ink)"></div>
     </div>
     <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">BDN Numbers</div>
@@ -5580,7 +5595,6 @@ function renderDashCharts(records, vessels) {
     let distV = 0, distM = 0;
     (typeof _getAllReportRecords === 'function' ? _getAllReportRecords() : []).forEach(r => {
       if (!r.supplyDate || r.supplied !== true) return;
-      if (typeof _rowMatchesReportPort === 'function' && !_rowMatchesReportPort(r)) return;
       const _fdD = _parseLocalDate(r.supplyDate);
       if (_fdD.getMonth() !== _fdMon || _fdD.getFullYear() !== _fdYr) return;
       distV += _recActQty(r, 'v');
@@ -5709,11 +5723,12 @@ function refreshReports() {
   }
   // KPIs: same source and rules as the Monthly Report / analytics charts —
   // live + archived records via _getAllReportRecords() (deduped), supplied
-  // only, the report's port filter, and the ACTUAL qty via _recActQty (an
+  // only, every port (the Monthly Report's FUJ / KFK button filters that report
+  // only), and the ACTUAL qty via _recActQty (an
   // actual of 0 is real; `act || actual` used to fall through to stale
   // fields). Unsupplied drafts used to inflate "Completed deliveries".
   const delivered = (typeof _getAllReportRecords === 'function' ? _getAllReportRecords() : records).filter(r =>
-    r && r.supplied === true && (typeof _rowMatchesReportPort !== 'function' || _rowMatchesReportPort(r)));
+    r && r.supplied === true);
   let totalV=0, totalM=0;
   delivered.forEach(r => {
     totalV += _recActQty(r, 'v');
@@ -5788,7 +5803,6 @@ function renderReportCharts(records) {
   const _rcNow = new Date(), _rcMon = _rcNow.getMonth(), _rcYr = _rcNow.getFullYear();
   const recs = (typeof _getAllReportRecords === 'function' ? _getAllReportRecords() : []).filter(r => {
     if (!r.supplyDate || r.supplied !== true) return false;
-    if (typeof _rowMatchesReportPort === 'function' && !_rowMatchesReportPort(r)) return false;
     const _rcD = _parseLocalDate(r.supplyDate);
     return !isNaN(_rcD.getTime()) && _rcD.getMonth() === _rcMon && _rcD.getFullYear() === _rcYr;
   });
@@ -7610,7 +7624,7 @@ function _applyPayload(payload, replaceUnions) {
   const st = payload.state;
   const focus = _snapshotFocus();
   if (replaceUnions) {
-    if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof saveArchives === 'function') saveArchives(); }
+    if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof _collapseArchiveCopies === 'function') _collapseArchiveCopies(); if (typeof saveArchives === 'function') saveArchives(); }
     if (Array.isArray(st.agents)) {
       _agents = _deepClone(st.agents);
       _agentNextId = Math.max(_agentNextId || 1000, ...(_agents.map(function(a) { return (Number(a.id) || 0) + 1; })));
@@ -7642,6 +7656,7 @@ function _applyPayload(payload, replaceUnions) {
   try { localStorage.setItem(LS_STATE_KEY, JSON.stringify(st)); } catch(e) {}
   try { localStorage.setItem(LS_RECORDS_KEY, JSON.stringify(_savedSupplies)); } catch(e) {}
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
+  if (typeof _refreshReportViews === 'function') _refreshReportViews(); // a colleague's record edits reach the reports on screen
   if (typeof renderTrashBin === 'function') renderTrashBin();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
@@ -7836,7 +7851,10 @@ async function _doSaveSharedState() {
       // database refused it (row-level security), it isn't a conflict.
       throw new Error('Save was rejected by the database (row-level security) — this account may not have operator write access');
     }
-    const { merged, conflicts } = _mergePayloads(base, payload, row.payload);
+    // Merge what this device has NOW, not `payload`: a change made while this save was
+    // on the network (another record saved, a delete) is only there, and applying the
+    // merge replaces local state. `base` still fits — pulls don't run under a save.
+    const { merged, conflicts } = _mergePayloads(base, _buildSavePayload(), row.payload);
     _applyPayload(merged, true);
     _adoptBase(row, false);
     _toastMerged(conflicts);
@@ -19044,6 +19062,13 @@ async function saveChecklistRecord(uid) {
   // an explicit confirmation (Cancel is the default) for a zero delivery.
   if (!(actV > 0) && !(actM > 0)) {
     if (!confirm('No actual quantity entered for ' + (rec.vessel || 'this vessel') + '.\n\nRecord a ZERO delivery (0 MT VLSFO, 0 MT MGO)? This locks the record and removes the nomination.\n\nPress Cancel to go back and enter the actual quantities.')) return;
+  } else {
+    // One grade nominated but its actual box left empty (the grey number in it is
+    // only the nomination): reports would count 0 MT for it — ask first.
+    const blankNom = [];
+    if (rawV === '' && !(actV > 0) && parseFloat(rec.nomV) > 0) blankNom.push('VLSFO (nominated ' + rec.nomV + ' MT)');
+    if (rawM === '' && !(actM > 0) && parseFloat(rec.nomM) > 0) blankNom.push('LSMGO (nominated ' + rec.nomM + ' MT)');
+    if (blankNom.length && !confirm('No actual quantity entered for ' + blankNom.join(' and ') + ' — ' + (rec.vessel || 'this vessel') + '.\n\nSave it as 0 MT supplied? Reports count the ACTUAL quantity, not the nomination.\n\nPress Cancel to go back and enter it.')) return;
   }
 
   // Always sync back to rec so state is consistent
@@ -19104,8 +19129,14 @@ async function saveChecklistRecord(uid) {
   // Replace existing saved record for this exact checklist entry (stable uid),
   // never by vessel+date — date formatting can shift between schedule runs and
   // previously caused duplicate Saved Supply rows for the same checklist record.
+  const _replaced = _savedSupplies.filter(r => r.checklistUid === uid);
   _savedSupplies = _savedSupplies.filter(r => r.checklistUid !== uid);
   _savedSupplies.push(supplyRec);
+  // …and so does an archived copy of the same checklist row (it would come back in
+  // the reports as a second delivery as soon as one of the two copies is edited).
+  const _gone = typeof _dropArchivedCopies === 'function' ? _dropArchivedCopies(supplyRec) : [];
+  _withSupersedes(supplyRec, Array.from(_supersededIds(_replaced)).concat(_gone));
+  if (_gone.length) { try { saveArchives(); } catch (e) {} }
 
   // Delivery Log — automatic Timely/Delayed classification + Dispute
   // capture from Remarks, exactly at the moment this supply is saved.
@@ -19723,16 +19754,98 @@ function _mergeArchiveRecords(existing, incoming) {
   const out = (existing || []).slice();
   const idx = new Map();
   out.forEach(function(r, i) { idx.set(_archiveRowKey(r), i); });
-  let added = 0;
+  let added = 0, replaced = 0;
   (incoming || []).forEach(function(r) {
     const k = _archiveRowKey(r);
     if (idx.has(k)) {
-      if (r && r.id) out[idx.get(k)] = r; // same record id — keep the newer copy
+      // Same record id: keep the newer copy (savedAt — an edit re-stamps it), so an
+      // edited row re-archived elsewhere is not lost to an old cached copy.
+      if (r && r.id) {
+        const i = idx.get(k), cur = out[i];
+        const tIn = Date.parse((r && r.savedAt) || '') || 0, tCur = Date.parse((cur && cur.savedAt) || '') || 0;
+        if (tIn >= tCur && JSON.stringify(r) !== JSON.stringify(cur)) { out[i] = r; replaced++; }
+      }
       return;
     }
     idx.set(k, out.length); out.push(r); added++;
   });
-  return { records: out, added: added };
+  return { records: out, added: added, replaced: replaced };
+}
+/* Two supply records are the SAME delivery: same checklist row AND provably the same
+   call — same nomination (nomUid), or, without nomUids, the same vessel at the same
+   supply time (to the minute). Checklist rows made before nomUids existed were named
+   'v_<vessel>', so different calls of one ship share that checklistUid — and two calls
+   can be a day or two apart: never guess from a date window (this decides deletions). */
+function _sameDelivery(a, b) {
+  if (!a || !b || !a.checklistUid || a.checklistUid !== b.checklistUid) return false;
+  if (a.nomUid && b.nomUid) return a.nomUid === b.nomUid;
+  const ta = a.supplyDate ? _parseDateLocal(a.supplyDate).getTime() : NaN, tb = b.supplyDate ? _parseDateLocal(b.supplyDate).getTime() : NaN;
+  const nv = function(r) { return String((r && (r.vessel || r.name)) || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+  return !isNaN(ta) && !isNaN(tb) && Math.floor(ta / 60000) === Math.floor(tb / 60000) && nv(a) === nv(b);
+}
+// Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns their ids
+// — the caller lists them in the record's `supersedes`, so a copy another device still has
+// (archives merge as a union) stays out of the reports when it syncs back.
+// A row with supplyRec's own id is left to _mergeArchiveRecords (the newer copy wins).
+function _dropArchivedCopies(supplyRec) {
+  const checklistUid = supplyRec && supplyRec.checklistUid;
+  if (!checklistUid || typeof _archives !== 'object' || !_archives) return [];
+  const gone = [];
+  Object.keys(_archives).forEach(function(yr) {
+    const y = _archives[yr];
+    if (!y || typeof y !== 'object') return;
+    Object.keys(y).forEach(function(mon) {
+      const a = y[mon];
+      if (!_isLiveArchive(a) || !Array.isArray(a.records)) return;
+      const keep = a.records.filter(function(r) {
+        if (!_sameDelivery(supplyRec, r) || (r && r.id && r.id === supplyRec.id)) return true;
+        if (r && r.id) gone.push(r.id);
+        return false;
+      });
+      if (keep.length !== a.records.length) y[mon] = Object.assign({}, a, { records: keep });
+    });
+  });
+  return gone;
+}
+// Ids of archived copies the records `recs` replaced (see _dropArchivedCopies).
+function _supersededIds(recs) {
+  const out = new Set();
+  (recs || []).forEach(function(r) { if (r && Array.isArray(r.supersedes)) r.supersedes.forEach(function(id) { if (id) out.add(id); }); });
+  return out;
+}
+function _withSupersedes(rec, ids) {
+  const all = Array.from(new Set([].concat(Array.isArray(rec.supersedes) ? rec.supersedes : [], ids || [])));
+  if (all.length) rec.supersedes = all;
+  return rec;
+}
+// Archived copies of one delivery (_sameDelivery) — re-saved or edited after its month was
+// archived, or an old copy another device still had (archives merge as a union, so a copy
+// removed on one device comes back from the others): only the newest (savedAt) is kept.
+// Runs wherever archives come in: load, cloud merge, backup restore, archiving.
+function _collapseArchiveCopies() {
+  const byCl = new Map();
+  _liveArchiveEntries().forEach(function(e) {
+    e.arch.records.forEach(function(r, i) {
+      if (r && r.checklistUid) { if (!byCl.has(r.checklistUid)) byCl.set(r.checklistUid, []); byCl.get(r.checklistUid).push({ e: e, r: r, i: i }); }
+    });
+  });
+  const drop = new Set();
+  // a copy a record replaced (re-save / edit) — synced back from a device that still had it
+  const sup = _supersededIds([].concat.apply(typeof _savedSupplies !== 'undefined' && Array.isArray(_savedSupplies) ? _savedSupplies : [], _liveArchiveEntries().map(function(e) { return e.arch.records; })));
+  if (sup.size) _liveArchiveEntries().forEach(function(e) { e.arch.records.forEach(function(r) { if (r && r.id && sup.has(r.id)) drop.add(r); }); });
+  byCl.forEach(function(list) {
+    if (list.length < 2) return;
+    const t = function(x) { return Date.parse((x.r && x.r.savedAt) || '') || 0; };
+    list.sort(function(a, b) { return t(b) - t(a) || b.i - a.i; });
+    const kept = [];
+    list.forEach(function(x) { if (drop.has(x.r)) return; if (kept.some(function(k) { return _sameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
+  });
+  if (!drop.size) return 0;
+  _liveArchiveEntries().forEach(function(e) {
+    if (e.arch.records.some(function(r) { return drop.has(r); }))
+      _archives[e.yr][e.mon] = Object.assign({}, e.arch, { records: e.arch.records.filter(function(r) { return !drop.has(r); }) });
+  });
+  return drop.size;
 }
 // Puts `rows` into the yr/mon archive, MERGING with an existing live archive
 // (re-archiving a month used to replace — and so silently drop — whatever
@@ -19774,6 +19887,7 @@ function loadArchivesLocal() {
   try {
     const raw = localStorage.getItem(ARCHIVES_KEY);
     if (raw) _archives = JSON.parse(raw) || {};
+    _collapseArchiveCopies();
   } catch(e) { /* leave _archives as-is */ }
 }
 
@@ -19796,7 +19910,7 @@ function _mergeArchives(remoteArchives) {
       if (!L) { _archives[yr][mon] = R; changed = true; return; }
       if (_isLiveArchive(L) && _isLiveArchive(R)) {
         const merged = _mergeArchiveRecords(L.records, R.records);
-        if (merged.added) {
+        if (merged.added || merged.replaced) {
           _archives[yr][mon] = Object.assign({}, L, { records: merged.records,
             archivedAt: _archiveStamp(R) > _archiveStamp(L) ? R.archivedAt : L.archivedAt });
           changed = true;
@@ -19806,6 +19920,7 @@ function _mergeArchives(remoteArchives) {
       if (_archiveStamp(R) > _archiveStamp(L)) { _archives[yr][mon] = R; changed = true; }
     });
   });
+  if (_collapseArchiveCopies()) changed = true;
   if (changed) saveArchives();
 }
 
@@ -19824,13 +19939,14 @@ function archiveMonth(mon,yr){
   var sel=(_savedSupplies||[]).filter(function(r){
     if(!r.supplyDate||!r.supplied)return false;
     var d=_parseDateLocal(r.supplyDate);
-    return d.getMonth()===mon&&d.getFullYear()===yr&&_rowMatchesReportPort(r);
+    return d.getMonth()===mon&&d.getFullYear()===yr&&_rowMatchesReportPort(r,_reportPort);
   });
   var rows=sel.map(function(r){return Object.assign({},r);});
   if(!rows.length){alert('No completed records for '+MO[mon]+' '+yr);return;}
   var key=MO[mon];
   var hadArchive=_isLiveArchive(_archives[yr]&&_archives[yr][key]);
   var added=_archiveMergeRows(yr,key,mon,rows);
+  _collapseArchiveCopies(); // an older archived copy of a delivery archived now gives way to it
   var selSet=new Set(sel);
   _savedSupplies=_savedSupplies.filter(function(r){return !selSet.has(r);});
   saveArchives();
@@ -19882,7 +19998,7 @@ function autoArchivePastMonths() {
     const sel = (_savedSupplies || []).filter(function(r) {
       if (!r.supplyDate || !r.supplied) return false;
       const d = _parseDateLocal(r.supplyDate);
-      return d.getMonth() === p.mon && d.getFullYear() === p.yr && _rowMatchesReportPort(r);
+      return d.getMonth() === p.mon && d.getFullYear() === p.yr;
     });
     const rows = sel.map(function(r) { return Object.assign({}, r); });
     if (!rows.length) return;
@@ -19892,6 +20008,7 @@ function autoArchivePastMonths() {
     _savedSupplies = _savedSupplies.filter(function(r) { return !selSet.has(r); });
     archivedAny = true;
   });
+  if (archivedAny) _collapseArchiveCopies(); // an older archived copy of a delivery archived now gives way to it
 
   if (archivedAny) {
     saveArchives();
@@ -20257,7 +20374,11 @@ async function removeDuplicateSavedRecords() {
   const seen = new Map();
   const deduped = [];
   const removedList = [];
+  // Saved twice from the same checklist row (two devices, or a re-save) = one delivery,
+  // whatever the quantities: keep the most recently saved / edited copy.
+  const isOlderCopy = r => r.checklistUid && sorted.some(o => o !== r && new Date(o.savedAt || 0) >= new Date(r.savedAt || 0) && sorted.indexOf(o) > sorted.indexOf(r) && _sameDelivery(o, r));
   sorted.forEach(r => {
+    if (isOlderCopy(r)) { removedList.push(r); return; }
     const key = _recordDedupeKey(r);
     if (!key.replace(/\|/g, '')) { deduped.push(r); return; } // nothing to key on — keep, don't guess
     if (seen.has(key)) { removedList.push(r); return; }
@@ -20267,7 +20388,7 @@ async function removeDuplicateSavedRecords() {
   if (!removedList.length) { alert('No duplicate records found — every saved record has a unique vessel, day, quantity and barge combination.'); return; }
   const preview = removedList.slice(0, 8).map(r => `• ${r.vessel || '—'} — ${r.dateStr || '—'} — VLSFO ${(r.vlsfoAct||0).toLocaleString()} MT / MGO ${(r.mgoAct||0).toLocaleString()} MT`).join('\n');
   const more = removedList.length > 8 ? `\n…and ${removedList.length - 8} more` : '';
-  if (!confirm(`Found ${removedList.length} duplicate record(s) — same vessel, day, quantities and barge. The earliest copy of each will be kept and the rest removed:\n\n${preview}${more}\n\nThis updates the shared workspace for everyone. Continue?`)) return;
+  if (!confirm(`Found ${removedList.length} duplicate record(s) — saved twice from the same checklist row (the latest copy is kept), or the same vessel, day, quantities and barge (the earliest copy is kept). These will be removed:\n\n${preview}${more}\n\nThis updates the shared workspace for everyone. Continue?`)) return;
   _savedSupplies = deduped;
   await saveSharedRecords();
   renderSavedRecords();
@@ -20275,6 +20396,22 @@ async function removeDuplicateSavedRecords() {
   showToast(`Removed ${removedList.length} duplicate record(s).`, 'success');
 }
 
+/* A saved record's quantity as the reports count it: the ACTUAL (an actual of 0 is
+   real — reports never fall back to the nomination). A 0 actual with a nomination
+   says so, so the list never shows a figure the reports don't use. */
+function _srQtyTxt(r, g) {
+  const act = _recActQty(r, g), nom = parseFloat(g === 'v' ? r.vlsfoNom : r.mgoNom) || 0;
+  if (!r.supplied) return (nom ? nom.toLocaleString() : '0') + ' MT <span style="font-weight:400;color:var(--muted)">(nominated)</span>';
+  return act.toLocaleString() + ' MT' + (!(act > 0) && nom > 0 ? ' <span style="font-weight:400;color:var(--amber)">(nominated ' + nom.toLocaleString() + ' MT — actual not entered)</span>' : '');
+}
+// Report views on screen follow a record change (edit here, or a colleague's via sync).
+function _refreshReportViews() {
+  const mm = document.getElementById('monthly-modal');
+  if (mm && mm.style.display === 'flex' && typeof renderMonthlyPreview === 'function') { try { renderMonthlyPreview(); } catch (e) {} }
+  if (typeof _currentPage === 'undefined') return;
+  if (_currentPage === 'reports' && typeof refreshReports === 'function') { try { refreshReports(); } catch (e) {} }
+  if (_currentPage === 'dashboard' && typeof refreshDashboard === 'function') { try { refreshDashboard(); } catch (e) {} }
+}
 function renderSavedRecords() {
   const el = document.getElementById('saved-records-list'); if (!el) return;
   if (!_savedSupplies.length) {
@@ -20290,8 +20427,8 @@ function renderSavedRecords() {
         </div>
         <div class="saved-record-meta">
            ${esc(r.dateStr)} &nbsp;|&nbsp;  ${esc(r.barge||'—')} &nbsp;|&nbsp;
-          VLSFO: <strong>${(r.vlsfoAct||r.vlsfoNom||0).toLocaleString()} MT</strong> &nbsp;|&nbsp;
-          MGO: <strong>${(r.mgoAct||r.mgoNom||0).toLocaleString()} MT</strong>
+          VLSFO: <strong>${_srQtyTxt(r, 'v')}</strong> &nbsp;|&nbsp;
+          MGO: <strong>${_srQtyTxt(r, 'm')}</strong>
           ${r.agent ? `&nbsp;|&nbsp; Agent: ${esc(r.agent)}` : ''}
           ${r.spec  ? `&nbsp;|&nbsp; ${esc(r.spec)}` : ''}
         </div>
@@ -20306,7 +20443,23 @@ function renderSavedRecords() {
     </div>`).join('');
 }
 
-let _editingRecordId = null;
+let _editingRecordId = null, _editingOrig = null, _editingShown = null;
+const _ER_FIELDS = ['vessel', 'barge', 'agent', 'spec', 'dateStr', 'vlsfoAct', 'mgoAct', 'bdnV', 'bdnM', 'notes', 'supplied'];
+function _erFormValues() {
+  const g = function(id) { const el = document.getElementById(id); return el ? String(el.value == null ? '' : el.value) : ''; };
+  return {
+    vessel: g('er-vessel').trim(), barge: g('er-barge').trim(), agent: g('er-agent').trim(), spec: g('er-spec').trim(),
+    dateStr: g('er-date').trim(), vlsfoAct: parseFloat(g('er-vlsfo-act')) || 0, mgoAct: parseFloat(g('er-mgo-act')) || 0,
+    bdnV: g('er-bdn-v').trim().slice(0, 60), bdnM: g('er-bdn-m').trim().slice(0, 60), notes: g('er-notes').trim(), supplied: g('er-supplied') === 'yes',
+  };
+}
+// A record's value for one dialog field, the way the dialog reads it.
+function _erRecVal(r, k) {
+  if (k === 'vlsfoAct') return _recActQty(r, 'v');
+  if (k === 'mgoAct') return _recActQty(r, 'm');
+  if (k === 'supplied') return !!r.supplied;
+  return String(r[k] == null ? '' : r[k]).trim();
+}
 function openEditRecord(id) {
   const r = _savedSupplies.find(x => x.id === id); if (!r) return;
   _editingRecordId = id;
@@ -20316,49 +20469,75 @@ function openEditRecord(id) {
   document.getElementById('er-spec').value      = r.spec      || '';
   document.getElementById('er-date').value      = r.dateStr   || '';
   document.getElementById('er-vlsfo-nom').value = r.vlsfoNom  || 0;
-  document.getElementById('er-vlsfo-act').value = r.vlsfoAct  || 0;
+  document.getElementById('er-vlsfo-act').value = _recActQty(r, 'v');
   document.getElementById('er-mgo-nom').value   = r.mgoNom    || 0;
-  document.getElementById('er-mgo-act').value   = r.mgoAct    || 0;
+  document.getElementById('er-mgo-act').value   = _recActQty(r, 'm');
   document.getElementById('er-bdn-v').value     = r.bdnV      || '';
   document.getElementById('er-bdn-m').value     = r.bdnM      || '';
   document.getElementById('er-notes').value     = r.notes     || '';
   document.getElementById('er-supplied').value  = r.supplied ? 'yes' : 'no';
+  // What the dialog showed: Save writes only what the user changed from this, onto the
+  // record as it is THEN (a colleague's change made meanwhile is kept, or asked about).
+  _editingOrig = JSON.parse(JSON.stringify(r));
+  _editingShown = _erFormValues();
+  _erSession = { id: id, saving: false };
   const diffEl = document.getElementById('er-diff');
   if (diffEl) { diffEl.style.display = 'none'; document.getElementById('er-diff-rows').innerHTML = ''; }
   document.getElementById('edit-record-modal').style.display = 'flex';
 }
-function closeEditRecord() { document.getElementById('edit-record-modal').style.display = 'none'; _editingRecordId = null; }
+function closeEditRecord() { document.getElementById('edit-record-modal').style.display = 'none'; _editingRecordId = null; _editingOrig = null; _editingShown = null; _erSession = null; }
+// One per opened dialog: a second click on Save while its save is in flight does nothing,
+// and a save that finishes after the dialog was closed (or another record opened) leaves it alone.
+let _erSession = null;
 async function saveEditRecord() {
-  if (!_editingRecordId) return;
+  const s = _erSession;
+  if (!_editingRecordId || !s || s.saving) return;
+  s.saving = true;
+  try { await _saveEditRecord(s); } finally { s.saving = false; }
+}
+async function _saveEditRecord(s) {
   const idx = _savedSupplies.findIndex(x => x.id === _editingRecordId);
-  if (idx === -1) return;
+  if (idx === -1) { alert('This record was removed meanwhile (by you or a colleague) — nothing was saved.'); closeEditRecord(); return; }
   const savedId = _editingRecordId;
-  _savedSupplies[idx] = {
-    ..._savedSupplies[idx],
-    vessel:    document.getElementById('er-vessel').value.trim() || _savedSupplies[idx].vessel,
-    barge:     document.getElementById('er-barge').value.trim(),
-    agent:     document.getElementById('er-agent').value.trim(),
-    spec:      document.getElementById('er-spec').value.trim(),
-    dateStr:   document.getElementById('er-date').value || _savedSupplies[idx].dateStr,
-    vlsfoNom:  parseFloat(document.getElementById('er-vlsfo-nom').value) || _savedSupplies[idx].vlsfoNom,
-    vlsfoAct:  parseFloat(document.getElementById('er-vlsfo-act').value) || 0,
-    mgoNom:    parseFloat(document.getElementById('er-mgo-nom').value)   || _savedSupplies[idx].mgoNom,
-    mgoAct:    parseFloat(document.getElementById('er-mgo-act').value)   || 0,
-    bdnV:      document.getElementById('er-bdn-v').value.trim().slice(0, 60),
-    bdnM:      document.getElementById('er-bdn-m').value.trim().slice(0, 60),
-    notes:     document.getElementById('er-notes').value.trim(),
-    supplied:  document.getElementById('er-supplied').value === 'yes',
-    savedAt:   new Date().toISOString(),
-  };
+  const cur = _savedSupplies[idx], orig = _editingOrig || cur, shown = _editingShown || _erFormValues();
+  const now = _erFormValues();
+  // The fields the user changed in the dialog.
+  const changed = _ER_FIELDS.filter(function(k) { return JSON.stringify(now[k]) !== JSON.stringify(shown[k]); });
+  if (!changed.length) { closeEditRecord(); return; }
+  const upd = {};
+  changed.forEach(function(k) { upd[k] = now[k]; });
+  if (!upd.vessel && changed.indexOf('vessel') >= 0) delete upd.vessel; // a name can't be emptied
+  // A changed supply date moves the record to that day (the month the reports file it under).
+  if (changed.indexOf('dateStr') >= 0) {
+    const d = now.dateStr ? parseDT(now.dateStr) : null;
+    if (!d) { alert('Supply date not understood — use e.g. 07 Oct 2026 05:57.'); return; }
+    upd.supplyDate = d.toISOString();
+    upd.dateStr = fmt24(d);
+  }
+  // A colleague changed the same field after this dialog was opened: ask before overwriting.
+  const clash = changed.filter(function(k) { return k !== 'dateStr' && JSON.stringify(_erRecVal(cur, k)) !== JSON.stringify(_erRecVal(orig, k)); });
+  if (changed.indexOf('dateStr') >= 0 && (cur.supplyDate !== orig.supplyDate || cur.dateStr !== orig.dateStr)) clash.push('dateStr');
+  if (clash.length && !confirm('Someone else changed ' + clash.join(', ') + ' of this record while you were editing (now: ' +
+      clash.map(function(k) { return k + ' = ' + _erRecVal(cur, k); }).join(', ') + ').\n\nSave your values anyway?')) return;
+  const saved = _savedSupplies[idx] = Object.assign({}, cur, upd, { savedAt: new Date().toISOString() });
+  // A new date or vessel name can stop an archived copy of this delivery matching it
+  // (_sameDelivery), and the reports would count that copy again: drop such copies now.
+  const gone = (upd.supplyDate || upd.vessel) ? _dropArchivedCopies(cur) : [];
+  if (gone.length) { _withSupersedes(saved, gone); try { saveArchives(); } catch (e) {} }
   // The checklist row this supply was saved from keeps the same BDN numbers
-  // (the checklist Excel export reads them from there).
-  const _cr = _savedSupplies[idx].checklistUid && _checklistRecords ? _checklistRecords[_savedSupplies[idx].checklistUid] : null;
-  if (_cr) { _cr.bdnV = _savedSupplies[idx].bdnV; _cr.bdnM = _savedSupplies[idx].bdnM; }
+  // (the checklist Excel export reads them from there). A 'v_<vessel>' row is shared by
+  // the ship's calls: only when it is still this call's row.
+  const _cr = saved.checklistUid && _checklistRecords ? _checklistRecords[saved.checklistUid] : null;
+  if (_cr && (String(saved.checklistUid).indexOf('v_') !== 0 ||
+      _sameDelivery(Object.assign({}, _cr, { checklistUid: saved.checklistUid, supplyDate: _cr.supplyDate || _cr.lockedAt }), cur))) {
+    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || '';
+  }
   await saveSharedRecords();
-  closeEditRecord();
+  if (_erSession === s) closeEditRecord();
   renderSavedRecords();
   renderLiveROBDashboard();
-  showToast('Record updated for ' + (_savedSupplies[idx].vessel || 'vessel'), 'success');
+  _refreshReportViews();
+  showToast('Record updated for ' + (saved.vessel || 'vessel'), 'success');
   setTimeout(() => {
     const row = document.getElementById(`srrow-${savedId}`);
     if (row) { row.style.transition='background .2s'; row.style.background='var(--green-lt)'; setTimeout(()=>{ row.style.background=''; },1400); }
@@ -20367,19 +20546,20 @@ async function saveEditRecord() {
 function updateEditDiff() {
   if (!_editingRecordId) return;
   const r = _savedSupplies.find(x => x.id === _editingRecordId); if (!r) return;
-  const newV  = parseFloat(document.getElementById('er-vlsfo-act').value) || 0;
-  const newM  = parseFloat(document.getElementById('er-mgo-act').value)   || 0;
-  const newSt = document.getElementById('er-supplied').value === 'yes';
+  // Only what the user changed in this dialog (Save writes nothing else), from the record
+  // as it is now — a colleague's change synced in meanwhile is not shown as being undone.
+  const now = _erFormValues(), shown = _editingShown || now;
+  const edited = function(k) { return JSON.stringify(now[k]) !== JSON.stringify(shown[k]) && JSON.stringify(now[k]) !== JSON.stringify(_erRecVal(r, k)); };
   const diffs = [];
-  const diffV = newV - (r.vlsfoAct || r.vlsfoNom || 0);
-  const diffM = newM - (r.mgoAct   || r.mgoNom   || 0);
-  if (diffV !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-v);flex-shrink:0"></span><span>VLSFO: <strong>${(r.vlsfoAct||r.vlsfoNom||0).toLocaleString()} MT</strong> → <strong style="color:var(--fuel-v)">${newV.toLocaleString()} MT</strong> <span style="color:${diffV>0?'var(--green)':'var(--red)'};font-weight:700">(${diffV>0?'+':''}${diffV.toLocaleString()} MT)</span></span></div>`);
-  if (diffM !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-m);flex-shrink:0"></span><span>MGO: <strong>${(r.mgoAct||r.mgoNom||0).toLocaleString()} MT</strong> → <strong style="color:var(--fuel-m)">${newM.toLocaleString()} MT</strong> <span style="color:${diffM>0?'var(--green)':'var(--red)'};font-weight:700">(${diffM>0?'+':''}${diffM.toLocaleString()} MT)</span></span></div>`);
-  const newBv = document.getElementById('er-bdn-v').value.trim(), newBm = document.getElementById('er-bdn-m').value.trim();
-  [['VLSFO', r.bdnV || '', newBv, 'var(--fuel-v)'], ['LSMGO', r.bdnM || '', newBm, 'var(--fuel-m)']].forEach(function(b) {
-    if (b[1] !== b[2]) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[3]};flex-shrink:0"></span><span>BDN No. (${b[0]}): <strong>${esc(b[1] || '—')}</strong> → <strong style="color:${b[3]}">${esc(b[2] || '—')}</strong></span></div>`);
+  [['vlsfoAct', 'v', 'VLSFO', 'var(--fuel-v)'], ['mgoAct', 'm', 'MGO', 'var(--fuel-m)']].forEach(function(q) {
+    if (!edited(q[0])) return;
+    const was = _recActQty(r, q[1]), to = now[q[0]], d = to - was;
+    diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${q[3]};flex-shrink:0"></span><span>${q[2]}: <strong>${was.toLocaleString()} MT</strong> → <strong style="color:${q[3]}">${to.toLocaleString()} MT</strong> <span style="color:${d>0?'var(--green)':'var(--red)'};font-weight:700">(${d>0?'+':''}${d.toLocaleString()} MT)</span></span></div>`);
   });
-  if (newSt !== r.supplied) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${newSt?'var(--green)':'var(--amber)'}">${newSt?'Completed':'Pending'}</strong></span></div>`);
+  [['bdnV', 'VLSFO', 'var(--fuel-v)'], ['bdnM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
+    if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN No. (${b[1]}): <strong>${esc(r[b[0]] || '—')}</strong> → <strong style="color:${b[2]}">${esc(now[b[0]] || '—')}</strong></span></div>`);
+  });
+  if (edited('supplied')) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${now.supplied?'var(--green)':'var(--amber)'}">${now.supplied?'Completed':'Pending'}</strong></span></div>`);
   const diffEl = document.getElementById('er-diff'), rowEl = document.getElementById('er-diff-rows');
   if (diffs.length) { diffEl.style.display='block'; rowEl.innerHTML=diffs.join(''); }
   else { diffEl.style.display='none'; rowEl.innerHTML=''; }
@@ -20658,7 +20838,10 @@ function openMonthlyReport() {
   renderMonthlyPreview();
   document.getElementById('monthly-modal').style.display = 'flex';
 }
-function closeMonthlyReport() { document.getElementById('monthly-modal').style.display = 'none'; }
+function closeMonthlyReport() {
+  document.getElementById('monthly-modal').style.display = 'none';
+  _reportPort = 'ALL'; // the FUJ / KFK choice belongs to this window only
+}
 let _reportPort = 'ALL';
 function setReportPort(port) {
   _reportPort = port;
@@ -20671,13 +20854,19 @@ function setReportPort(port) {
   });
   renderMonthlyPreview();
 }
-function _rowMatchesReportPort(r) {
-  if (_reportPort === 'ALL') return true;
+/* The Monthly Report window's FUJ / KFK choice applies to that report (preview,
+   downloads, Archive Month) only — callers pass it explicitly. Everything else
+   (dashboard, Reports page, Bunker Quantity charts, auto-archive) counts every
+   port: the choice used to stay set after closing the window and silently
+   filter the dashboard's Distributed chart and the Reports page too. */
+function _rowMatchesReportPort(r, port) {
+  port = port || 'ALL';
+  if (port === 'ALL') return true;
   var areaKey = r.areaCode || r.area || '';
   const _rpMap = { 'FUJ-A':'FUJ', 'FUJ-B':'FUJ', 'KFK-A':'KFK', 'KFK-B':'KFK' };
-  var port = _rpMap[areaKey] || _rpMap[Object.keys(_rpMap).find(k => areaKey.includes(k)) || ''];
-  if (!port) port = areaKey.includes('KFK') ? 'KFK' : areaKey.includes('FUJ') ? 'FUJ' : null;
-  return port === _reportPort;
+  var rowPort = _rpMap[areaKey] || _rpMap[Object.keys(_rpMap).find(k => areaKey.includes(k)) || ''];
+  if (!rowPort) rowPort = areaKey.includes('KFK') ? 'KFK' : areaKey.includes('FUJ') ? 'FUJ' : null;
+  return rowPort === port;
 }
 function setReportMode(mode) {
   _reportMode = mode;
@@ -20697,11 +20886,11 @@ function renderMonthlyPreview() {
     const fromD = fromVal ? parseDT(fromVal) : null, toD = toVal ? parseDT(toVal) : null;
     if (!fromD || !toD) { prev.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:8px 0">Select a From and To date to view the range.</div>'; return; }
     const toEnd = new Date(toD.getFullYear(), toD.getMonth(), toD.getDate(), 23, 59, 59);
-    rows = getRowsByRange(fromD, toEnd);
+    rows = getRowsByRange(fromD, toEnd, _reportPort);
     rangeLabel = `${fmtShort(fromD)} ${fromD.getFullYear()} – ${fmtShort(toD)} ${toD.getFullYear()}`;
   } else {
     const mon = parseInt(document.getElementById('report-month').value), yr = parseInt(document.getElementById('report-year').value);
-    rows = getMonthlyRows(mon, yr);
+    rows = getMonthlyRows(mon, yr, _reportPort);
     rangeLabel = `${MO[mon]} ${yr}`;
   }
   if (_reportPort !== 'ALL') rangeLabel += ` — ${_reportPort}`;
@@ -20737,33 +20926,40 @@ function _getAllReportRecords() {
     });
   }
   const liveIds = new Set(base.map(r => r.id).filter(Boolean));
+  // The same delivery live and archived (_sameDelivery): the live record wins over the
+  // archived copy (even after its quantities were edited, which changes the fuzzy key below).
+  const liveByCl = new Map();
+  base.forEach(r => { if (r && r.checklistUid) { if (!liveByCl.has(r.checklistUid)) liveByCl.set(r.checklistUid, []); liveByCl.get(r.checklistUid).push(r); } });
   // Safety net for the same delivery present BOTH live and archived without
   // a matching id: drop the archived copy when its fuzzy key equals a live
   // record's. Two live records (or two archived ones) are never collapsed —
   // that silently dropped genuine split / repeat deliveries from reports.
   const liveKeys = new Set(base.map(r => _recordDedupeKey(r)));
+  const supIds = _supersededIds(base.concat(archRows)); // copies a re-saved / edited record replaced
   const combined = [...base, ...archRows.filter(r => {
     if (r.id && liveIds.has(r.id)) return false;
+    if (r.id && supIds.has(r.id)) return false;
+    if (r.checklistUid && liveByCl.has(r.checklistUid) && liveByCl.get(r.checklistUid).some(l => _sameDelivery(l, r))) return false;
     const key = _recordDedupeKey(r);
     return !(key.replace(/\|/g, '') && liveKeys.has(key));
   })];
   return combined;
 }
-function getRowsByRange(fromD, toD) {
+function getRowsByRange(fromD, toD, port) {
   return _getAllReportRecords().filter(r => {
     if (!r.supplyDate) return false;
     const d = _parseDateLocal(r.supplyDate);
-    return d >= fromD && d <= toD && r.supplied === true && _rowMatchesReportPort(r);
+    return d >= fromD && d <= toD && r.supplied === true && _rowMatchesReportPort(r, port);
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
     // Only supplied rows reach here, so report the ACTUAL quantity (0 is a
     // real actual) — never fall back to the nominated figure.
     .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
-function getMonthlyRows(mon, yr) {
+function getMonthlyRows(mon, yr, port) {
   return _getAllReportRecords().filter(r => {
     if (!r.supplyDate) return false;
     const d = _parseDateLocal(r.supplyDate);
-    return d.getMonth() === mon && d.getFullYear() === yr && r.supplied === true && _rowMatchesReportPort(r);
+    return d.getMonth() === mon && d.getFullYear() === yr && r.supplied === true && _rowMatchesReportPort(r, port);
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
     .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
@@ -20774,10 +20970,10 @@ async function downloadMonthlyReport(btnEl) {
     const fromD=fromVal?parseDT(fromVal):null,toD=toVal?parseDT(toVal):null;
     if(!fromD||!toD){alert('Select a From and To date.');return;}
     const toEnd=new Date(toD.getFullYear(),toD.getMonth(),toD.getDate(),23,59,59);
-    rows=getRowsByRange(fromD,toEnd);rangeLabel=`${fmtShort(fromD)}-${fmtShort(toD)}_${toD.getFullYear()}`;
+    rows=getRowsByRange(fromD,toEnd,_reportPort);rangeLabel=`${fmtShort(fromD)}-${fmtShort(toD)}_${toD.getFullYear()}`;
   } else {
     const mon=parseInt(document.getElementById('report-month').value),yr=parseInt(document.getElementById('report-year').value);
-    rows=getMonthlyRows(mon,yr);rangeLabel=`${MO[mon]}_${yr}`;
+    rows=getMonthlyRows(mon,yr,_reportPort);rangeLabel=`${MO[mon]}_${yr}`;
   }
   if (_reportPort !== 'ALL') rangeLabel += `_${_reportPort}`;
   if (!rows.length){alert('No supplies in selected period.');return;}
@@ -20867,12 +21063,12 @@ async function downloadMonthlyReportPDF(btnEl) {
     const fromD=fromVal?parseDT(fromVal):null,toD=toVal?parseDT(toVal):null;
     if(!fromD||!toD){alert('Select a From and To date.');return;}
     const toEnd=new Date(toD.getFullYear(),toD.getMonth(),toD.getDate(),23,59,59);
-    rows=getRowsByRange(fromD,toEnd);
+    rows=getRowsByRange(fromD,toEnd,_reportPort);
     rangeLabel=`${fmtShort(fromD)}-${fmtShort(toD)}_${toD.getFullYear()}`;
     badge=`${fmtShort(fromD)} ${fromD.getFullYear()} – ${fmtShort(toD)} ${toD.getFullYear()}`;
   } else {
     const mon=parseInt(document.getElementById('report-month').value),yr=parseInt(document.getElementById('report-year').value);
-    rows=getMonthlyRows(mon,yr);
+    rows=getMonthlyRows(mon,yr,_reportPort);
     rangeLabel=`${MO[mon]}_${yr}`;
     badge=`${MO[mon]} ${yr}`;
   }
