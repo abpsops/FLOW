@@ -19783,9 +19783,16 @@ function _sameDelivery(a, b) {
   const nv = function(r) { return String((r && (r.vessel || r.name)) || '').trim().toLowerCase().replace(/\s+/g, ' '); };
   return !isNaN(ta) && !isNaN(tb) && Math.floor(ta / 60000) === Math.floor(tb / 60000) && nv(a) === nv(b);
 }
-// Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns their ids
-// — the caller lists them in the record's `supersedes`, so a copy another device still has
-// (archives merge as a union) stays out of the reports when it syncs back.
+// Two copies are PROVABLY one delivery — safe to delete one: the same record id, or the same
+// nomination on the same checklist row. Rows without nomUids (saved before 12 Oct 2026) are
+// never deleted on a match: the reports skip the older copy instead (see _getAllReportRecords).
+function _provablySameDelivery(a, b) {
+  return !!(a && b && ((a.id && a.id === b.id) || (a.nomUid && b.nomUid && _sameDelivery(a, b))));
+}
+// Archived copies of the delivery `supplyRec` (see _sameDelivery): removed when provably the
+// same (_provablySameDelivery), kept otherwise. Returns all their ids — the caller lists them
+// in the record's `supersedes`, so the reports skip them, also when a copy another device
+// still has (archives merge as a union) syncs back.
 // A row with supplyRec's own id is left to _mergeArchiveRecords (the newer copy wins).
 function _dropArchivedCopies(supplyRec) {
   const checklistUid = supplyRec && supplyRec.checklistUid;
@@ -19800,7 +19807,7 @@ function _dropArchivedCopies(supplyRec) {
       const keep = a.records.filter(function(r) {
         if (!_sameDelivery(supplyRec, r) || (r && r.id && r.id === supplyRec.id)) return true;
         if (r && r.id) gone.push(r.id);
-        return false;
+        return !_provablySameDelivery(supplyRec, r);
       });
       if (keep.length !== a.records.length) y[mon] = Object.assign({}, a, { records: keep });
     });
@@ -19818,8 +19825,8 @@ function _withSupersedes(rec, ids) {
   if (all.length) rec.supersedes = all;
   return rec;
 }
-// Archived copies of one delivery (_sameDelivery) — re-saved or edited after its month was
-// archived, or an old copy another device still had (archives merge as a union, so a copy
+// Archived copies of one delivery (_provablySameDelivery) — re-saved or edited after its month
+// was archived, or an old copy another device still had (archives merge as a union, so a copy
 // removed on one device comes back from the others): only the newest (savedAt) is kept.
 // Runs wherever archives come in: load, cloud merge, backup restore, archiving.
 function _collapseArchiveCopies() {
@@ -19832,13 +19839,13 @@ function _collapseArchiveCopies() {
   const drop = new Set();
   // a copy a record replaced (re-save / edit) — synced back from a device that still had it
   const sup = _supersededIds([].concat.apply(typeof _savedSupplies !== 'undefined' && Array.isArray(_savedSupplies) ? _savedSupplies : [], _liveArchiveEntries().map(function(e) { return e.arch.records; })));
-  if (sup.size) _liveArchiveEntries().forEach(function(e) { e.arch.records.forEach(function(r) { if (r && r.id && sup.has(r.id)) drop.add(r); }); });
+  if (sup.size) _liveArchiveEntries().forEach(function(e) { e.arch.records.forEach(function(r) { if (r && r.id && r.nomUid && sup.has(r.id)) drop.add(r); }); });
   byCl.forEach(function(list) {
     if (list.length < 2) return;
     const t = function(x) { return Date.parse((x.r && x.r.savedAt) || '') || 0; };
     list.sort(function(a, b) { return t(b) - t(a) || b.i - a.i; });
     const kept = [];
-    list.forEach(function(x) { if (drop.has(x.r)) return; if (kept.some(function(k) { return _sameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
+    list.forEach(function(x) { if (drop.has(x.r)) return; if (kept.some(function(k) { return _provablySameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
   });
   if (!drop.size) return 0;
   _liveArchiveEntries().forEach(function(e) {
@@ -20936,7 +20943,17 @@ function _getAllReportRecords() {
   // that silently dropped genuine split / repeat deliveries from reports.
   const liveKeys = new Set(base.map(r => _recordDedupeKey(r)));
   const supIds = _supersededIds(base.concat(archRows)); // copies a re-saved / edited record replaced
+  // Two archived copies of one delivery that the archive keeps (rows without nomUids are never
+  // deleted on a match, and one record can be archived in two months): count the newest.
+  const archHidden = new Set(), archByCl = new Map();
+  archRows.forEach(r => { if (r.checklistUid) { if (!archByCl.has(r.checklistUid)) archByCl.set(r.checklistUid, []); archByCl.get(r.checklistUid).push(r); } });
+  archByCl.forEach(list => {
+    if (list.length < 2) return;
+    const t = r => Date.parse(r.savedAt || '') || 0, kept = [];
+    list.slice().sort((a, b) => t(b) - t(a)).forEach(r => { if (kept.some(k => (k.id && k.id === r.id) || _sameDelivery(k, r))) archHidden.add(r); else kept.push(r); });
+  });
   const combined = [...base, ...archRows.filter(r => {
+    if (archHidden.has(r)) return false;
     if (r.id && liveIds.has(r.id)) return false;
     if (r.id && supIds.has(r.id)) return false;
     if (r.checklistUid && liveByCl.has(r.checklistUid) && liveByCl.get(r.checklistUid).some(l => _sameDelivery(l, r))) return false;

@@ -210,7 +210,7 @@ async function editRecord(p, id, fields) {
     const near = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-12T06:00:00.000Z' }));
     check('…nor one two days later (a ship can call again within days: no date-window guessing)', near.length === 0 && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, near);
     const same = await page.evaluate(() => _dropArchivedCopies({ id: 'v_alpha_new', checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-10T06:00:00.000Z' }));
-    check('…but a re-save of that same September call (same ship, same supply time) replaces its archived copy, and names it', JSON.stringify(same) === JSON.stringify(['v_alpha_1757500000000']), same);
+    check('…a re-save of that same September call (same ship, same supply time) names its archived copy (counted once) — but an old row without a nomination id is never deleted on a match', JSON.stringify(same) === JSON.stringify(['v_alpha_1757500000000']) && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, same);
     // double click on Save: no false "someone else changed"
     await page.evaluate(() => { showPage('records'); openEditRecord('v_alpha_3000'); document.getElementById('er-vlsfo-act').value = '500'; window.__dialogs = []; });
     await page.evaluate(() => Promise.all([saveEditRecord(), saveEditRecord()]));
@@ -419,6 +419,32 @@ async function editRecord(p, id, fields) {
     const local = await A.page.evaluate(() => _savedSupplies.map(r => [r.id, r.mgoAct, r.notes || '']));
     const g = (id, k) => cloud.find(r => r.id === id)[k];
     check('both edits made during the slow, conflicting save reach the cloud and stay on this device; the colleague\'s note too', g('a_1000', 'mgoAct') === 60 && g('cp_1000', 'mgoAct') === 150.5 && g('om_1000', 'notes') === 'checked by B' && local.find(r => r[0] === 'cp_1000')[1] === 150.5, [cloud.map(r => [r.id, r.mgoAct, r.notes]), local]);
+  });
+
+  /* 12 — rows without nomination ids: matches are counted once but never deleted; one record archived in two months counts once */
+  await scenario('E12 legacy copies kept, counted once', async (openT) => {
+    const n = new Date();
+    const pm = new Date(n.getFullYear(), n.getMonth() - 1, 12, 6, 0), pmKey = MO[pm.getMonth()], pmYr = pm.getFullYear();
+    const pm2 = new Date(n.getFullYear(), n.getMonth() - 1, 0, 23, 30), pm2Key = MO[pm2.getMonth()], pm2Yr = pm2.getFullYear();
+    const legacy = (id, d, v, savedAt) => ({ id: id, checklistUid: 'v_alpha', vessel: 'ALPHA', area: AREA['FUJ-A'], areaCode: 'FUJ-A', dateStr: 'x', supplyDate: d.toISOString(), vlsfoAct: v, mgoAct: 0, barge: 'Barge 1', supplied: true, savedAt: savedAt });
+    const call1 = legacy('v_alpha_1', pm, 480, '2026-09-12T08:00:00.000Z'), redo = legacy('v_alpha_2', pm, 320, '2026-10-05T08:00:00.000Z');
+    const moved = Object.assign(legacy('v_omega_1', pm2, 250, '2026-10-06T08:00:00.000Z'), { checklistUid: 'v_omega', vessel: 'OMEGA' });
+    const movedOld = Object.assign({}, moved, { supplyDate: new Date(pm.getFullYear(), pm.getMonth(), 1, 0, 30).toISOString(), savedAt: '2026-10-01T00:00:00.000Z' });
+    const seed = U.seedPayload({ vessels: [] });
+    seed.records = [];
+    seed.state.archives = {};
+    const put = (y, k, m, recs) => { seed.state.archives[y] = seed.state.archives[y] || {}; const a = seed.state.archives[y][k]; if (a) a.records.push(...recs); else seed.state.archives[y][k] = { records: recs, archivedAt: '2026-10-01T00:00:00.000Z', month: m, year: y }; };
+    put(pmYr, pmKey, pm.getMonth(), [call1, redo, movedOld]); put(pm2Yr, pm2Key, pm2.getMonth(), [moved]);
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const { page } = await openT(db);
+    await sleep(300);
+    const st = await page.evaluate(([a, b, k2]) => ({ ids: _liveArchiveEntries().flatMap(e => e.arch.records.map(r => r.id)).sort(), omegaIn: _liveArchiveEntries().filter(e => e.arch.records.some(r => r.id === 'v_omega_1')).map(e => e.mon), rep: [].concat(getMonthlyRows(a[0], a[1]), getMonthlyRows(b[0], b[1])).map(r => r.name + ' ' + r.vQ).sort() }), [[pm.getMonth(), pmYr], [pm2.getMonth(), pm2Yr], pm2Key]);
+    check('two archived rows without nomination ids at the same time on one checklist row: both kept in the archive, the newest counted once; one record archived in two months (same id): the newer copy kept, counted once', JSON.stringify(st.ids) === JSON.stringify(['v_alpha_1', 'v_alpha_2', 'v_omega_1']) && JSON.stringify(st.omegaIn) === JSON.stringify([pm2Key]) && JSON.stringify(st.rep) === JSON.stringify(['ALPHA 320', 'OMEGA 250']), st);
+    await sleep(500);
+    await page.evaluate(() => saveSharedState());
+    await sleep(500);
+    const cloudIds = Object.values(U.row(db).payload.state.archives).flatMap(y => Object.values(y)).flatMap(a => (a.records || []).map(r => r.id)).sort();
+    check('…and the cloud keeps both ALPHA rows', JSON.stringify(cloudIds) === JSON.stringify(['v_alpha_1', 'v_alpha_2', 'v_omega_1']), cloudIds);
   });
 
   await browser.close();
