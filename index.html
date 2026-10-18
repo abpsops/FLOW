@@ -7529,10 +7529,61 @@ function _mergePayloads(base, local, remote) {
     merged = _mergeDoc(_deepClone(remote));
     merged.state.vessels = _merge3((_mergeDoc(base).state.vessels) || [], _mergeDoc(local).state.vessels || [], merged.state.vessels || [], 'vessels', ctx, 'vessels');
   } else {
-    merged = _merge3(_mergeDoc(base), _mergeDoc(local), _mergeDoc(remote), '', ctx, '');
+    const bd = _mergeDoc(base), ld = _mergeDoc(local), rd = _mergeDoc(remote);
+    merged = _mergeBakes(bd, ld, rd, _merge3(bd, ld, rd, '', ctx, ''), ctx);
   }
   merged.state.version = (remote && remote.version) || (remote && remote.state && remote.state.version) || 0;
   return { merged: merged, conflicts: ctx.conflicts };
+}
+/* A barge's opening ROB and the supplies / reloads already folded into it (bakedSupplyIds)
+   are ONE value: live ROB = opening − every supply not yet baked. Merged separately, one
+   side's baked list won the clash and the other side's supplies were deducted a second time.
+   Baked ids are merged as a set (union; an id one side dropped vs base is dropped), and an
+   opening both sides moved takes both moves: local + remote − base (a supply both sides
+   baked is counted once). Returns `m` with new objects — never mutates the inputs. */
+function _mergeBakes(b, l, r, m, ctx) {
+  const bakedOf = function(d) { return _isPlainObj(d && d.state && d.state.bakedSupplyIds) ? d.state.bakedSupplyIds : {}; };
+  const bB = bakedOf(b), lB = bakedOf(l), rB = bakedOf(r);
+  const bids = Array.from(new Set(Object.keys(lB).concat(Object.keys(rB))));
+  if (!bids.length || !m || !m.state) return m;
+  const arr = function(o, k) { return Array.isArray(o[k]) ? o[k] : []; };
+  const bargeOf = function(d, id) { return ((d && d.state && d.state.barges) || []).find(function(x) { return x && String(x.id) === String(id); }); };
+  const recs = Array.isArray(m.records) ? m.records : [], reloads = (m.state && Array.isArray(m.state.bargeReloads)) ? m.state.bargeReloads : [];
+  const baked = Object.assign({}, bakedOf(m));
+  let barges = Array.isArray(m.state.barges) ? m.state.barges.slice() : null;
+  const fixed = {};
+  bids.forEach(function(bid) {
+    const bs = arr(bB, bid), ls = arr(lB, bid), rs = arr(rB, bid);
+    baked[bid] = _mergeSet(bs, ls, rs);
+    const inB = new Set(bs), rNew = new Set(rs.filter(function(id) { return !inB.has(id); }));
+    const lNew = ls.filter(function(id) { return !inB.has(id); });
+    const both = lNew.filter(function(id) { return rNew.has(id); });
+    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid);
+    if (!barges || !bb || !lb || !rb || (!lNew.length && !rNew.size)) return;
+    const i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
+    if (i < 0) return;
+    let mb = null;
+    [['vrob', 'vlsfoAct', 'v'], ['mrob', 'mgoAct', 'm']].forEach(function(g) {
+      const vb = parseFloat(bb[g[0]]) || 0, vl = parseFloat(lb[g[0]]) || 0, vr = parseFloat(rb[g[0]]) || 0;
+      if (vl === vb || vr === vb) return; // one side only: the plain merge took it
+      // a supply (or reload) baked on both sides was deducted (added) twice by the sum
+      const twice = both.reduce(function(t, id) {
+        const rec = recs.find(function(x) { return x && x.id === id; });
+        if (rec) return t + (parseFloat(rec[g[1]]) || 0);
+        const rl = reloads.find(function(x) { return x && x.id === id; });
+        return rl ? t - (parseFloat(rl[g[2]]) || 0) : t;
+      }, 0);
+      mb = mb || Object.assign({}, barges[i]);
+      mb[g[0]] = Math.round(vl + vr - vb + twice);
+      fixed['state.barges[' + bid + '].' + g[0]] = 1;
+    });
+    if (mb) barges[i] = mb;
+  });
+  if (ctx && Array.isArray(ctx.conflicts)) // resolved above — not a clash to report
+    ctx.conflicts = ctx.conflicts.filter(function(p) { return !fixed[p] && String(p).indexOf('state.bakedSupplyIds') !== 0; });
+  const state = Object.assign({}, m.state, { bakedSupplyIds: baked });
+  if (barges) state.barges = barges;
+  return Object.assign({}, m, { state: state });
 }
 
 /* ── Local snapshot persistence ── */
@@ -7635,7 +7686,7 @@ function _applyPayload(payload, replaceUnions) {
     if (_isPlainObj(st.fuelingInitiated)) _fuelingInitiated = _deepClone(st.fuelingInitiated);
     if (_isPlainObj(st.bakedSupplyIds)) _bakedSupplyIds = _deepClone(st.bakedSupplyIds);
   }
-  applyState(st);
+  applyState(st, !!replaceUnions); // a merge result or the cloud row itself: no zero-ROB guard
   if (Array.isArray(st.loadingRecords)) _saveLoadingToLocal();
   _manualROB = _isPlainObj(st.manualROB) ? _deepClone(st.manualROB) : {};
   try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB)); } catch(e) {}
@@ -9361,7 +9412,7 @@ function _guardAgainstZeroROBReset(incomingBarges, incomingVersion) {
   });
 }
 
-function applyState(state) {
+function applyState(state, trusted) {
   if (!state) return;
 
   // Clear current UI
@@ -9375,7 +9426,9 @@ function applyState(state) {
 
   // Restore barges
   if (state.barges && state.barges.length) {
-    const guardedBarges = _guardAgainstZeroROBReset(state.barges, state.version);
+    // (A merge's version is the remote row's, older than this device's last save: the
+    // guard would put back the stock of a barge a supply in the merge just emptied.)
+    const guardedBarges = trusted ? state.barges : _guardAgainstZeroROBReset(state.barges, state.version);
     guardedBarges.forEach(b => {
       // Backward compat: old saves had single 'buf' field
       if (b.buf !== undefined && b.vbuf === undefined) { b.vbuf = b.buf; b.mbuf = Math.round(b.buf * 0.3); }
