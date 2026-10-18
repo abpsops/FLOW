@@ -7610,8 +7610,7 @@ function _restoreFocus(snap) {
 function _isEditingSyncedForm() {
   const el = document.activeElement;
   if (!el || !/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return false;
-  // (also the Edit Supply Record dialog: a pull under it would be overwritten by its values)
-  return !!(el.closest && (el.closest('#vc') || el.closest('#barge-list') || el.closest('#edit-record-modal')));
+  return !!(el.closest && (el.closest('#vc') || el.closest('#barge-list')));
 }
 
 // Apply a full payload (a pulled row, or a merge result) to memory + UI.
@@ -19131,7 +19130,7 @@ async function saveChecklistRecord(uid) {
   _savedSupplies.push(supplyRec);
   // …and so does an archived copy of the same checklist row (it would come back in
   // the reports as a second delivery as soon as one of the two copies is edited).
-  if (typeof _dropArchivedCopies === 'function' && _dropArchivedCopies(uid)) { try { saveArchives(); } catch (e) {} }
+  if (typeof _dropArchivedCopies === 'function' && _dropArchivedCopies(supplyRec)) { try { saveArchives(); } catch (e) {} }
 
   // Delivery Log — automatic Timely/Delayed classification + Dispute
   // capture from Remarks, exactly at the moment this supply is saved.
@@ -19766,8 +19765,20 @@ function _mergeArchiveRecords(existing, incoming) {
   });
   return { records: out, added: added, replaced: replaced };
 }
-// Removes archived copies of one checklist row (checklistUid). Returns how many.
-function _dropArchivedCopies(checklistUid) {
+/* Two supply records are the SAME delivery: same checklist row AND provably the same
+   call — same nomination (nomUid), or, without nomUids, the same vessel supplied
+   within 3 days. (Checklist rows made before nomUids existed were named 'v_<vessel>',
+   so different calls of one ship share that checklistUid.) */
+function _sameDelivery(a, b) {
+  if (!a || !b || !a.checklistUid || a.checklistUid !== b.checklistUid) return false;
+  if (a.nomUid && b.nomUid) return a.nomUid === b.nomUid;
+  const ta = a.supplyDate ? _parseDateLocal(a.supplyDate).getTime() : NaN, tb = b.supplyDate ? _parseDateLocal(b.supplyDate).getTime() : NaN;
+  const nv = function(r) { return String((r && (r.vessel || r.name)) || '').trim().toLowerCase().replace(/\s+/g, ' '); };
+  return !isNaN(ta) && !isNaN(tb) && Math.abs(ta - tb) < 3 * 86400000 && nv(a) === nv(b);
+}
+// Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns how many.
+function _dropArchivedCopies(supplyRec) {
+  const checklistUid = supplyRec && supplyRec.checklistUid;
   if (!checklistUid || typeof _archives !== 'object' || !_archives) return 0;
   let n = 0;
   Object.keys(_archives).forEach(function(yr) {
@@ -19776,7 +19787,7 @@ function _dropArchivedCopies(checklistUid) {
     Object.keys(y).forEach(function(mon) {
       const a = y[mon];
       if (!_isLiveArchive(a) || !Array.isArray(a.records)) return;
-      const keep = a.records.filter(function(r) { return !(r && r.checklistUid === checklistUid); });
+      const keep = a.records.filter(function(r) { return !_sameDelivery(supplyRec, r); });
       if (keep.length !== a.records.length) { n += a.records.length - keep.length; y[mon] = Object.assign({}, a, { records: keep }); }
     });
   });
@@ -20307,10 +20318,9 @@ async function removeDuplicateSavedRecords() {
   const removedList = [];
   // Saved twice from the same checklist row (two devices, or a re-save) = one delivery,
   // whatever the quantities: keep the most recently saved / edited copy.
-  const latestByCl = new Map();
-  sorted.forEach(r => { if (r.checklistUid) latestByCl.set(r.checklistUid, r); });
+  const isOlderCopy = r => r.checklistUid && sorted.some(o => o !== r && new Date(o.savedAt || 0) >= new Date(r.savedAt || 0) && sorted.indexOf(o) > sorted.indexOf(r) && _sameDelivery(o, r));
   sorted.forEach(r => {
-    if (r.checklistUid && latestByCl.get(r.checklistUid) !== r) { removedList.push(r); return; }
+    if (isOlderCopy(r)) { removedList.push(r); return; }
     const key = _recordDedupeKey(r);
     if (!key.replace(/\|/g, '')) { deduped.push(r); return; } // nothing to key on — keep, don't guess
     if (seen.has(key)) { removedList.push(r); return; }
@@ -20417,8 +20427,13 @@ function openEditRecord(id) {
   document.getElementById('edit-record-modal').style.display = 'flex';
 }
 function closeEditRecord() { document.getElementById('edit-record-modal').style.display = 'none'; _editingRecordId = null; _editingOrig = null; _editingShown = null; }
+let _erSaving = false;
 async function saveEditRecord() {
-  if (!_editingRecordId) return;
+  if (!_editingRecordId || _erSaving) return; // a second click while the first save is in flight
+  _erSaving = true;
+  try { await _saveEditRecord(); } finally { _erSaving = false; }
+}
+async function _saveEditRecord() {
   const idx = _savedSupplies.findIndex(x => x.id === _editingRecordId);
   if (idx === -1) { alert('This record was removed meanwhile (by you or a colleague) — nothing was saved.'); closeEditRecord(); return; }
   const savedId = _editingRecordId;
@@ -20840,9 +20855,10 @@ function _getAllReportRecords() {
     });
   }
   const liveIds = new Set(base.map(r => r.id).filter(Boolean));
-  // Same checklist row = same delivery: the live record wins over an archived copy
-  // (even after its quantities were edited, which changes the fuzzy key below).
-  const liveCl = new Set(base.map(r => r.checklistUid).filter(Boolean));
+  // The same delivery live and archived (_sameDelivery): the live record wins over the
+  // archived copy (even after its quantities were edited, which changes the fuzzy key below).
+  const liveByCl = new Map();
+  base.forEach(r => { if (r && r.checklistUid) { if (!liveByCl.has(r.checklistUid)) liveByCl.set(r.checklistUid, []); liveByCl.get(r.checklistUid).push(r); } });
   // Safety net for the same delivery present BOTH live and archived without
   // a matching id: drop the archived copy when its fuzzy key equals a live
   // record's. Two live records (or two archived ones) are never collapsed —
@@ -20850,7 +20866,7 @@ function _getAllReportRecords() {
   const liveKeys = new Set(base.map(r => _recordDedupeKey(r)));
   const combined = [...base, ...archRows.filter(r => {
     if (r.id && liveIds.has(r.id)) return false;
-    if (r.checklistUid && liveCl.has(r.checklistUid)) return false;
+    if (r.checklistUid && liveByCl.has(r.checklistUid) && liveByCl.get(r.checklistUid).some(l => _sameDelivery(l, r))) return false;
     const key = _recordDedupeKey(r);
     return !(key.replace(/\|/g, '') && liveKeys.has(key));
   })];

@@ -190,6 +190,32 @@ async function editRecord(p, id, fields) {
     check('checklist: an empty LSMGO actual with 100 MT nominated asks before saving 0 MT; Cancel saves nothing', asked.dialogs.some(m => /No actual quantity entered for LSMGO \(nominated 100 MT\)/.test(m)) && !asked.saved, asked);
   });
 
+  /* 6 — older checklist rows were named 'v_<vessel>': different calls of one ship share that uid */
+  await scenario('E6 legacy shared checklist uid', async (openT) => {
+    const seed = U.seedPayload({ vessels: [] });
+    const sep = { id: 'v_alpha_1757500000000', checklistUid: 'v_alpha', vessel: 'ALPHA', areaCode: 'FUJ-A', area: AREA['FUJ-A'], dateStr: '10 Sep 2026  10:00', supplyDate: '2026-09-10T06:00:00.000Z', vlsfoAct: 480, mgoAct: 0, barge: 'Barge 1', supplied: true, savedAt: '2026-09-10T08:00:00.000Z' };
+    const oct = rec({ uid: 'v_alpha', ts: 3000, vessel: 'ALPHA', vAct: 495, mAct: 0, extra: { nomUid: undefined } });
+    const oct2 = rec({ uid: 'v_alpha', ts: 3100, savedAt: '2026-10-09T00:00:00.000Z', vessel: 'ALPHA', vAct: 300, mAct: 0, supplyDate: (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth() + 1, 15, 10, 0).toISOString(); })(), extra: { nomUid: undefined } }); // a later call (next month — past months are auto-archived on load)
+    seed.records = [oct, oct2];
+    seed.state.archives = { 2026: { Sep: { records: [sep], archivedAt: '2026-10-01T00:00:00.000Z', month: 8, year: 2026 } } };
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const { page } = await openT(db);
+    const sepRows = await page.evaluate(() => getMonthlyRows(8, 2026).map(r => [r.name, r.vQ]));
+    check('a September delivery archived under the old uid still counts although a later ALPHA call is live with the same uid', JSON.stringify(sepRows) === JSON.stringify([['ALPHA', 480]]), sepRows);
+    await page.evaluate(() => removeDuplicateSavedRecords());
+    await sleep(400);
+    check('Remove Duplicates keeps two different ALPHA calls that share the old uid', U.row(db).payload.records.length === 2, U.row(db).payload.records.map(r => r.id));
+    const dropped = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', nomUid: 'n9', vessel: 'ALPHA', supplyDate: new Date().toISOString() }));
+    check('saving a new ALPHA call from a reused old checklist row never deletes the archived September delivery', dropped === 0 && await page.evaluate(() => _archives[2026].Sep.records.length) === 1, dropped);
+    const same = await page.evaluate(() => _dropArchivedCopies({ checklistUid: 'v_alpha', vessel: 'ALPHA', supplyDate: '2026-09-11T06:00:00.000Z' }));
+    check('…but a re-save of that same September call (same ship, within 3 days) replaces its archived copy', same === 1, same);
+    // double click on Save: no false "someone else changed"
+    await page.evaluate(() => { showPage('records'); openEditRecord('v_alpha_3000'); document.getElementById('er-vlsfo-act').value = '500'; window.__dialogs = []; });
+    await page.evaluate(() => Promise.all([saveEditRecord(), saveEditRecord()]));
+    await sleep(400);
+    check('a double click on Save Changes saves once, with no false "Someone else changed" prompt', await page.evaluate(() => !window.__dialogs.some(m => /Someone else changed/.test(m))) && U.row(db).payload.records.find(r => r.id === 'v_alpha_3000').vlsfoAct === 500);
+  });
+
   await browser.close();
   console.log('RECORDS-EDIT: ' + pass + ' passed, ' + fail + ' failed');
   process.exitCode = fail ? 1 : 0;
