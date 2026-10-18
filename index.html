@@ -4637,7 +4637,7 @@ function copyAllAgentEmails(btn) {
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:12px;border-bottom:2px solid var(--border)">
       <div>
         <div style="font-family:DM Sans,sans-serif;font-size:18px;font-weight:600;color:var(--ink)">Edit Supply Record</div>
-        <div style="font-size:12px;color:var(--pg-deliverylog);margin-top:3px">Modify actuals, status, barge or remarks. Changes sync to all team members.</div>
+        <div style="font-size:12px;color:var(--pg-deliverylog);margin-top:3px">Modify actuals, BDN numbers, status, barge or remarks. Changes sync to all team members.</div>
       </div>
       <button onclick="closeEditRecord()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--pg-deliverylog);line-height:1">&times;</button>
     </div>
@@ -4657,6 +4657,11 @@ function copyAllAgentEmails(btn) {
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Actual VLSFO</label><input type="number" id="er-vlsfo-act" min="0" step="1" oninput="updateEditDiff()" style="font-size:14px;padding:9px 12px;border:2px solid var(--fuel-v);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-v-lt);font-weight:600;color:var(--ink)"></div>
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--muted);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Nom. MGO</label><input type="number" id="er-mgo-nom" min="0" step="1" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface2);color:var(--muted)"></div>
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Actual LSMGO</label><input type="number" id="er-mgo-act" min="0" step="1" oninput="updateEditDiff()" style="font-size:14px;padding:9px 12px;border:2px solid var(--fuel-m);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-m-lt);font-weight:600;color:var(--ink)"></div>
+    </div>
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">BDN Numbers</div>
+    <div class="er-bdn-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+      <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-v" style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN No. (VLSFO)</label><input type="text" id="er-bdn-v" maxlength="60" autocomplete="off" spellcheck="false" oninput="updateEditDiff()" placeholder="BDN No." style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-m" style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN No. (LSMGO)</label><input type="text" id="er-bdn-m" maxlength="60" autocomplete="off" spellcheck="false" oninput="updateEditDiff()" placeholder="BDN No." style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
     </div>
     <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">Status &amp; Remarks</div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:18px">
@@ -20290,6 +20295,7 @@ function renderSavedRecords() {
           ${r.agent ? `&nbsp;|&nbsp; Agent: ${esc(r.agent)}` : ''}
           ${r.spec  ? `&nbsp;|&nbsp; ${esc(r.spec)}` : ''}
         </div>
+        ${(r.bdnV || r.bdnM) ? `<div class="saved-record-bdn" style="font-size:11px;color:var(--sub);margin-top:3px">BDN No.: ${[r.bdnV ? 'VLSFO <strong>' + esc(r.bdnV) + '</strong>' : '', r.bdnM ? 'LSMGO <strong>' + esc(r.bdnM) + '</strong>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>` : ''}
         ${r.notes?`<div style="font-size:11px;color:var(--sub);margin-top:3px"> ${esc(r.notes)}</div>`:''}
         <div style="font-size:10px;color:var(--muted);margin-top:3px">Saved: ${new Date(r.savedAt).toLocaleString()}</div>
       </div>
@@ -20313,6 +20319,8 @@ function openEditRecord(id) {
   document.getElementById('er-vlsfo-act').value = r.vlsfoAct  || 0;
   document.getElementById('er-mgo-nom').value   = r.mgoNom    || 0;
   document.getElementById('er-mgo-act').value   = r.mgoAct    || 0;
+  document.getElementById('er-bdn-v').value     = r.bdnV      || '';
+  document.getElementById('er-bdn-m').value     = r.bdnM      || '';
   document.getElementById('er-notes').value     = r.notes     || '';
   document.getElementById('er-supplied').value  = r.supplied ? 'yes' : 'no';
   const diffEl = document.getElementById('er-diff');
@@ -20336,10 +20344,16 @@ async function saveEditRecord() {
     vlsfoAct:  parseFloat(document.getElementById('er-vlsfo-act').value) || 0,
     mgoNom:    parseFloat(document.getElementById('er-mgo-nom').value)   || _savedSupplies[idx].mgoNom,
     mgoAct:    parseFloat(document.getElementById('er-mgo-act').value)   || 0,
+    bdnV:      document.getElementById('er-bdn-v').value.trim().slice(0, 60),
+    bdnM:      document.getElementById('er-bdn-m').value.trim().slice(0, 60),
     notes:     document.getElementById('er-notes').value.trim(),
     supplied:  document.getElementById('er-supplied').value === 'yes',
     savedAt:   new Date().toISOString(),
   };
+  // The checklist row this supply was saved from keeps the same BDN numbers
+  // (the checklist Excel export reads them from there).
+  const _cr = _savedSupplies[idx].checklistUid && _checklistRecords ? _checklistRecords[_savedSupplies[idx].checklistUid] : null;
+  if (_cr) { _cr.bdnV = _savedSupplies[idx].bdnV; _cr.bdnM = _savedSupplies[idx].bdnM; }
   await saveSharedRecords();
   closeEditRecord();
   renderSavedRecords();
@@ -20361,6 +20375,10 @@ function updateEditDiff() {
   const diffM = newM - (r.mgoAct   || r.mgoNom   || 0);
   if (diffV !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-v);flex-shrink:0"></span><span>VLSFO: <strong>${(r.vlsfoAct||r.vlsfoNom||0).toLocaleString()} MT</strong> → <strong style="color:var(--fuel-v)">${newV.toLocaleString()} MT</strong> <span style="color:${diffV>0?'var(--green)':'var(--red)'};font-weight:700">(${diffV>0?'+':''}${diffV.toLocaleString()} MT)</span></span></div>`);
   if (diffM !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-m);flex-shrink:0"></span><span>MGO: <strong>${(r.mgoAct||r.mgoNom||0).toLocaleString()} MT</strong> → <strong style="color:var(--fuel-m)">${newM.toLocaleString()} MT</strong> <span style="color:${diffM>0?'var(--green)':'var(--red)'};font-weight:700">(${diffM>0?'+':''}${diffM.toLocaleString()} MT)</span></span></div>`);
+  const newBv = document.getElementById('er-bdn-v').value.trim(), newBm = document.getElementById('er-bdn-m').value.trim();
+  [['VLSFO', r.bdnV || '', newBv, 'var(--fuel-v)'], ['LSMGO', r.bdnM || '', newBm, 'var(--fuel-m)']].forEach(function(b) {
+    if (b[1] !== b[2]) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[3]};flex-shrink:0"></span><span>BDN No. (${b[0]}): <strong>${esc(b[1] || '—')}</strong> → <strong style="color:${b[3]}">${esc(b[2] || '—')}</strong></span></div>`);
+  });
   if (newSt !== r.supplied) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${newSt?'var(--green)':'var(--amber)'}">${newSt?'Completed':'Pending'}</strong></span></div>`);
   const diffEl = document.getElementById('er-diff'), rowEl = document.getElementById('er-diff-rows');
   if (diffs.length) { diffEl.style.display='block'; rowEl.innerHTML=diffs.join(''); }

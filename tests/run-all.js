@@ -29,6 +29,7 @@ const SUITES = [
   ['r5-io', 'suites/r5/r5_io.test.js', 'docx templates, storage, Excel export, Supabase wipe'],
   ['fix', 'suites/fix/fix.test.js', 'reports KPIs, checklist dedupe, delivery-log tombstones, nuclear clear'],
   ['xss', 'suites/fix/xss.test.js', 'stored-XSS sweep over every page and modal'],
+  ['records-bdn', 'suites/fix/bdn.test.js', 'Saved Supply Records → Edit: BDN numbers (VLSFO / LSMGO), change summary, list, XSS'],
   ['track-record', 'suites/fix/trackrecord.test.js', 'disputes only when marked, vessel names merged, watchlist details'],
   ['free-windows', 'suites/fw/fw.test.js', 'Free Windows planner calculations and exports'],
   ['sync-race', 'suites/fw/race.test.js', 'deletions survive a save racing a pull (forced interleavings)'],
