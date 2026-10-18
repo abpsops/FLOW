@@ -40,28 +40,34 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
 
 (async () => {
   const browser = await H.launch();
-  const scenario = async (name, fn) => {
+  const scenario = async (name, fn, expectedErr) => {
     console.log('— ' + name);
     const apps = [];
     try { await fn(async (db, uid) => { const a = await open(browser, db, uid); apps.push(a); return a; }); }
     catch (e) { check(name + ' (threw)', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); }
-    const errs = [].concat(...apps.map(a => U.realErrors(a)));
+    const errs = [].concat(...apps.map(a => U.realErrors(a))).filter(e => !(expectedErr && expectedErr.test(e)));
     check(name + ': no page errors', errs.length === 0, errs.slice(0, 3));
     for (const a of apps) await a.ctx.close();
   };
-  const twoSupplies = (bGrade) => {
+  const twoSupplies = (bGrade, o) => {
+    o = o || {};
     const seed = U.seedPayload({ vessels: [
       Object.assign({}, VBASE, { nomUid: 'n1', name: 'ALPHA', type: 'VLSFO', qty: 100, mgo: 0, eta: eta(3) }),
       Object.assign({}, VBASE, { nomUid: 'n2', name: 'BRAVO', type: bGrade, qty: bGrade === 'VLSFO' ? 50 : 0, mgo: bGrade === 'MGO' ? 50 : 0, eta: eta(10) }),
     ] });
     seed.state.bakedSupplyIds = {};
+    if (o.vrob != null) seed.state.barges[0].vrob = o.vrob;
+    // a synced "current ROB" override (ROB Update panel, e.g. after a dip)
+    if (o.override) seed.state.manualROB = { '1_final': { v: o.override[0], m: o.override[1], reason: 'dip', editedAt: new Date().toISOString(), editedBy: 'ROB Update', atIds: [] } };
     return seed;
   };
 
   // Barge 1: 4000 VLSFO / 800 MGO. B logs BRAVO 50 MT; A (not pulled yet) logs ALPHA 100 MT VLSFO.
-  for (const [bGrade, want, timing] of [['MGO', [3900, 750], 'after'], ['MGO', [3900, 750], 'during'], ['VLSFO', [3850, 800], 'after']]) {
-    await scenario(`R1 two supplies, BRAVO ${bGrade}, A logs ${timing} its schedule save`, async (openT) => {
-      const db = H.createDb({ workspace: twoSupplies(bGrade), realtime: false });
+  // R1d: with a synced ROB override 2000 / 600 → 1900 / 550. R1e: 100 MT on board, 50 + 80 delivered → 0 (never negative).
+  for (const [bGrade, want, timing, o, aQty, tag] of [['MGO', [3900, 750], 'after', null, 100, 'a'], ['MGO', [3900, 750], 'during', null, 100, 'b'], ['VLSFO', [3850, 800], 'after', null, 100, 'c'],
+      ['MGO', [1900, 550], 'after', { override: [2000, 600] }, 100, 'd'], ['VLSFO', [0, 800], 'after', { vrob: 100 }, 80, 'e']]) {
+    await scenario(`R1${tag} two supplies, BRAVO ${bGrade}, A logs ${timing} its schedule save${o ? ' — ' + JSON.stringify(o) : ''}`, async (openT) => {
+      const db = H.createDb({ workspace: twoSupplies(bGrade, o), realtime: false });
       const A = await openT(db, 'user-operator');
       const B = await openT(db, 'user-operator2');
       if (timing === 'after') await generate(A.page);
@@ -69,7 +75,7 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       const okB = await logSupply(B.page, 'n2', bGrade === 'VLSFO' ? 50 : 0, bGrade === 'MGO' ? 50 : 0);
       await slow(A.page);
       let okA;
-      if (timing === 'after') okA = await logSupply(A.page, 'n1', 100, 0);
+      if (timing === 'after') okA = await logSupply(A.page, 'n1', aQty, 0);
       else okA = await A.page.evaluate(async () => {   // the schedule save is still on the network when ALPHA is logged
         calculate(); await new Promise(r => setTimeout(r, 300));
         const inflight = !!_saveRunning;
@@ -83,7 +89,34 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       await sleep(600);
       const r = { okA, okB, cloud: cloudBarge(db), A: await live(A.page), B: await live(B.page), fresh: await live(F.page), toasts: await A.page.evaluate(() => window.__toasts.filter(t => /bakedSupplyIds|barges/.test(t))) };
       check(`each supply is deducted once — ${want.join(' / ')} in the cloud, on both devices and on a fresh one`, okA === 'ok' && okB === 'ok' && [r.cloud, r.A, r.B, r.fresh].every(x => JSON.stringify(x) === JSON.stringify(want)) && !r.toasts.length, r);
+      if (tag === 'e') {
+        const rl = await F.page.evaluate(async () => { openReloadModal(1); document.getElementById('reload-vlsfo').value = '1000'; await saveReloadQty(); await _waitForSaveIdle(); const l = getAllLiveROBs()[1]; return [Math.round(l.liveV), Math.round(l.liveM)]; });
+        check('…and a later 1000 MT reload gives exactly 1000', JSON.stringify(rl) === JSON.stringify([1000, 800]) && JSON.stringify(cloudBarge(db)) === JSON.stringify([1000, 800]), [rl, cloudBarge(db)]);
+      }
     });
+  }
+
+  // The save reaches the server but its response is lost: the next save meets this device's own write.
+  for (const [mode, want] of [['override', [1900, 600]], ['clamp', [0, 800]]]) {
+    await scenario(`R4 a save whose response was lost (${mode})`, async (openT) => {
+      const seed = twoSupplies('MGO', mode === 'override' ? { override: [2000, 600] } : { vrob: 60 });
+      const db = H.createDb({ workspace: seed, realtime: false });
+      const A = await openT(db, 'user-operator');
+      await generate(A.page);
+      const dropped = await A.page.evaluate(async () => {
+        const o = window.__mockDb; let n = 0;
+        window.__mockDb = async function(q) { const op = JSON.parse(q); const r = await o(q); if (!n && op.table === 'abps_workspace' && op.action === 'update') { n++; window.__mockDb = o; throw new Error('Failed to fetch'); } return r; };
+        document.getElementById('cl-av-n_n1').value = '100'; document.getElementById('cl-am-n_n1').value = '0';
+        await saveChecklistRecord('n_n1'); await _waitForSaveIdle();
+        return n;
+      });
+      await A.page.evaluate(async () => { await _pollOnce(true); await _waitForSaveIdle(); });
+      await sleep(800);
+      const F = await openT(db, 'user-operator2');
+      await sleep(600);
+      const r = { dropped, cloud: cloudBarge(db), A: await live(A.page), fresh: await live(F.page) };
+      check(`its own write is not applied twice: ${want.join(' / ')} everywhere`, dropped === 1 && [r.cloud, r.A, r.fresh].every(x => JSON.stringify(x) === JSON.stringify(want)), r);
+    }, /saveSharedState failed: Error: Failed to fetch/); // the network failure this test injects
   }
 
   // Barge 1: 100 VLSFO. B logs ALPHA 100 MT (barge empty); A (not pulled) saves a remark.
@@ -115,6 +148,9 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       const res = {};
       let x = _mergePayloads(doc(4000, 800, []), doc(3900, 800, ['s1'], [S1]), doc(4000, 750, ['s2'], [S2]));
       res.diffGrades = [x.merged.state.barges[0].vrob, x.merged.state.barges[0].mrob, x.merged.state.bakedSupplyIds[1].slice().sort(), x.conflicts];
+      _savedSupplies = x.merged.records; _bakedSupplyIds = x.merged.state.bakedSupplyIds; _manualROB = {};
+      const lr = computeLiveROB(1, 'Barge 1', x.merged.state.barges[0].vrob, x.merged.state.barges[0].mrob, null);
+      res.diffGradesLive = [Math.round(lr.v), Math.round(lr.m)];
       x = _mergePayloads(doc(4000, 800, []), doc(3870, 800, ['s1', 's3'], [S1, S3]), doc(3900, 800, ['s1'], [S1]));
       res.bothBakedOne = [x.merged.state.barges[0].vrob, x.merged.state.bakedSupplyIds[1].slice().sort()];
       x = _mergePayloads(doc(4000, 800, []), doc(4170, 800, ['s3', 'r1'], [S3], [R1]), doc(4200, 800, ['r1'], [], [R1]));
@@ -126,8 +162,9 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       res.untouched = JSON.stringify(r) === rCopy && JSON.stringify(l) === lCopy;
       return res;
     });
-    check('different grades: both openings taken, both supplies baked, no conflict reported', JSON.stringify(out.diffGrades) === JSON.stringify([3900, 750, ['s1', 's2'], []]), out.diffGrades);
-    check('same grade, one supply baked on both sides plus one more locally: 4000 − 100 − 30 = 3870', JSON.stringify(out.bothBakedOne) === JSON.stringify([3870, ['s1', 's3']]), out.bothBakedOne);
+    check('both sides baked different supplies: this device\'s opening and baked list are kept together, no conflict reported', JSON.stringify(out.diffGrades) === JSON.stringify([3900, 800, ['s1'], []]), out.diffGrades);
+    check('…so the colleague\'s supply is deducted once by the live ROB: 3900 / 750', JSON.stringify(out.diffGradesLive) === JSON.stringify([3900, 750]), out.diffGradesLive);
+    check('same grade, one supply baked on both sides plus one more locally: 4000 − 100 − 30 = 3870, both baked', JSON.stringify(out.bothBakedOne) === JSON.stringify([3870, ['s1', 's3']]), out.bothBakedOne);
     check('a reload baked on both sides is added once: 4000 + 200 − 30 = 4170', JSON.stringify(out.reloadBoth) === JSON.stringify([4170]), out.reloadBoth);
     check('only one side baked: its opening and list, as before', JSON.stringify(out.oneSided) === JSON.stringify([3900, ['s0', 's1']]), out.oneSided);
     check('the merge does not change its inputs (the remote row becomes the next merge base)', out.untouched === true);

@@ -7536,54 +7536,36 @@ function _mergePayloads(base, local, remote) {
   return { merged: merged, conflicts: ctx.conflicts };
 }
 /* A barge's opening ROB and the supplies / reloads already folded into it (bakedSupplyIds)
-   are ONE value: live ROB = opening − every supply not yet baked. Merged separately, one
-   side's baked list won the clash and the other side's supplies were deducted a second time.
-   Baked ids are merged as a set (union; an id one side dropped vs base is dropped), and an
-   opening both sides moved takes both moves: local + remote − base (a supply both sides
-   baked is counted once). Returns `m` with new objects — never mutates the inputs. */
+   are ONE value: live ROB = opening − every supply not yet baked (computeLiveROB, with the
+   manual overrides and the clamp at 0). Merged per key, the opening of one grade could come
+   from the remote while the baked list came from local, and the remote's supply was then
+   deducted a second time. When both sides baked something different, this device's opening
+   and baked list are kept TOGETHER: the colleague's supplies, not in that list, are deducted
+   once by computeLiveROB and baked by the next save. Returns `m` with new objects — never
+   mutates the inputs. */
 function _mergeBakes(b, l, r, m, ctx) {
   const bakedOf = function(d) { return _isPlainObj(d && d.state && d.state.bakedSupplyIds) ? d.state.bakedSupplyIds : {}; };
   const bB = bakedOf(b), lB = bakedOf(l), rB = bakedOf(r);
   const bids = Array.from(new Set(Object.keys(lB).concat(Object.keys(rB))));
   if (!bids.length || !m || !m.state) return m;
-  const arr = function(o, k) { return Array.isArray(o[k]) ? o[k] : []; };
+  const ids = function(o, k) { return JSON.stringify((Array.isArray(o[k]) ? o[k] : []).map(String).sort()); };
   const bargeOf = function(d, id) { return ((d && d.state && d.state.barges) || []).find(function(x) { return x && String(x.id) === String(id); }); };
-  const recs = Array.isArray(m.records) ? m.records : [], reloads = (m.state && Array.isArray(m.state.bargeReloads)) ? m.state.bargeReloads : [];
   const baked = Object.assign({}, bakedOf(m));
-  let barges = Array.isArray(m.state.barges) ? m.state.barges.slice() : null;
+  const barges = Array.isArray(m.state.barges) ? m.state.barges.slice() : null;
   const fixed = {};
   bids.forEach(function(bid) {
-    const bs = arr(bB, bid), ls = arr(lB, bid), rs = arr(rB, bid);
-    baked[bid] = _mergeSet(bs, ls, rs);
-    const inB = new Set(bs), rNew = new Set(rs.filter(function(id) { return !inB.has(id); }));
-    const lNew = ls.filter(function(id) { return !inB.has(id); });
-    const both = lNew.filter(function(id) { return rNew.has(id); });
-    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid);
-    if (!barges || !bb || !lb || !rb || (!lNew.length && !rNew.size)) return;
-    const i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
-    if (i < 0) return;
-    let mb = null;
-    [['vrob', 'vlsfoAct', 'v'], ['mrob', 'mgoAct', 'm']].forEach(function(g) {
-      const vb = parseFloat(bb[g[0]]) || 0, vl = parseFloat(lb[g[0]]) || 0, vr = parseFloat(rb[g[0]]) || 0;
-      if (vl === vb || vr === vb) return; // one side only: the plain merge took it
-      // a supply (or reload) baked on both sides was deducted (added) twice by the sum
-      const twice = both.reduce(function(t, id) {
-        const rec = recs.find(function(x) { return x && x.id === id; });
-        if (rec) return t + (parseFloat(rec[g[1]]) || 0);
-        const rl = reloads.find(function(x) { return x && x.id === id; });
-        return rl ? t - (parseFloat(rl[g[2]]) || 0) : t;
-      }, 0);
-      mb = mb || Object.assign({}, barges[i]);
-      mb[g[0]] = Math.round(vl + vr - vb + twice);
-      fixed['state.barges[' + bid + '].' + g[0]] = 1;
-    });
-    if (mb) barges[i] = mb;
+    const bs = ids(bB, bid), ls = ids(lB, bid), rs = ids(rB, bid);
+    if (ls === bs || rs === bs || ls === rs) return; // one side baked (or both alike): the plain merge keeps them together
+    const lb = bargeOf(l, bid), i = barges ? barges.findIndex(function(x) { return x && String(x.id) === String(bid); }) : -1;
+    if (!lb || i < 0) return;
+    baked[bid] = (lB[bid] || []).slice();
+    barges[i] = Object.assign({}, barges[i], { vrob: lb.vrob, mrob: lb.mrob });
+    fixed['state.bakedSupplyIds.' + bid] = fixed['state.barges[' + bid + '].vrob'] = fixed['state.barges[' + bid + '].mrob'] = 1;
   });
+  if (!Object.keys(fixed).length) return m;
   if (ctx && Array.isArray(ctx.conflicts)) // resolved above — not a clash to report
-    ctx.conflicts = ctx.conflicts.filter(function(p) { return !fixed[p] && String(p).indexOf('state.bakedSupplyIds') !== 0; });
-  const state = Object.assign({}, m.state, { bakedSupplyIds: baked });
-  if (barges) state.barges = barges;
-  return Object.assign({}, m, { state: state });
+    ctx.conflicts = ctx.conflicts.filter(function(p) { return !fixed[p]; });
+  return Object.assign({}, m, { state: Object.assign({}, m.state, { bakedSupplyIds: baked, barges: barges }) });
 }
 
 /* ── Local snapshot persistence ── */
