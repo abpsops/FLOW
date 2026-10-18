@@ -213,6 +213,10 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
       res.equalMoves = [Math.round(eq.v), Math.round(eq.m)];
       x = _mergePayloads(doc(4000, 800, ['s0']), doc(3900, 800, ['s0', 's1'], [S1]), doc(4000, 800, ['s0']));
       res.oneSided = [x.merged.state.barges[0].vrob, x.merged.state.bakedSupplyIds[1].slice().sort()];
+      // the colleague's supply was moved to Barge 2 after it was baked here, and they then typed a measured 3990
+      const S6 = { id: 's6', barge: 'Barge 2', vlsfoAct: 100, mgoAct: 0 }, S7 = { id: 's7', barge: 'Barge 1', vlsfoAct: 0, mgoAct: 30 };
+      x = _mergePayloads(doc(4000, 800, []), doc(4000, 770, ['s7'], [S6, S7]), doc(3990, 800, ['s6'], [S6, S7]));
+      res.moved = [x.merged.state.barges[0].vrob, x.merged.state.barges[0].mrob];
       const l = doc(3900, 800, ['s1'], [S1]), r = doc(4000, 750, ['s2'], [S2]), rCopy = JSON.stringify(r), lCopy = JSON.stringify(l);
       _mergePayloads(doc(4000, 800, []), l, r);
       res.untouched = JSON.stringify(r) === rCopy && JSON.stringify(l) === lCopy;
@@ -225,6 +229,7 @@ const generate = p => p.evaluate(async () => { calculate(); await _waitForSaveId
     check('only one side baked: its opening and list, as before', JSON.stringify(out.oneSided) === JSON.stringify([3900, ['s0', 's1']]), out.oneSided);
     check('two different 50 MT VLSFO supplies, one on each side (both openings 3950): live 3900', JSON.stringify(out.equalMoves) === JSON.stringify([3900, 800]), out.equalMoves);
     check('the merge does not change its inputs (the remote row becomes the next merge base)', out.untouched === true);
+    check('a colleague\'s supply since moved to another barge is not given back: their measured 3990 stays', JSON.stringify(out.moved) === JSON.stringify([3990, 770]), out.moved);
   });
 
   await browser.close();
