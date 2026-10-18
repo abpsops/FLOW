@@ -7624,7 +7624,7 @@ function _applyPayload(payload, replaceUnions) {
   const st = payload.state;
   const focus = _snapshotFocus();
   if (replaceUnions) {
-    if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof saveArchives === 'function') saveArchives(); }
+    if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof _collapseArchiveCopies === 'function') _collapseArchiveCopies(); if (typeof saveArchives === 'function') saveArchives(); }
     if (Array.isArray(st.agents)) {
       _agents = _deepClone(st.agents);
       _agentNextId = Math.max(_agentNextId || 1000, ...(_agents.map(function(a) { return (Number(a.id) || 0) + 1; })));
@@ -19777,6 +19777,7 @@ function _sameDelivery(a, b) {
   return !isNaN(ta) && !isNaN(tb) && Math.abs(ta - tb) < 3 * 86400000 && nv(a) === nv(b);
 }
 // Removes archived copies of the delivery `supplyRec` (see _sameDelivery). Returns how many.
+// A row with supplyRec's own id is left to _mergeArchiveRecords (the newer copy wins).
 function _dropArchivedCopies(supplyRec) {
   const checklistUid = supplyRec && supplyRec.checklistUid;
   if (!checklistUid || typeof _archives !== 'object' || !_archives) return 0;
@@ -19787,11 +19788,37 @@ function _dropArchivedCopies(supplyRec) {
     Object.keys(y).forEach(function(mon) {
       const a = y[mon];
       if (!_isLiveArchive(a) || !Array.isArray(a.records)) return;
-      const keep = a.records.filter(function(r) { return !_sameDelivery(supplyRec, r); });
+      const keep = a.records.filter(function(r) { return !_sameDelivery(supplyRec, r) || (r && r.id && r.id === supplyRec.id); });
       if (keep.length !== a.records.length) { n += a.records.length - keep.length; y[mon] = Object.assign({}, a, { records: keep }); }
     });
   });
   return n;
+}
+// Archived copies of one delivery (_sameDelivery) — re-saved or edited after its month was
+// archived, or an old copy another device still had (archives merge as a union, so a copy
+// removed on one device comes back from the others): only the newest (savedAt) is kept.
+// Runs wherever archives come in: load, cloud merge, backup restore, archiving.
+function _collapseArchiveCopies() {
+  const byCl = new Map();
+  _liveArchiveEntries().forEach(function(e) {
+    e.arch.records.forEach(function(r, i) {
+      if (r && r.checklistUid) { if (!byCl.has(r.checklistUid)) byCl.set(r.checklistUid, []); byCl.get(r.checklistUid).push({ e: e, r: r, i: i }); }
+    });
+  });
+  const drop = new Set();
+  byCl.forEach(function(list) {
+    if (list.length < 2) return;
+    const t = function(x) { return Date.parse((x.r && x.r.savedAt) || '') || 0; };
+    list.sort(function(a, b) { return t(b) - t(a) || b.i - a.i; });
+    const kept = [];
+    list.forEach(function(x) { if (kept.some(function(k) { return _sameDelivery(k.r, x.r); })) drop.add(x.r); else kept.push(x); });
+  });
+  if (!drop.size) return 0;
+  _liveArchiveEntries().forEach(function(e) {
+    if (e.arch.records.some(function(r) { return drop.has(r); }))
+      _archives[e.yr][e.mon] = Object.assign({}, e.arch, { records: e.arch.records.filter(function(r) { return !drop.has(r); }) });
+  });
+  return drop.size;
 }
 // Puts `rows` into the yr/mon archive, MERGING with an existing live archive
 // (re-archiving a month used to replace — and so silently drop — whatever
@@ -19833,6 +19860,7 @@ function loadArchivesLocal() {
   try {
     const raw = localStorage.getItem(ARCHIVES_KEY);
     if (raw) _archives = JSON.parse(raw) || {};
+    _collapseArchiveCopies();
   } catch(e) { /* leave _archives as-is */ }
 }
 
@@ -19865,6 +19893,7 @@ function _mergeArchives(remoteArchives) {
       if (_archiveStamp(R) > _archiveStamp(L)) { _archives[yr][mon] = R; changed = true; }
     });
   });
+  if (_collapseArchiveCopies()) changed = true;
   if (changed) saveArchives();
 }
 
@@ -19890,6 +19919,7 @@ function archiveMonth(mon,yr){
   var key=MO[mon];
   var hadArchive=_isLiveArchive(_archives[yr]&&_archives[yr][key]);
   var added=_archiveMergeRows(yr,key,mon,rows);
+  _collapseArchiveCopies(); // an older archived copy of a delivery archived now gives way to it
   var selSet=new Set(sel);
   _savedSupplies=_savedSupplies.filter(function(r){return !selSet.has(r);});
   saveArchives();
@@ -19951,6 +19981,7 @@ function autoArchivePastMonths() {
     _savedSupplies = _savedSupplies.filter(function(r) { return !selSet.has(r); });
     archivedAny = true;
   });
+  if (archivedAny) _collapseArchiveCopies(); // an older archived copy of a delivery archived now gives way to it
 
   if (archivedAny) {
     saveArchives();
@@ -20422,18 +20453,22 @@ function openEditRecord(id) {
   // record as it is THEN (a colleague's change made meanwhile is kept, or asked about).
   _editingOrig = JSON.parse(JSON.stringify(r));
   _editingShown = _erFormValues();
+  _erSession = { id: id, saving: false };
   const diffEl = document.getElementById('er-diff');
   if (diffEl) { diffEl.style.display = 'none'; document.getElementById('er-diff-rows').innerHTML = ''; }
   document.getElementById('edit-record-modal').style.display = 'flex';
 }
-function closeEditRecord() { document.getElementById('edit-record-modal').style.display = 'none'; _editingRecordId = null; _editingOrig = null; _editingShown = null; }
-let _erSaving = false;
+function closeEditRecord() { document.getElementById('edit-record-modal').style.display = 'none'; _editingRecordId = null; _editingOrig = null; _editingShown = null; _erSession = null; }
+// One per opened dialog: a second click on Save while its save is in flight does nothing,
+// and a save that finishes after the dialog was closed (or another record opened) leaves it alone.
+let _erSession = null;
 async function saveEditRecord() {
-  if (!_editingRecordId || _erSaving) return; // a second click while the first save is in flight
-  _erSaving = true;
-  try { await _saveEditRecord(); } finally { _erSaving = false; }
+  const s = _erSession;
+  if (!_editingRecordId || !s || s.saving) return;
+  s.saving = true;
+  try { await _saveEditRecord(s); } finally { s.saving = false; }
 }
-async function _saveEditRecord() {
+async function _saveEditRecord(s) {
   const idx = _savedSupplies.findIndex(x => x.id === _editingRecordId);
   if (idx === -1) { alert('This record was removed meanwhile (by you or a colleague) — nothing was saved.'); closeEditRecord(); return; }
   const savedId = _editingRecordId;
@@ -20457,17 +20492,24 @@ async function _saveEditRecord() {
   if (changed.indexOf('dateStr') >= 0 && (cur.supplyDate !== orig.supplyDate || cur.dateStr !== orig.dateStr)) clash.push('dateStr');
   if (clash.length && !confirm('Someone else changed ' + clash.join(', ') + ' of this record while you were editing (now: ' +
       clash.map(function(k) { return k + ' = ' + _erRecVal(cur, k); }).join(', ') + ').\n\nSave your values anyway?')) return;
-  _savedSupplies[idx] = Object.assign({}, cur, upd, { savedAt: new Date().toISOString() });
+  const saved = _savedSupplies[idx] = Object.assign({}, cur, upd, { savedAt: new Date().toISOString() });
+  // A new date or vessel name can stop an archived copy of this delivery matching it
+  // (_sameDelivery), and the reports would count that copy again: drop such copies now.
+  if ((upd.supplyDate || upd.vessel) && _dropArchivedCopies(cur)) { try { saveArchives(); } catch (e) {} }
   // The checklist row this supply was saved from keeps the same BDN numbers
-  // (the checklist Excel export reads them from there).
-  const _cr = _savedSupplies[idx].checklistUid && _checklistRecords ? _checklistRecords[_savedSupplies[idx].checklistUid] : null;
-  if (_cr) { _cr.bdnV = _savedSupplies[idx].bdnV || ''; _cr.bdnM = _savedSupplies[idx].bdnM || ''; }
+  // (the checklist Excel export reads them from there). A 'v_<vessel>' row is shared by
+  // the ship's calls: only when it is still this call's row.
+  const _cr = saved.checklistUid && _checklistRecords ? _checklistRecords[saved.checklistUid] : null;
+  if (_cr && (String(saved.checklistUid).indexOf('v_') !== 0 ||
+      _sameDelivery(Object.assign({}, _cr, { checklistUid: saved.checklistUid, supplyDate: _cr.supplyDate || _cr.lockedAt }), cur))) {
+    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || '';
+  }
   await saveSharedRecords();
-  closeEditRecord();
+  if (_erSession === s) closeEditRecord();
   renderSavedRecords();
   renderLiveROBDashboard();
   _refreshReportViews();
-  showToast('Record updated for ' + (_savedSupplies[idx].vessel || 'vessel'), 'success');
+  showToast('Record updated for ' + (saved.vessel || 'vessel'), 'success');
   setTimeout(() => {
     const row = document.getElementById(`srrow-${savedId}`);
     if (row) { row.style.transition='background .2s'; row.style.background='var(--green-lt)'; setTimeout(()=>{ row.style.background=''; },1400); }
@@ -20476,19 +20518,20 @@ async function _saveEditRecord() {
 function updateEditDiff() {
   if (!_editingRecordId) return;
   const r = _savedSupplies.find(x => x.id === _editingRecordId); if (!r) return;
-  const newV  = parseFloat(document.getElementById('er-vlsfo-act').value) || 0;
-  const newM  = parseFloat(document.getElementById('er-mgo-act').value)   || 0;
-  const newSt = document.getElementById('er-supplied').value === 'yes';
+  // Only what the user changed in this dialog (Save writes nothing else), from the record
+  // as it is now — a colleague's change synced in meanwhile is not shown as being undone.
+  const now = _erFormValues(), shown = _editingShown || now;
+  const edited = function(k) { return JSON.stringify(now[k]) !== JSON.stringify(shown[k]) && JSON.stringify(now[k]) !== JSON.stringify(_erRecVal(r, k)); };
   const diffs = [];
-  const diffV = newV - _recActQty(r, 'v');
-  const diffM = newM - _recActQty(r, 'm');
-  if (diffV !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-v);flex-shrink:0"></span><span>VLSFO: <strong>${_recActQty(r, 'v').toLocaleString()} MT</strong> → <strong style="color:var(--fuel-v)">${newV.toLocaleString()} MT</strong> <span style="color:${diffV>0?'var(--green)':'var(--red)'};font-weight:700">(${diffV>0?'+':''}${diffV.toLocaleString()} MT)</span></span></div>`);
-  if (diffM !== 0) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fuel-m);flex-shrink:0"></span><span>MGO: <strong>${_recActQty(r, 'm').toLocaleString()} MT</strong> → <strong style="color:var(--fuel-m)">${newM.toLocaleString()} MT</strong> <span style="color:${diffM>0?'var(--green)':'var(--red)'};font-weight:700">(${diffM>0?'+':''}${diffM.toLocaleString()} MT)</span></span></div>`);
-  const newBv = document.getElementById('er-bdn-v').value.trim(), newBm = document.getElementById('er-bdn-m').value.trim();
-  [['VLSFO', r.bdnV || '', newBv, 'var(--fuel-v)'], ['LSMGO', r.bdnM || '', newBm, 'var(--fuel-m)']].forEach(function(b) {
-    if (b[1] !== b[2]) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[3]};flex-shrink:0"></span><span>BDN No. (${b[0]}): <strong>${esc(b[1] || '—')}</strong> → <strong style="color:${b[3]}">${esc(b[2] || '—')}</strong></span></div>`);
+  [['vlsfoAct', 'v', 'VLSFO', 'var(--fuel-v)'], ['mgoAct', 'm', 'MGO', 'var(--fuel-m)']].forEach(function(q) {
+    if (!edited(q[0])) return;
+    const was = _recActQty(r, q[1]), to = now[q[0]], d = to - was;
+    diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${q[3]};flex-shrink:0"></span><span>${q[2]}: <strong>${was.toLocaleString()} MT</strong> → <strong style="color:${q[3]}">${to.toLocaleString()} MT</strong> <span style="color:${d>0?'var(--green)':'var(--red)'};font-weight:700">(${d>0?'+':''}${d.toLocaleString()} MT)</span></span></div>`);
   });
-  if (newSt !== r.supplied) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${newSt?'var(--green)':'var(--amber)'}">${newSt?'Completed':'Pending'}</strong></span></div>`);
+  [['bdnV', 'VLSFO', 'var(--fuel-v)'], ['bdnM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
+    if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN No. (${b[1]}): <strong>${esc(r[b[0]] || '—')}</strong> → <strong style="color:${b[2]}">${esc(now[b[0]] || '—')}</strong></span></div>`);
+  });
+  if (edited('supplied')) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${now.supplied?'var(--green)':'var(--amber)'}">${now.supplied?'Completed':'Pending'}</strong></span></div>`);
   const diffEl = document.getElementById('er-diff'), rowEl = document.getElementById('er-diff-rows');
   if (diffs.length) { diffEl.style.display='block'; rowEl.innerHTML=diffs.join(''); }
   else { diffEl.style.display='none'; rowEl.innerHTML=''; }
