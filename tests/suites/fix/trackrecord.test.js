@@ -97,6 +97,18 @@ function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + Str
   const btn = await p.evaluate(() => { showPage('checklist'); return /⚠ Dispute/.test(document.body.innerHTML.match(/cl-flag-disputed-[^"]*"[^>]*>[^<]*/) ? document.body.innerHTML.match(/cl-flag-disputed-[^"]*"[^>]*>[^<]*/)[0] : '') || typeof clToggleFlag === 'function'; });
   check(btn, 'checklist ⚠ Dispute button wired');
 
+  // ── 9. Dashboard order: the watchlist sits right under Fuel Type Distribution + Barge Fleet Status ──
+  const order = await p.evaluate(() => {
+    showPage('dashboard');
+    const top = id => { const e = document.getElementById(id); const c = e && e.closest('.chart-card'); return c ? c.getBoundingClientRect().top + window.scrollY : null; };
+    const fuel = document.getElementById('chart-fuel-dist-distributed').closest('.chart-card'), fleet = document.getElementById('dash-fleet-status').closest('.chart-card');
+    const wl = document.getElementById('dash-track-record-watchlist').closest('.chart-card'), monthly = document.getElementById('dash-monthly-qty-title').closest('.chart-card');
+    const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const r = e => e.getBoundingClientRect();
+    return { domOrder: after(fuel, wl) && after(fleet, wl) && after(wl, monthly), below: r(wl).top >= Math.max(r(fuel).bottom, r(fleet).bottom) - 1, sameRow: fuel.parentElement === fleet.parentElement && wl.parentElement === fuel.parentElement.parentElement && wl.previousElementSibling === fuel.parentElement };
+  });
+  check(order.domOrder && order.below && order.sameRow, 'Dashboard: Track Record Watchlist comes right after the Fuel Type Distribution / Barge Fleet Status row, before Monthly Quantity ' + JSON.stringify(order));
+
   const errs = realErrors(app);
   check(errs.length === 0, 'no page errors ' + JSON.stringify(errs.slice(0, 5)));
   await browser.close();
