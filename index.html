@@ -1491,6 +1491,8 @@ html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6p
 .dash-row-2col{display:flex;flex-wrap:wrap;gap:14px}
 .dash-row-2col > :first-child{flex:2 1 420px;min-width:0}
 .dash-row-2col > :last-child{flex:1 1 300px;min-width:0}
+.dash-side-stack{display:flex;flex-direction:column;gap:14px;min-width:0}
+.dash-side-stack > .chart-card{margin:0}
 @media(max-width:700px){.g3{grid-template-columns:1fr 1fr}.kpi-grid-3{grid-template-columns:1fr 1fr}.nsc-grid{grid-template-columns:1fr 1fr}.ap-grid{grid-template-columns:1fr}.tlm{grid-template-columns:1fr 1fr 1fr}}
 @media(max-width:768px){
   .sidebar{display:none;position:fixed;top:var(--header-h);left:0;z-index:350;height:calc(100vh - var(--header-h));width:248px;box-shadow:var(--sh-lg)}
@@ -3138,19 +3140,34 @@ function flowWelcomeGo(pageId) {
       <div id="week-calendar" style="min-height:220px"></div>
       <div id="free-windows-panel" style="display:none;margin-top:14px"></div>
     </div>
-    <div class="chart-card" style="display:flex;flex-direction:column">
-      <div class="chart-title">Barge Fleet Status</div>
-      <div class="chart-subtitle" style="margin-bottom:10px">Live ROB &amp; availability</div>
-      <div id="dash-fleet-status" style="flex:1">
-        <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
+    <!-- Right column: Barge Fleet Status only as tall as its barges, Operational Activity
+         right under it taking the rest of the height beside the calendar. -->
+    <div class="dash-side-stack">
+      <div class="chart-card" style="flex:0 0 auto">
+        <div class="chart-title">Barge Fleet Status</div>
+        <div class="chart-subtitle" style="margin-bottom:10px">Live ROB &amp; availability</div>
+        <div id="dash-fleet-status">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
+        </div>
+      </div>
+      <div class="chart-card" style="display:flex;flex-direction:column;flex:1 1 auto">
+        <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
+        <!-- The feed fills whatever height is left under Barge Fleet Status (beside the taller
+             Weekly Planned Supply calendar) and scrolls inside it, instead of stopping at a
+             fixed height and leaving a blank gap. The absolute inner box keeps the feed's own
+             length from stretching the row; min-height covers the single-column (mobile) layout. -->
+        <div style="position:relative;flex:1;min-height:280px">
+          <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
+            <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Dashboard 2-col: Fuel type distribution + Operational activity -->
-  <div class="dash-row-2col">
-    <div class="chart-card">
-      <div class="chart-title">Fuel Type Distribution</div>
+  <!-- Fuel type distribution -->
+  <div class="chart-card">
+    <div class="chart-title">Fuel Type Distribution</div>
       <div class="chart-subtitle">VLSFO vs LSMGO — this month's distributed vs planned (ROB-adjusted) quantities</div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;flex:1">
         <div style="display:flex;flex-direction:column;min-width:0">
@@ -3163,20 +3180,6 @@ function flowWelcomeGo(pageId) {
         </div>
       </div>
     </div>
-    <div class="chart-card" style="display:flex;flex-direction:column">
-      <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
-      <!-- The feed fills whatever height the row gives this card (it sits next
-           to the taller Fuel Type Distribution card) and scrolls inside it,
-           instead of stopping at a fixed 280px and leaving a blank gap. The
-           absolute inner box keeps the feed's own length from stretching the
-           row; min-height covers the single-column (mobile) layout. -->
-      <div style="position:relative;flex:1;min-height:280px">
-        <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
-          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
-        </div>
-      </div>
-    </div>
-  </div>
 
   <!-- Track Record Watchlist — the standing, passive version of Counterparty
        Track Record Intelligence. The per-nomination banner only shows when
