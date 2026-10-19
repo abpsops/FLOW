@@ -7756,7 +7756,7 @@ function _applyPayload(payload, replaceUnions) {
   try { localStorage.setItem(LS_RECORDS_KEY, JSON.stringify(_savedSupplies)); } catch(e) {}
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
   if (typeof _refreshReportViews === 'function') _refreshReportViews(); // a colleague's record edits reach the reports on screen
-  if (typeof _refreshBargeColours === 'function' && JSON.stringify(Array.from(_bargeColorMap())) !== coloursBefore) _refreshBargeColours(); // …and a colleague's barge colour
+  if (typeof _refreshBargeColours === 'function' && coloursBefore !== '[]' && JSON.stringify(Array.from(_bargeColorMap())) !== coloursBefore) _refreshBargeColours(); // …and a colleague's barge colour (not the first load)
   if (typeof renderTrashBin === 'function') renderTrashBin();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
@@ -22178,14 +22178,17 @@ function _paintBargeCard(id) {
   if (st) { card.setAttribute('data-bc', '1'); card.setAttribute('style', 'margin-top:10px;' + st); }
   card.querySelectorAll('.bg-sw').forEach(function(sw) { sw.classList.toggle('on', sw.getAttribute('data-k') === inp.value); });
 }
-// Every screen that shows a barge follows a colour change.
+// The screen showing barges follows a colour change (the others redraw when opened). Only the page
+// being looked at is redrawn, so a colour change never builds views — or the ROB engine's barge
+// configuration — that nobody has opened yet.
 function _refreshBargeColours() {
   const run = function(f) { try { f(); } catch (e) {} };
-  run(function() { if (_lastSched && _lastSched.length) { let br = getBarges(); if (!br.length) br = (_bargeConfig || []).map(function(b) { return { id: b.id, name: b.name }; }); renderBargeTabsAndTL(_lastSched, br); } });
-  run(renderDashFleetStatus);
-  run(renderLiveROBDashboard);
-  run(renderSavedRecords);
-  run(function() { renderChecklist(null); }); // null: re-draw only — nothing is injected into the checklist
+  const pg = (typeof _currentPage !== 'undefined') ? _currentPage : '';
+  if (pg === 'timeline' || pg === 'schedule') run(function() { if (_lastSched && _lastSched.length) { let br = getBarges(); if (!br.length) br = (_bargeConfig || []).map(function(b) { return { id: b.id, name: b.name }; }); renderBargeTabsAndTL(_lastSched, br); } });
+  if (pg === 'dashboard') run(renderDashFleetStatus);
+  if (pg === 'bargefleet') run(function() { if (_bargeConfig && _bargeConfig.length) renderLiveROBDashboard(); });
+  if (pg === 'records') run(renderSavedRecords);
+  if (pg === 'checklist') run(function() { renderChecklist(null); }); // null: re-draw only — nothing is injected into the checklist
   run(_refreshReportViews);
 }
 function getBarges() {
