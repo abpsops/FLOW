@@ -1314,6 +1314,17 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .barge-card[data-bc]{border-left:5px solid var(--bc)}
 @media print{.bg-dot{display:none!important}.barge-tl-tab[data-bc]::before{display:none!important}}
 html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6px 0 0 var(--bc),var(--hl-shadow)}
+.bg-pill{display:inline-flex;align-items:center;gap:5px;max-width:100%;padding:1px 6px;border-radius:3px;border:1px solid var(--bc);background:var(--bc-lt);color:var(--bc);font-weight:800;font-size:8.5px;font-family:'DM Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;vertical-align:middle}
+.bg-pill .bg-dot{margin-right:0}
+.bg-pill.none{border-color:var(--border);background:var(--surface2);color:var(--muted);font-weight:600}
+.bg-pill.sm{padding:1px 4px;gap:0}
+.bg-pill.sm .bg-dot{display:none}
+.cal-vcard .bg-pill,.cal-ticket-loading .bg-pill{white-space:normal;line-height:1.25;word-break:break-word}
+.bg-pill.on-fill{background:var(--surface)}
+.bg-pill.on-fill.none{background:var(--surface);color:var(--sub)}
+.cal-vcard[data-bc]{box-shadow:inset -3px 0 0 var(--bc)}
+.cal-vcard[data-bc]:hover{box-shadow:inset -3px 0 0 var(--bc),var(--sh-xs)}
+@media print{.bg-pill{border-color:#999!important;background:#fff!important;color:#000!important}.bg-pill .bg-dot{display:none!important}}
 .bg-sw-row{display:inline-flex;gap:5px;align-items:center;margin-right:4px}
 .bg-sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;background:var(--bc);cursor:pointer;padding:0;box-shadow:0 0 0 1px var(--border)}
 .bg-sw:hover{transform:scale(1.15)}
@@ -5491,7 +5502,7 @@ function renderDashFuelingStatus() {
 function renderDashFleetStatus() {
   const el = document.getElementById('dash-fleet-status');
   if (!el) return;
-  const barges = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const barges = _fleetNow();
   if (!barges.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>';
     return;
@@ -5547,7 +5558,7 @@ function renderDashActivity(records, vessels) {
       items.push({
         color,
         title: `Loading Scheduled — ${r.grade}`,
-        detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
+        detail: `${r.terminal} — ${r.qty.toLocaleString()} MT ${r.grade} · ${_resolveRecordBargeName(r)}${r.surveyor ? ' · Surveyor: ' + r.surveyor : ''} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
         time: dateLbl + ' ' + (ldWin || t),
         onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
       });
@@ -5820,7 +5831,7 @@ function refreshReports() {
 function _resolveRecordBargeName(r) {
   const direct = (r.barge || r.bargeLabel || '').toString().trim();
   if (direct) return direct;
-  const fleet = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const fleet = _fleetNow();
   if (fleet.length === 1 && fleet[0].name) return fleet[0].name;
   return 'Unassigned';
 }
@@ -8737,6 +8748,7 @@ function renderLoadingList() {
   if (!sorted.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center">No loadings scheduled yet — add one above.</div>';
   } else {
+    const ldMap = _bargeColorMap();
     el.innerHTML = sorted.map(function(r) {
       const start = new Date(r.startAt), end = new Date(r.endAt);
       const gradeColor = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
@@ -8768,6 +8780,7 @@ function renderLoadingList() {
           + '</button>';
       return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;' + doneStyle + '">'
         + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
+        + _bargePill(_resolveRecordBargeName(r), ldMap)
         + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + esc(r.terminal || '—') + '</div>'
@@ -9060,7 +9073,7 @@ function _dismissTrackingReportAlerts() {
 function _populateLoadingBargeSelect() {
   const sel = document.getElementById('ld-barge');
   if (!sel) return;
-  const fleet = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const fleet = _fleetNow();
   const prev = sel.value;
   sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
   if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
@@ -14432,7 +14445,7 @@ function buildTL(items, containerId, loadingsForBarge) {
       ld.className = 'tli';
       ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--amber)"></div><div class="tll"></div></div>
       <div class="tlc" style="border-color:var(--amber-bd);background:var(--amber-lt)">
-        <div class="tlch"><div class="tlvn">Loading — ${esc(rec.terminal)}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${esc(rec.grade)}</span></div></div>
+        <div class="tlch"><div class="tlvn">Loading — ${esc(rec.terminal)}</div><div class="br"><span class="tb" style="background:${gradeColorBg};color:${gradeColor};border:1px solid var(--amber-bd)">${esc(rec.grade)}</span>${_bargePill(_resolveRecordBargeName(rec), cmap)}</div></div>
         <div class="tlm">
           <div class="tmi"><label>Loading Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Loading End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
@@ -21558,6 +21571,7 @@ function renderWeekCalendar(offsetDays) {
   // Build HTML — 7 columns, ruled like a spec table rather than soft cards
   let colsHtml = '';
   let totalV7=0, totalM7=0, totalOps7=0;
+  const calMap = _bargeColorMap();
 
   days.forEach((day, dayIdx) => {
     const isToday = day.toDateString() === new Date().toDateString();
@@ -21652,7 +21666,7 @@ function renderWeekCalendar(offsetDays) {
                 box-sizing:border-box;
                 cursor:pointer;
                 transition:filter .12s, transform .12s;
-              " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="${esc(r.terminal)} — ${esc(r.grade)} ${r.qty.toLocaleString()} MT&#10;${ldWin ? 'Start ' + _etaFrame(r.startWin).code + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+esc(r.surveyor):''}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+              " class="cal-ticket-clickable cal-ticket-loading" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="${esc(r.terminal)} — ${esc(r.grade)} ${r.qty.toLocaleString()} MT&#10;Barge: ${esc(_resolveRecordBargeName(r))}&#10;${ldWin ? 'Start ' + _etaFrame(r.startWin).code + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.surveyor?'&#10;Surveyor: '+esc(r.surveyor):''}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
                 <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                   <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${ldWin || fmt(start)}</span>
                   <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">LOAD · ${esc(r.grade)}</span>
@@ -21662,6 +21676,7 @@ function renderWeekCalendar(offsetDays) {
                   <span style="color:#fff">${esc(r.grade)}&nbsp;${r.qty.toLocaleString()}</span>
                 </div>
                 <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
+                  <div>${_bargePill(_resolveRecordBargeName(r), calMap, 'on-fill sm')}</div>
                   <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
                   ${r.surveyor?`<div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;white-space:normal;word-break:break-word;overflow-wrap:break-word;line-height:1.35;font-family:'DM Mono',monospace">Surveyor: ${esc(r.surveyor)}</div>`:''}
                 </div>
@@ -21682,7 +21697,8 @@ function renderWeekCalendar(offsetDays) {
             const loc = item.area || item.anchorage || item.location || '';
             const barge = item.bargeLabel || '';
             const hasSno = item.sno !== undefined && item.sno !== null;
-            return `<div style="
+            const calBst = barge ? _bargeStyle(barge, calMap) : '';
+            return `<div ${calBst ? 'data-bc="1" data-bgn="' + esc(String(barge).trim()) + '"' : ''} style="${calBst}${calBst ? ';' : ''}
               background:var(--bg);
               border:1px solid var(--border);
               border-left:3px solid ${gc.border};
@@ -21692,7 +21708,7 @@ function renderWeekCalendar(offsetDays) {
               box-sizing:border-box;
               ${hasSno?'cursor:pointer':'cursor:default'};
               transition:border-color .12s, transform .12s;
-            " class="${hasSno?'cal-ticket-clickable':''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${(item.etaWin && _etaFrame(item.etaWin)) ? etaTime + ' ' + _etaFrameHours(item.etaWin) + ' (time frame)' : etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
+            " class="${hasSno?'cal-ticket-clickable ':''}cal-vcard" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${(item.etaWin && _etaFrame(item.etaWin)) ? etaTime + ' ' + _etaFrameHours(item.etaWin) + ' (time frame)' : etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
               <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                 <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
                 ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:item.isEarly?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--teal);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">BEFORE LAYCAN</span>`:''}
@@ -21704,7 +21720,7 @@ function renderWeekCalendar(offsetDays) {
                 ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${esc(_nomQtyTxt(item,'M',calNomM))}</span>`:''}
               </div>
               ${barge||loc?`<div style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border2);display:flex;flex-direction:column;gap:2px">
-                ${barge?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_BARGE}${esc(barge)}</div>`:''}
+                ${barge?`<div>${_bargePill(barge, calMap, 'sm')}</div>`:''}
                 ${loc?`<div style="font-size:8.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_PIN}${esc(loc)}</div>`:''}
               </div>`:''}
             </div>`;
@@ -22163,6 +22179,18 @@ function _bargeStyle(name, map) { return _bargeVars((map || _bargeColorMap()).ge
 function _bargeAttrs(name, map) { const st = _bargeStyle(name, map); return st ? ' data-bc="1" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"' : ''; }
 // a small coloured dot before a barge name in lists and tables
 function _bargeDot(name, map) { const st = _bargeStyle(name, map); return st ? '<span class="bg-dot" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"></span>' : ''; }
+// The fleet as configured right now: the ROB engine's copy once the schedule has been generated,
+// before that the barge cards (the `_barges` entries only carry ids — no names).
+function _fleetNow() { return (_bargeConfig && _bargeConfig.length) ? _bargeConfig : getBarges(); }
+// A pill with the barge's name in its colour, for cards that must say WHICH barge. A barge that is not
+// on a card here keeps a plain pill, and a record with no barge says so.
+function _bargePill(name, map, cls) {
+  const nm = String(name == null ? '' : name).trim(), c = cls ? ' ' + cls : '';
+  if (!nm || nm === 'Unassigned') return '<span class="bg-pill none' + c + '">No barge</span>';
+  const st = _bargeStyle(nm, map);
+  return st ? '<span class="bg-pill' + c + '" data-bc="1" data-bgn="' + esc(nm) + '" style="' + st + '"><span class="bg-dot"></span>' + esc(nm) + '</span>'
+            : '<span class="bg-pill none' + c + '">' + esc(nm) + '</span>';
+}
 function setBargeColor(id, key) {
   if (!_bargeKeyOk(key)) return;
   const inp = document.getElementById('b' + id + '-color'); if (!inp) return;

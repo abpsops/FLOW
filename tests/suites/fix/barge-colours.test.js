@@ -225,6 +225,64 @@ const colours = p => p.evaluate(() => captureCurrentState().barges.map(b => [b.n
     check('the PDF table has no barge dots', r.pdf && r.pdf.dots === 0 && r.pdf.coloured === 0, r);
   }, /stop|Could not/);
 
+  /* 11 — the Dashboard's weekly calendar, the Loading page and loading cards say which barge */
+  await scenario('C11 calendar and loading cards name and colour their barge', async (openT) => {
+    const iso = h => new Date(Date.now() + h * 3600000).toISOString();
+    const seed = seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11')]);
+    seed.state.vessels = [V('n1', 'ALPHA', 'VLSFO', 300, 0, 3, '1'), V('n2', 'BRAVO', 'MGO', 0, 200, 4, '2')];
+    seed.state.loadingRecords = [
+      { id: 'l1', barge: 'FNSA 10', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 3840, startAt: iso(1), endAt: iso(7), surveyor: 'INTERTEK', notes: '' },
+      { id: 'l2', barge: 'FNSA 11', terminal: 'GPS CHEMOIL TERMINAL', grade: 'LSMGO', qty: 1000, startAt: iso(2), endAt: iso(8), surveyor: 'SAYBOLT', notes: '' },
+      { id: 'l3', barge: '', terminal: 'FOTT (ECOMAR)', grade: 'LSMGO', qty: 900, startAt: iso(3), endAt: iso(9), surveyor: '', notes: '' },
+    ];
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const A = await openT(db);
+    await A.page.evaluate(() => { calculate(); });
+    await sleep(1200);
+    const probe = () => A.page.evaluate(() => {
+      showPage('dashboard'); try { refreshDashboard(); } catch (e) {}
+      const txt = e => e.textContent.replace(/\s+/g, ' ').trim();
+      const vessels = [...document.querySelectorAll('.cal-vcard')].map(c => [c.querySelector('.bg-pill') ? txt(c.querySelector('.bg-pill')) : null, c.getAttribute('style') || '']);
+      const loads = [...document.querySelectorAll('.cal-ticket-loading')].map(c => [txt(c.querySelector('.bg-pill') || c), (c.querySelector('.bg-pill') || c).getAttribute('style') || '', txt(c).indexOf('VOPAK') >= 0 ? 'vopak' : txt(c).indexOf('GPS') >= 0 ? 'gps' : 'fott']);
+      showPage('loading');
+      const rows = [...document.querySelectorAll('#loading-list .bg-pill, #page-loading .card .bg-pill')].map(txt);
+      showPage('timeline');
+      const tlLoad = [...document.querySelectorAll('#tl .tlc .bg-pill')].map(txt);
+      showPage('dashboard');
+      const feed = [...document.querySelectorAll('#dash-activity-feed')].map(txt).join(' ');
+      return { vessels, loads, rows, tlLoad, feed };
+    });
+    let r = await probe();
+    check('weekly calendar: each vessel card has its barge pill and colour edge', r.vessels.length === 2 && r.vessels.every(v => /^FNSA 1[01]$/.test(v[0]) && /--barge-/.test(v[1])) && r.vessels.some(v => v[0] === 'FNSA 10' && /--barge-1/.test(v[1])) && r.vessels.some(v => v[0] === 'FNSA 11' && /--barge-2/.test(v[1])), r.vessels);
+    check('weekly calendar: each loading card says which barge — and "No barge" when none is set', r.loads.length === 3 && r.loads.find(l => l[2] === 'vopak')[0] === 'FNSA 10' && r.loads.find(l => l[2] === 'gps')[0] === 'FNSA 11' && r.loads.find(l => l[2] === 'fott')[0] === 'No barge' && /--barge-2/.test(r.loads.find(l => l[2] === 'gps')[1]), r.loads);
+    check('Loading page rows, the loading entries on the Supply Timeline and the dashboard activity feed name the barge too', ['FNSA 10', 'FNSA 11', 'No barge'].every(n => r.rows.includes(n)) && r.tlLoad.some(t => /FNSA 1[01]/.test(t)) && /VOPAK TERMINAL[^|]*FNSA 10/.test(r.feed) && /GPS CHEMOIL TERMINAL[^|]*FNSA 11/.test(r.feed), r);
+    await A.page.evaluate(() => setBargeColor(2, 'olive'));
+    r = await probe();
+    check('picking olive recolours the calendar cards in place', r.vessels.find(v => v[0] === 'FNSA 11')[1].indexOf('--barge-4') >= 0 && r.loads.find(l => l[2] === 'gps')[1].indexOf('--barge-4') >= 0, r);
+  });
+
+  /* 12 — a single-barge fleet, before the schedule has been generated */
+  await scenario('C12 a loading with no barge on a one-barge fleet names that barge straight away', async (openT) => {
+    const iso = h => new Date(Date.now() + h * 3600000).toISOString();
+    const seed = seedOf([BARGE(1, 'FNSA 10')]);
+    seed.state.loadingRecords = [{ id: 'l1', barge: '', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 3840, startAt: iso(1), endAt: iso(7), surveyor: '', notes: '' }];
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const A = await openT(db);
+    await sleep(800);
+    const r = await A.page.evaluate(() => {
+      const out = { cfg: (_bargeConfig || []).length };
+      showPage('dashboard'); try { refreshDashboard(); } catch (e) {}
+      out.cal = [...document.querySelectorAll('.cal-ticket-loading .bg-pill')].map(e => e.textContent.replace(/\s+/g, ' ').trim());
+      out.fleet = [...document.querySelectorAll('#dash-fleet-status .fs-name')].map(e => e.textContent.trim());
+      out.feed = document.getElementById('dash-activity-feed').textContent.replace(/\s+/g, ' ');
+      showPage('loading');
+      out.row = [...document.querySelectorAll('#page-loading .card .bg-pill')].map(e => e.textContent.trim());
+      out.select = [...document.querySelectorAll('#ld-barge option')].map(o => o.value);
+      return out;
+    });
+    check('before Generate: the calendar card, fleet row, Loading row and form all say FNSA 10 (not "No barge" / "Unassigned")', r.cfg === 0 && r.cal[0] === 'FNSA 10' && r.fleet[0] === 'FNSA 10' && r.row[0] === 'FNSA 10' && r.select[0] === 'FNSA 10' && /FNSA 10/.test(r.feed) && !/Unassigned/.test(r.feed), r);
+  });
+
   await browser.close();
   console.log('BARGE-COLOURS: ' + pass + ' passed, ' + fail + ' failed');
   process.exitCode = fail ? 1 : 0;
