@@ -225,6 +225,13 @@ function _chartTextColor() {
   --fuel-m-lt: #FAEEE1;
   --fuel-m-bd: #E4B98C;
 
+  /* ── Barge identity colours — one per barge, never used for fuel or status ── */
+  --barge-1: #7C4DDB;  --barge-1-lt: #F0EAFB;   /* violet */
+  --barge-2: #D6336C;  --barge-2-lt: #FCE8EF;   /* pink   */
+  --barge-3: #52667A;  --barge-3-lt: #ECEFF3;   /* slate  */
+  --barge-4: #7A8B1F;  --barge-4-lt: #F1F4DF;   /* olive  */
+  --barge-5: #8D5B3A;  --barge-5-lt: #F5ECE4;   /* brown  */
+
   /* ── Playbook page colours — curated, harmonious family, one per heading ── */
   --pg-dashboard:    #0F6B5C;
   --pg-nominations:  #2E7A50;
@@ -335,6 +342,12 @@ html[data-theme="dark"] {
   --fuel-m:    #E29A5A;
   --fuel-m-lt: rgba(226,154,90,.15);
   --fuel-m-bd: rgba(226,154,90,.38);
+
+  --barge-1: #A98BF0;  --barge-1-lt: rgba(169,139,240,.16);
+  --barge-2: #F0759E;  --barge-2-lt: rgba(240,117,158,.16);
+  --barge-3: #9FB1C4;  --barge-3-lt: rgba(159,177,196,.16);
+  --barge-4: #B4C34D;  --barge-4-lt: rgba(180,195,77,.16);
+  --barge-5: #C99A76;  --barge-5-lt: rgba(201,154,118,.16);
 
   --bg:        #0A101C;
   --surface:   #10192A;
@@ -1287,6 +1300,24 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .barge-tl-tab{padding:8px 14px;font-size:11.5px;font-weight:600;cursor:pointer;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-1px;transition:all .12s;background:none;border-top:none;border-left:none;border-right:none;font-family:DM Sans,sans-serif}
 .barge-tl-tab.active{color:var(--azure);border-bottom-color:var(--azure)}
 .barge-tl-tab:hover:not(.active){color:var(--ink);background:var(--surface2)}
+/* Barge identity colour (--bc / --bc-lt are set inline from the barge's palette key) */
+.bg-dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bc,var(--muted));margin-right:6px;vertical-align:baseline;flex-shrink:0}
+.barge-tl-tab[data-bc]::before{content:"";display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--bc);margin-right:7px}
+.barge-tl-tab[data-bc].active{color:var(--bc);border-bottom-color:var(--bc)}
+.tli[data-bc] .tlc{box-shadow:inset 6px 0 0 var(--bc),var(--sh-xs)}
+.tli[data-bc] .tlc:hover{box-shadow:inset 6px 0 0 var(--bc),var(--sh-sm)}
+.tli[data-bc] .tll{background:var(--bc);opacity:.45;width:2px}
+.tb.tb-bg{background:var(--bc-lt);color:var(--bc);border:1px solid var(--bc);font-weight:800}
+.fs-row[data-bc]{border-left:5px solid var(--bc);padding-left:12px!important;background:linear-gradient(90deg,var(--bc-lt),transparent 60%)}
+.fs-row[data-bc] .fs-name{color:var(--bc)}
+.rob-card[data-bc]{box-shadow:inset 5px 0 0 var(--bc),var(--sh-sm)!important}
+.barge-card[data-bc]{border-left:5px solid var(--bc)}
+@media print{.bg-dot{display:none!important}.barge-tl-tab[data-bc]::before{display:none!important}}
+html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6px 0 0 var(--bc),var(--hl-shadow)}
+.bg-sw-row{display:inline-flex;gap:5px;align-items:center;margin-right:4px}
+.bg-sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;background:var(--bc);cursor:pointer;padding:0;box-shadow:0 0 0 1px var(--border)}
+.bg-sw:hover{transform:scale(1.15)}
+.bg-sw.on{border-color:var(--surface);box-shadow:0 0 0 2px var(--bc)}
 
 /* ════════════════════════════════════════
    VOYAGE TABLE
@@ -1468,7 +1499,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
   @page{size:A4 landscape;margin:10mm 8mm}
   /* Paper is white: print with the light-theme tokens even when the screen
      is in dark mode (mirrors :root — keep in sync if those values change). */
-  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
+  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
   body>*{display:none!important}
   #print-only-container{display:block!important;position:static!important;width:100%!important}
   #print-only-container *{display:revert}
@@ -1825,6 +1856,13 @@ html[data-skin="harbour"] .barge-tl-tabs{background:transparent;border-bottom:0;
 html[data-skin="harbour"] .barge-tl-tab{color:#33475F;font-weight:700;border:0;border-radius:999px;padding:9px 16px;margin:0;background:#FFFFFF;box-shadow:var(--hl-shadow)}
 html[data-skin="harbour"] .barge-tl-tab.active{color:#FFFFFF;background:#0B2545}
 html[data-skin="harbour"] .barge-tl-tab:hover:not(.active){background:#FFFFFF;color:#0B2545}
+html[data-skin="harbour"] .barge-tl-tab[data-bc].active{color:#FFFFFF;background:var(--bc)}
+html[data-skin="harbour"] .barge-tl-tab[data-bc].active::before{background:#FFFFFF}
+/* Harbour draws a ROB / delay alert as a 3px inset edge on the card: keep it outermost, the barge colour right inside it */
+html[data-skin="harbour"] .tli[data-bc] .tlc{box-shadow:inset 6px 0 0 var(--bc),var(--hl-shadow)}
+html[data-skin="harbour"] .tli[data-bc] .tlc:hover{box-shadow:inset 6px 0 0 var(--bc),var(--hl-shadow-up)}
+html[data-skin="harbour"] .tli[data-bc] .tlc:is(.wv,.wvm){box-shadow:inset 3px 0 0 #C0392B,inset 9px 0 0 var(--bc),var(--hl-shadow)}
+html[data-skin="harbour"] .tli[data-bc] .tlc:is(.wm,.del){box-shadow:inset 3px 0 0 #F0A433,inset 9px 0 0 var(--bc),var(--hl-shadow)}
 html[data-skin="harbour"] .legend{border-radius:14px;padding:10px 16px}
 html[data-skin="harbour"] .nsc-result{border-radius:18px;padding:16px}
 
@@ -5459,6 +5497,7 @@ function renderDashFleetStatus() {
     return;
   }
   const liveROBs = (typeof getAllLiveROBs === 'function') ? getAllLiveROBs() : {};
+  const cmapF = _bargeColorMap();
   el.innerHTML = barges.map(b => {
     const live = liveROBs[b.id];
     const v = live ? live.liveV : (parseFloat(b.vrob) || parseFloat(b.robV) || 0);
@@ -5468,9 +5507,9 @@ function renderDashFleetStatus() {
     const pctM = Math.min(100, Math.round(m / (cap * 0.3) * 100));
     const statusClass = pctV < 20 ? 'badge-red' : pctV < 40 ? 'badge-amber' : 'badge-green';
     const statusLabel = pctV < 20 ? 'Refill' : pctV < 40 ? 'Low' : 'Available';
-    return `<div style="padding:10px 0;border-bottom:1px solid var(--border2)">
+    return `<div class="fs-row"${_bargeAttrs(b.name, cmapF).replace(' style="', ' style="padding:10px 0;border-bottom:1px solid var(--border2);') || ' style="padding:10px 0;border-bottom:1px solid var(--border2)"'}>
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="font-size:12px;font-weight:700;color:var(--ink)">${esc(b.name||('Barge '+(b.id||'')))}</div>
+        <div class="fs-name" style="font-size:12px;font-weight:700;color:var(--ink)">${_bargeDot(b.name, cmapF)}${esc(b.name||('Barge '+(b.id||'')))}</div>
         <span class="badge ${statusClass}" style="font-size:9.5px">${statusLabel}</span>
       </div>
       <div class="progress-bar-wrap">
@@ -7682,6 +7721,7 @@ function _applyPayload(payload, replaceUnions) {
   if (!payload || !payload.state) return;
   const st = payload.state;
   const focus = _snapshotFocus();
+  const coloursBefore = JSON.stringify(Array.from(_bargeColorMap()));
   if (replaceUnions) {
     if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof _collapseArchiveCopies === 'function') _collapseArchiveCopies(); if (typeof saveArchives === 'function') saveArchives(); }
     if (Array.isArray(st.agents)) {
@@ -7716,6 +7756,7 @@ function _applyPayload(payload, replaceUnions) {
   try { localStorage.setItem(LS_RECORDS_KEY, JSON.stringify(_savedSupplies)); } catch(e) {}
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
   if (typeof _refreshReportViews === 'function') _refreshReportViews(); // a colleague's record edits reach the reports on screen
+  if (typeof _refreshBargeColours === 'function' && coloursBefore !== '[]' && JSON.stringify(Array.from(_bargeColorMap())) !== coloursBefore) _refreshBargeColours(); // …and a colleague's barge colour (not the first load)
   if (typeof renderTrashBin === 'function') renderTrashBin();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
@@ -9336,6 +9377,7 @@ function captureCurrentState() {
       // Refill rates were never captured, so they reset to 750/275 on reload.
       vrfr: parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,
       mrfr: parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,
+      color: (document.getElementById(`b${id}-color`)?.value)||'',
     });
   });
   // Reload events only for barges that still exist — a removed barge's
@@ -9423,6 +9465,14 @@ function _guardAgainstZeroROBReset(incomingBarges, incomingVersion) {
 function applyState(state, trusted) {
   if (!state) return;
 
+  // The colours on screen now, by barge id + name: a state without a colour for a barge (saved
+  // by an older build, which doesn't know colours) must not reset what was picked here.
+  const prevBargeColours = new Map();
+  (_barges || []).forEach(function(b) {
+    const k = (document.getElementById('b' + b.id + '-color') || {}).value;
+    if (_bargeKeyOk(k)) prevBargeColours.set(String(b.id) + '|' + String((document.getElementById('b' + b.id + '-name') || {}).value || '').trim(), k);
+  });
+
   // Clear current UI
   document.getElementById('vc').innerHTML = '';
   document.getElementById('barge-list').innerHTML = '';
@@ -9437,11 +9487,16 @@ function applyState(state, trusted) {
     // (A merge's version is the remote row's, older than this device's last save: the
     // guard would put back the stock of a barge a supply in the merge just emptied.)
     const guardedBarges = trusted ? state.barges : _guardAgainstZeroROBReset(state.barges, state.version);
+    const keptColour = function(b) { return !_bargeKeyOk(b && b.color) ? prevBargeColours.get(String(b && b.id) + '|' + String((b && b.name) || '').trim()) : undefined; };
+    _bargeColorReserve = new Set(guardedBarges.map(function(b) { return _bargeKeyOk(b && b.color) ? b.color : keptColour(b); }).filter(_bargeKeyOk)); // defaults avoid colours the state already assigns
+    try {
     guardedBarges.forEach(b => {
       // Backward compat: old saves had single 'buf' field
       if (b.buf !== undefined && b.vbuf === undefined) { b.vbuf = b.buf; b.mbuf = Math.round(b.buf * 0.3); }
-      addBarge(b);
+      const kc = keptColour(b);
+      addBarge(kc ? Object.assign({}, b, { color: kc }) : b);
     });
+    } finally { _bargeColorReserve = null; }
     if (guardedBarges.some(function(b){ return b._robGuardApplied; })) {
       console.warn('ABPS: prevented a zero-ROB reset on reload for one or more barges — restored from local cache instead.');
     }
@@ -9914,6 +9969,7 @@ function renderLiveROBDashboard() {
   }
 
   const liveROBs = getAllLiveROBs();
+  const robMap = _bargeColorMap();
   let html = '';
 
   Object.values(liveROBs).forEach(function(rob) {
@@ -9932,13 +9988,14 @@ function renderLiveROBDashboard() {
     const vRefillHrs = (b.vrfr||750) > 0 ? vUllage / (b.vrfr||750) : 0;
     const mRefillHrs = (b.mrfr||275) > 0 ? mUllage / (b.mrfr||275) : 0;
 
-    html += '<div style="background:var(--surface);border:none;border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--sh-sm);position:relative;overflow:hidden">' +
+    const robBc = _bargeStyle(rob.bargeName, robMap);
+    html += '<div class="rob-card"' + (robBc ? ' data-bc="1" data-bgn="' + esc(String(rob.bargeName).trim()) + '"' : '') + ' style="' + robBc + (robBc ? ';' : '') + 'background:var(--surface);border:none;border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--sh-sm);position:relative;overflow:hidden">' +
       '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--azure),var(--teal))"></div>' +
 
       // Header
       '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--border2);flex-wrap:wrap;gap:8px">' +
       '<div style="display:flex;align-items:center;gap:10px">' +
-      '<div style="width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--azure),var(--teal))"></div>' +
+      '<div style="width:10px;height:10px;border-radius:50%;background:' + (robBc ? 'var(--bc)' : 'linear-gradient(135deg,var(--azure),var(--teal))') + '"></div>' +
       '<div style="font-size:14px;font-weight:700;color:var(--ink);font-family:DM Sans,sans-serif;display:flex;align-items:center;gap:8px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 2a4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1 4-4m0 8v12m-6-6l6 6 6-6"/></svg>' + esc(rob.bargeName) + '</div>' +
       (hasManual ? '<span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple-bd)">Manual Override Active</span>' : '') +
       '</div>' +
@@ -11102,6 +11159,11 @@ async function downloadVoyageSchedulePNG() {
   const pdfBtns = Array.from(card.querySelectorAll('button[onclick^="downloadBargePDF"]'));
   const pdfBtnOrigDisplay = pdfBtns.map(b => b.style.display);
   pdfBtns.forEach(b => { b.style.display = 'none'; });
+  // The barge colours are for the screen: the image keeps the plain tabs and names.
+  const bcEls = Array.from(card.querySelectorAll('[data-bc]'));
+  bcEls.forEach(e => e.removeAttribute('data-bc'));
+  const bcDots = Array.from(card.querySelectorAll('.bg-dot'));
+  bcDots.forEach(d => { d.style.display = 'none'; });
 
   const origLabel = btn ? btn.innerHTML : '';
   if (btn) {
@@ -11172,6 +11234,8 @@ async function downloadVoyageSchedulePNG() {
     hiddenRows.forEach(row => { row.style.display = ''; });
     hiddenCells.forEach(cell => { cell.style.display = ''; });
     pdfBtns.forEach((b, i) => { b.style.display = pdfBtnOrigDisplay[i]; });
+    bcEls.forEach(e => e.setAttribute('data-bc', '1'));
+    bcDots.forEach(d => { d.style.display = ''; });
     wraps.forEach((w, i) => { w.style.overflow = wrapOrigStyles[i].overflow; w.style.width = wrapOrigStyles[i].width; });
     tables.forEach((t, i) => { t.style.width = tableOrigWidths[i]; });
     card.style.width = cardOrigWidth;
@@ -14193,10 +14257,11 @@ function renderBargeTabsAndTL(sched, barges) {
     else { const firstKey = Object.keys(bargeGroups)[0]; if (firstKey) bargeGroups[firstKey].items.push(item); }
   });
   const bargeKeys = barges.map(b => b.id);
+  const cmap = _bargeColorMap();
 
   if (barges.length > 1) {
     let tabsHtml = '<div class="barge-tl-tabs">';
-    bargeKeys.forEach((bid,i) => { tabsHtml += `<button class="barge-tl-tab${i===0?' active':''}" onclick="switchBargeTL('${escJs(bid)}')">${esc(bargeGroups[bid].name)}</button>`; });
+    bargeKeys.forEach((bid,i) => { tabsHtml += `<button class="barge-tl-tab${i===0?' active':''}"${_bargeAttrs(bargeGroups[bid].name, cmap)} onclick="switchBargeTL('${escJs(bid)}')">${esc(bargeGroups[bid].name)}</button>`; });
     tabsHtml += '</div>';
     bargeKeys.forEach((bid,i) => { tabsHtml += `<div id="tl-${bid}" style="${i>0?'display:none':''}"></div>`; });
     tlWrap.innerHTML = tabsHtml;
@@ -14222,7 +14287,7 @@ function renderBargeTabsAndTL(sched, barges) {
 
     if (barges.length > 1) {
       let vtHtml = '<div class="barge-tl-tabs">';
-      bargeKeys.forEach((bid,i) => { vtHtml += `<button class="barge-tl-tab${i===0?' active':''}" onclick="switchBargeTbl('${escJs(bid)}')">${esc(bargeGroups[bid].name)}</button>`; });
+      bargeKeys.forEach((bid,i) => { vtHtml += `<button class="barge-tl-tab${i===0?' active':''}"${_bargeAttrs(bargeGroups[bid].name, cmap)} onclick="switchBargeTbl('${escJs(bid)}')">${esc(bargeGroups[bid].name)}</button>`; });
       vtHtml += '</div>';
       bargeKeys.forEach((bid,i) => {
         const activeItems = filterActive(bargeGroups[bid].items);
@@ -14280,6 +14345,7 @@ function switchBargeTbl(bid) {
 }
 
 function buildVoyRows(items) {
+  const cmapV = _bargeColorMap();
   if (!items || !items.length) return '<tr><td colspan="17" style="text-align:center;padding:24px;color:var(--muted);font-size:13px">No vessels scheduled. Add vessel nominations and generate the schedule.</td></tr>';
   return items.map((item,idx) => {
     const nomV_ = (item.nomVQ !== undefined && item.nomVQ !== null) ? item.nomVQ : item.vQ;
@@ -14307,7 +14373,7 @@ function buildVoyRows(items) {
       ? `<span style="color:var(--purple);font-style:italic">${_itemEtaTxt(item)} <span style="font-size:9px;font-weight:700">(NO FIRM ETA)</span></span>`
       : _itemEtaTxt(item);
     const chkCell = `<td style="text-align:center;padding:6px 4px"><input type="checkbox" class="voy-print-chk" data-sno="${esc(item.sno)}" checked style="width:15px;height:15px;accent-color:var(--azure);cursor:pointer" title="Include in print"></td>`;
-    return `<tr${cls}>${chkCell}<td class="sno">${esc(item.sno)}</td><td><strong>${esc(item.name)}</strong></td><td style="font-size:11px;font-weight:700;font-family:DM Mono,monospace">${esc(areaS)}</td><td>${fo}</td><td>${mo}</td><td style="font-size:11px">${esc(item.spec||'—')}</td><td>${lcStr}</td><td>${etaDisplay}</td><td>${fmt24(item.bargeStart)}</td><td>${fmt24(item.etc)}</td><td>${pl}</td><td>${st}</td><td>${paqT}</td><td>${esc(item.agent||'—')}</td><td style="font-size:11px">${esc(item.bargeLabel||'—')}</td><td style="font-size:11px">${esc(item.mani||'—')}</td></tr>`;
+    return `<tr${cls}>${chkCell}<td class="sno">${esc(item.sno)}</td><td><strong>${esc(item.name)}</strong></td><td style="font-size:11px;font-weight:700;font-family:DM Mono,monospace">${esc(areaS)}</td><td>${fo}</td><td>${mo}</td><td style="font-size:11px">${esc(item.spec||'—')}</td><td>${lcStr}</td><td>${etaDisplay}</td><td>${fmt24(item.bargeStart)}</td><td>${fmt24(item.etc)}</td><td>${pl}</td><td>${st}</td><td>${paqT}</td><td>${esc(item.agent||'—')}</td><td style="font-size:11px">${_bargeDot(item.bargeLabel, cmapV)}${esc(item.bargeLabel||'—')}</td><td style="font-size:11px">${esc(item.mani||'—')}</td></tr>`;
   }).join('');
 }
 
@@ -14347,6 +14413,7 @@ function buildTL(items, containerId, loadingsForBarge) {
   const vEntries = (items || []).map(function(it) { return { type: 'vessel', time: new Date(it.bargeStart || it.eta), item: it }; });
   const lEntries = (loadingsForBarge || []).map(function(r) { return { type: 'loading', time: new Date(r.startAt), rec: r }; });
   const merged = vEntries.concat(lEntries).sort(function(a, b) { return a.time - b.time; });
+  const cmap = _bargeColorMap();
 
   if (!merged.length) {
     tl.innerHTML = '<div style="background:var(--green-lt);border:1.5px solid var(--green-bd);border-radius:12px;padding:20px;text-align:center;margin-bottom:1rem">' +
@@ -14393,7 +14460,8 @@ function buildTL(items, containerId, loadingsForBarge) {
     const vB  = item.vLow?`<span class="tb tb-wv">VLSFO Alert</span>`:'';
     const mB  = item.mLow?`<span class="tb tb-wm">MGO Alert</span>`:'';
     const paqB= item.paq==='yes'?`<span class="tb tb-ok">PAQ ✓</span>`:`<span class="tb tb-dl">PAQ Pending</span>`;
-    const bgB = item.bargeLabel?`<span class="tb tb-on">${esc(item.bargeLabel)}</span>`:'';
+    const bgSt = _bargeStyle(item.bargeLabel, cmap);
+    const bgB = item.bargeLabel?(bgSt?`<span class="tb tb-bg" data-bgn="${esc(String(item.bargeLabel).trim())}" style="${bgSt}">${esc(item.bargeLabel)}</span>`:`<span class="tb tb-on">${esc(item.bargeLabel)}</span>`):'';
     const areaLabel = AREA_OPTIONS.find(o=>o.value===item.area)?.label || item.area || '—';
     const vT  = (item.vLow && item.refuelSlot && item.refuelSlot.rfv>0)?`<div class="cat cat-v"><div class="pdot" style="background:var(--red)"></div>VLSFO ROB LOW — refuelling scheduled</div>`:(item.vLow?`<div class="cat cat-v"><div class="pdot" style="background:var(--red)"></div>VLSFO ROB LOW</div>`:'');
     const mT  = (item.mLow && item.refuelSlot && item.refuelSlot.rfm>0)?`<div class="cat cat-m"><div class="pdot" style="background:var(--amber)"></div>MGO ROB LOW — refuelling scheduled</div>`:(item.mLow?`<div class="cat cat-m"><div class="pdot" style="background:var(--amber)"></div>MGO ROB LOW</div>`:'');
@@ -14421,6 +14489,7 @@ function buildTL(items, containerId, loadingsForBarge) {
       </div>` : '';
     const d = document.createElement('div');
     d.className = 'tli';
+    if (bgSt) { d.setAttribute('data-bc', '1'); d.setAttribute('data-bgn', String(item.bargeLabel).trim()); d.setAttribute('style', bgSt); }
     d.innerHTML = `<div class="tls"><div class="tld" style="background:${dc}"></div><div class="tll"></div></div>
     <div class="tlc ${cc}">
       <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}</div><div class="br">${_etaFrameTag(item.etaWin)}${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
@@ -18827,6 +18896,7 @@ function _clDedupeRecords() {
 
 function renderChecklist(sched) {
   const wrap = document.getElementById('checklist-rows'); if (!wrap) return;
+  const clMap = _bargeColorMap();
 
   // Inject/update from schedule (but never delete existing records)
   if (sched && sched.length) injectChecklistFromSchedule(sched);
@@ -18917,7 +18987,7 @@ function renderChecklist(sched) {
           </div>` : '<span style="color:var(--muted)">—</span>'}
         </td>
 
-        <td style="padding:9px 12px;font-size:12px">${esc(rec.bargeLabel || '—')}</td>
+        <td style="padding:9px 12px;font-size:12px">${_bargeDot(rec.bargeLabel, clMap)}${esc(rec.bargeLabel || '—')}</td>
 
         <td style="padding:9px 12px">
           <div style="display:flex;flex-direction:column;gap:4px">
@@ -20486,6 +20556,7 @@ function renderSavedRecords() {
     el.innerHTML = '<div style="font-size:13px;color:var(--muted);padding:12px 0;text-align:center">No saved records yet. Click "Save ✓" in the checklist to save supply records.</div>';
     return;
   }
+  const srMap = _bargeColorMap();
   el.innerHTML = [..._savedSupplies].sort((a,b) => new Date(a.supplyDate) - new Date(b.supplyDate)).map(r => `
     <div class="saved-record-row" id="srrow-${esc(r.id)}">
       <div class="saved-record-info">
@@ -20494,7 +20565,7 @@ function renderSavedRecords() {
           <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:${r.supplied?'var(--green-lt)':'var(--amber-lt)'};color:${r.supplied?'var(--green)':'var(--amber)'};border:1px solid ${r.supplied?'var(--green-bd)':'var(--amber-bd)'}">${r.supplied?'Completed':'Pending'}</span>
         </div>
         <div class="saved-record-meta">
-           ${esc(r.dateStr)} &nbsp;|&nbsp;  ${esc(r.barge||'—')} &nbsp;|&nbsp;
+           ${esc(r.dateStr)} &nbsp;|&nbsp;  ${_bargeDot(r.barge, srMap)}${esc(r.barge||'—')} &nbsp;|&nbsp;
           VLSFO: <strong>${_srQtyTxt(r, 'v')}</strong> &nbsp;|&nbsp;
           MGO: <strong>${_srQtyTxt(r, 'm')}</strong>
           ${r.agent ? `&nbsp;|&nbsp; Agent: ${esc(r.agent)}` : ''}
@@ -20964,9 +21035,10 @@ function renderMonthlyPreview() {
   if (_reportPort !== 'ALL') rangeLabel += ` — ${_reportPort}`;
   if (!rows.length) { prev.innerHTML = `<div style="font-size:12px;color:var(--muted);padding:10px 14px;background:var(--surface);border-radius:8px;border:none;box-shadow:var(--sh-in-xs)">No <strong>completed and saved</strong> supply records found for ${rangeLabel}.<br><span style="font-size:11px">Only supplies marked as  Completed and saved via the checklist appear in Monthly Reports.</span></div>`; return; }
   const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
+  const rpMap = _bargeColorMap();
   prev.innerHTML = `<div style="font-size:12px;color:var(--sub);margin-bottom:8px">${rows.length} record${rows.length>1?'s':''} — <strong>${rangeLabel}</strong></div>
   <table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:var(--ink-solid);color:#fff"><th style="padding:6px 8px;text-align:left">Vessel</th><th style="padding:6px 8px;text-align:left">Date</th><th style="padding:6px 8px;text-align:right">VLSFO</th><th style="padding:6px 8px;text-align:left">BDN (VLSFO)</th><th style="padding:6px 8px;text-align:right">MGO</th><th style="padding:6px 8px;text-align:left">BDN (LSMGO)</th><th style="padding:6px 8px;text-align:left">Barge</th></tr></thead>
-  <tbody>${rows.map(r=>`<tr style="border-bottom:.5px solid var(--border2)"><td style="padding:6px 8px;font-weight:500">${esc(r.name)}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.dateStr)}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.vQ>0?fmtMT(r.vQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnV||'—')}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.mQ>0?fmtMT(r.mQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnM||'—')}</td><td style="padding:6px 8px">${esc(r.bargeLabel||'—')}</td></tr>`).join('')}
+  <tbody>${rows.map(r=>`<tr style="border-bottom:.5px solid var(--border2)"><td style="padding:6px 8px;font-weight:500">${esc(r.name)}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.dateStr)}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.vQ>0?fmtMT(r.vQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnV||'—')}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.mQ>0?fmtMT(r.mQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnM||'—')}</td><td style="padding:6px 8px">${_bargeDot(r.bargeLabel, rpMap)}${esc(r.bargeLabel||'—')}</td></tr>`).join('')}
   <tr style="background:var(--bg);font-weight:700"><td style="padding:6px 8px" colspan="2">TOTAL</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totV)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totM)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px"></td></tr>
   </tbody></table>`;
 }
@@ -21254,6 +21326,7 @@ async function downloadBargePDF(bargeId, btnEl) {
   }
 
   const tblClone = targetTbl.cloneNode(true);
+  tblClone.querySelectorAll('.bg-dot').forEach(function(d) { d.remove(); }); // the barge colour is for the screen; exports stay as they were
   if (allChecks.length) {
     // Remove unchecked rows entirely from the clone
     Array.from(tblClone.querySelectorAll('.voy-print-chk')).forEach(chk => {
@@ -21823,12 +21896,15 @@ function addBarge(def = {}) {
   const vcap=def.vcap??5000,mcap=def.mcap??1000,vrob=def.vrob??4500,mrob=def.mrob??900;
   const vbuf=def.vbuf??500,mbuf=def.mbuf??150,vtph=def.vtph??300,mtph=def.mtph??100;
   const vrfr=def.vrfr??750,mrfr=def.mrfr??275;
+  const colorKey = _bargeKeyOk(def.color) ? def.color : _bargeDefaultKey();
   const c=document.createElement('div');
-  c.className='vcard';c.id=`barge-${id}`;c.style.marginTop='10px';
+  c.className='vcard barge-card';c.id=`barge-${id}`;c.style.marginTop='10px';
   c.innerHTML=`
   <div class="vcard-hdr">
     <span class="vnum barge-tag"> ${esc(name)}</span>
     <div style="display:flex;gap:6px;align-items:center">
+      <input type="hidden" id="b${id}-color" value="${colorKey}">
+      <span class="bg-sw-row" role="group" aria-label="Barge colour">${_BARGE_PALETTE.map(function(k, i) { return `<button type="button" class="bg-sw${k === colorKey ? ' on' : ''}" data-k="${k}" style="--bc:var(--barge-${i + 1})" title="${_BARGE_PALETTE_LABEL[k]}" aria-label="Barge colour ${_BARGE_PALETTE_LABEL[k]}" onclick="setBargeColor(${id},'${k}')"></button>`; }).join('')}</span>
       <input type="text" id="b${id}-name" value="${esc(name)}" style="font-size:12px;padding:5px 9px;border:none;box-shadow:var(--sh-in-xs);border-radius:6px;width:130px;font-family:DM Sans,sans-serif" oninput="renameBargeDropdowns()">
       <button class="btn btn-secondary btn-sm" id="b${id}-edit-btn" onclick="toggleBargeEdit(${id})" style="gap:5px">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -21888,6 +21964,7 @@ function addBarge(def = {}) {
 
   document.getElementById('barge-list').appendChild(c);
   _barges.push({id});
+  _paintBargeCard(id);
   populateBargeDropdowns();
   updateBargeView(id);   // build view-mode summary + refill preview
 }
@@ -22055,10 +22132,69 @@ function updateRefillPreview(id) {
 
 function rmBarge(id) { document.getElementById(`barge-${id}`)?.remove(); _barges=_barges.filter(b=>b.id!==id); populateBargeDropdowns(); saveSharedState(); }
 function renameBargeDropdowns() { populateBargeDropdowns(); clearTimeout(upd._t); upd._t=setTimeout(saveSharedState,1500); }
+/* ── Barge colours ──────────────────────────────────────────────────────
+   Each barge has one identity colour (a palette KEY, saved with the barge and synced).
+   Colour = which barge; fuel colours stay on volumes, status colours on status. Only keys
+   from the palette are ever turned into CSS, so a synced value can't inject anything. */
+const _BARGE_PALETTE = ['violet', 'pink', 'slate', 'olive', 'brown'];
+const _BARGE_PALETTE_LABEL = { violet: 'Violet', pink: 'Pink', slate: 'Slate', olive: 'Olive', brown: 'Brown' };
+let _bargeColorReserve = null; // while barges load: keys the incoming state already assigns
+function _bargeKeyOk(k) { return _BARGE_PALETTE.indexOf(k) >= 0; }
+// Default for a barge with none: the first palette colour no other barge uses (same order on every device).
+function _bargeDefaultKey() {
+  const used = new Set(_bargeColorReserve ? Array.from(_bargeColorReserve) : []);
+  (_barges || []).forEach(function(b) { const el = document.getElementById('b' + b.id + '-color'); if (el && el.value) used.add(el.value); });
+  return _BARGE_PALETTE.find(function(k) { return !used.has(k); }) || _BARGE_PALETTE[((_barges || []).length) % _BARGE_PALETTE.length];
+}
+// barge name → palette key, from the barge cards on this device
+function _bargeColorMap() {
+  const m = new Map();
+  (_barges || []).forEach(function(b) {
+    const nm = String((document.getElementById('b' + b.id + '-name') || {}).value || '').trim();
+    const k = (document.getElementById('b' + b.id + '-color') || {}).value;
+    if (nm && _bargeKeyOk(k) && !m.has(nm)) m.set(nm, k);
+  });
+  return m;
+}
+function _bargeVars(key) { const i = _BARGE_PALETTE.indexOf(key) + 1; return i ? '--bc:var(--barge-' + i + ');--bc-lt:var(--barge-' + i + '-lt)' : ''; }
+// inline-style declarations ('' for an unknown barge)
+function _bargeStyle(name, map) { return _bargeVars((map || _bargeColorMap()).get(String(name == null ? '' : name).trim())); }
+// ` data-bc="1" style="…"` for an element that has no style attribute of its own
+function _bargeAttrs(name, map) { const st = _bargeStyle(name, map); return st ? ' data-bc="1" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"' : ''; }
+// a small coloured dot before a barge name in lists and tables
+function _bargeDot(name, map) { const st = _bargeStyle(name, map); return st ? '<span class="bg-dot" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"></span>' : ''; }
+function setBargeColor(id, key) {
+  if (!_bargeKeyOk(key)) return;
+  const inp = document.getElementById('b' + id + '-color'); if (!inp) return;
+  inp.value = key;
+  _paintBargeCard(id);
+  _refreshBargeColours();
+  clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 600);
+}
+function _paintBargeCard(id) {
+  const card = document.getElementById('barge-' + id), inp = document.getElementById('b' + id + '-color');
+  if (!card || !inp) return;
+  const st = _bargeVars(inp.value);
+  if (st) { card.setAttribute('data-bc', '1'); card.setAttribute('style', 'margin-top:10px;' + st); }
+  card.querySelectorAll('.bg-sw').forEach(function(sw) { sw.classList.toggle('on', sw.getAttribute('data-k') === inp.value); });
+}
+// A colour change recolours what is already on screen, in place: every coloured element carries its
+// barge name (data-bgn) and takes the colour from the barge cards. Nothing is redrawn, so what
+// someone is typing, the barge tab they chose and their Print ticks are untouched.
+function _repaintBargeColours() {
+  const map = _bargeColorMap();
+  document.querySelectorAll('[data-bgn]').forEach(function(el) {
+    const i = _BARGE_PALETTE.indexOf(map.get(String(el.getAttribute('data-bgn') || '').trim())) + 1;
+    if (!i) return;
+    el.style.setProperty('--bc', 'var(--barge-' + i + ')');
+    el.style.setProperty('--bc-lt', 'var(--barge-' + i + '-lt)');
+  });
+}
+function _refreshBargeColours() { _repaintBargeColours(); }
 function getBarges() {
   return _barges.map(b=>{
     const id=b.id;
-    return{id,name:(document.getElementById(`b${id}-name`)?.value||`Barge ${id}`).trim(),vcap:parseFloat(document.getElementById(`b${id}-vcap`)?.value)||5000,mcap:parseFloat(document.getElementById(`b${id}-mcap`)?.value)||1000,vrob:parseFloat(document.getElementById(`b${id}-vrob`)?.value)||0,mrob:parseFloat(document.getElementById(`b${id}-mrob`)?.value)||0,vbuf:parseFloat(document.getElementById(`b${id}-vbuf`)?.value)||500,mbuf:parseFloat(document.getElementById(`b${id}-mbuf`)?.value)||150,vtph:parseFloat(document.getElementById(`b${id}-vtph`)?.value)||300,mtph:parseFloat(document.getElementById(`b${id}-mtph`)?.value)||100,vrfr:parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,mrfr:parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275};
+    return{id,name:(document.getElementById(`b${id}-name`)?.value||`Barge ${id}`).trim(),vcap:parseFloat(document.getElementById(`b${id}-vcap`)?.value)||5000,mcap:parseFloat(document.getElementById(`b${id}-mcap`)?.value)||1000,vrob:parseFloat(document.getElementById(`b${id}-vrob`)?.value)||0,mrob:parseFloat(document.getElementById(`b${id}-mrob`)?.value)||0,vbuf:parseFloat(document.getElementById(`b${id}-vbuf`)?.value)||500,mbuf:parseFloat(document.getElementById(`b${id}-mbuf`)?.value)||150,vtph:parseFloat(document.getElementById(`b${id}-vtph`)?.value)||300,mtph:parseFloat(document.getElementById(`b${id}-mtph`)?.value)||100,vrfr:parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,mrfr:parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,color:(document.getElementById(`b${id}-color`)?.value)||''};
   });
 }
 /* ─── SUPPLY SEQUENCE CLASSIFIER ─── */
