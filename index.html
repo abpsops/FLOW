@@ -1312,6 +1312,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .fs-row[data-bc] .fs-name{color:var(--bc)}
 .rob-card[data-bc]{box-shadow:inset 5px 0 0 var(--bc),var(--sh-sm)!important}
 .barge-card[data-bc]{border-left:5px solid var(--bc)}
+@media print{.bg-dot{display:none!important}.barge-tl-tab[data-bc]::before{display:none!important}}
 html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6px 0 0 var(--bc),var(--hl-shadow)}
 .bg-sw-row{display:inline-flex;gap:5px;align-items:center;margin-right:4px}
 .bg-sw{width:16px;height:16px;border-radius:50%;border:2px solid transparent;background:var(--bc);cursor:pointer;padding:0;box-shadow:0 0 0 1px var(--border)}
@@ -7720,6 +7721,7 @@ function _applyPayload(payload, replaceUnions) {
   if (!payload || !payload.state) return;
   const st = payload.state;
   const focus = _snapshotFocus();
+  const coloursBefore = JSON.stringify(Array.from(_bargeColorMap()));
   if (replaceUnions) {
     if (_isPlainObj(st.archives)) { _archives = _deepClone(st.archives); if (typeof _collapseArchiveCopies === 'function') _collapseArchiveCopies(); if (typeof saveArchives === 'function') saveArchives(); }
     if (Array.isArray(st.agents)) {
@@ -7754,6 +7756,7 @@ function _applyPayload(payload, replaceUnions) {
   try { localStorage.setItem(LS_RECORDS_KEY, JSON.stringify(_savedSupplies)); } catch(e) {}
   if (typeof renderSavedRecords === 'function') renderSavedRecords();
   if (typeof _refreshReportViews === 'function') _refreshReportViews(); // a colleague's record edits reach the reports on screen
+  if (typeof _refreshBargeColours === 'function' && JSON.stringify(Array.from(_bargeColorMap())) !== coloursBefore) _refreshBargeColours(); // …and a colleague's barge colour
   if (typeof renderTrashBin === 'function') renderTrashBin();
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
@@ -9462,6 +9465,14 @@ function _guardAgainstZeroROBReset(incomingBarges, incomingVersion) {
 function applyState(state, trusted) {
   if (!state) return;
 
+  // The colours on screen now, by barge id + name: a state without a colour for a barge (saved
+  // by an older build, which doesn't know colours) must not reset what was picked here.
+  const prevBargeColours = new Map();
+  (_barges || []).forEach(function(b) {
+    const k = (document.getElementById('b' + b.id + '-color') || {}).value;
+    if (_bargeKeyOk(k)) prevBargeColours.set(String(b.id) + '|' + String((document.getElementById('b' + b.id + '-name') || {}).value || '').trim(), k);
+  });
+
   // Clear current UI
   document.getElementById('vc').innerHTML = '';
   document.getElementById('barge-list').innerHTML = '';
@@ -9476,12 +9487,14 @@ function applyState(state, trusted) {
     // (A merge's version is the remote row's, older than this device's last save: the
     // guard would put back the stock of a barge a supply in the merge just emptied.)
     const guardedBarges = trusted ? state.barges : _guardAgainstZeroROBReset(state.barges, state.version);
-    _bargeColorReserve = new Set(guardedBarges.map(function(b) { return b && b.color; }).filter(_bargeKeyOk)); // defaults avoid colours the state already assigns
+    const keptColour = function(b) { return !_bargeKeyOk(b && b.color) ? prevBargeColours.get(String(b && b.id) + '|' + String((b && b.name) || '').trim()) : undefined; };
+    _bargeColorReserve = new Set(guardedBarges.map(function(b) { return _bargeKeyOk(b && b.color) ? b.color : keptColour(b); }).filter(_bargeKeyOk)); // defaults avoid colours the state already assigns
     try {
     guardedBarges.forEach(b => {
       // Backward compat: old saves had single 'buf' field
       if (b.buf !== undefined && b.vbuf === undefined) { b.vbuf = b.buf; b.mbuf = Math.round(b.buf * 0.3); }
-      addBarge(b);
+      const kc = keptColour(b);
+      addBarge(kc ? Object.assign({}, b, { color: kc }) : b);
     });
     } finally { _bargeColorReserve = null; }
     if (guardedBarges.some(function(b){ return b._robGuardApplied; })) {
@@ -11146,6 +11159,11 @@ async function downloadVoyageSchedulePNG() {
   const pdfBtns = Array.from(card.querySelectorAll('button[onclick^="downloadBargePDF"]'));
   const pdfBtnOrigDisplay = pdfBtns.map(b => b.style.display);
   pdfBtns.forEach(b => { b.style.display = 'none'; });
+  // The barge colours are for the screen: the image keeps the plain tabs and names.
+  const bcEls = Array.from(card.querySelectorAll('[data-bc]'));
+  bcEls.forEach(e => e.removeAttribute('data-bc'));
+  const bcDots = Array.from(card.querySelectorAll('.bg-dot'));
+  bcDots.forEach(d => { d.style.display = 'none'; });
 
   const origLabel = btn ? btn.innerHTML : '';
   if (btn) {
@@ -11216,6 +11234,8 @@ async function downloadVoyageSchedulePNG() {
     hiddenRows.forEach(row => { row.style.display = ''; });
     hiddenCells.forEach(cell => { cell.style.display = ''; });
     pdfBtns.forEach((b, i) => { b.style.display = pdfBtnOrigDisplay[i]; });
+    bcEls.forEach(e => e.setAttribute('data-bc', '1'));
+    bcDots.forEach(d => { d.style.display = ''; });
     wraps.forEach((w, i) => { w.style.overflow = wrapOrigStyles[i].overflow; w.style.width = wrapOrigStyles[i].width; });
     tables.forEach((t, i) => { t.style.width = tableOrigWidths[i]; });
     card.style.width = cardOrigWidth;
@@ -21306,6 +21326,7 @@ async function downloadBargePDF(bargeId, btnEl) {
   }
 
   const tblClone = targetTbl.cloneNode(true);
+  tblClone.querySelectorAll('.bg-dot').forEach(function(d) { d.remove(); }); // the barge colour is for the screen; exports stay as they were
   if (allChecks.length) {
     // Remove unchecked rows entirely from the clone
     Array.from(tblClone.querySelectorAll('.voy-print-chk')).forEach(chk => {

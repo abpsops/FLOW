@@ -143,6 +143,65 @@ const colours = p => p.evaluate(() => captureCurrentState().barges.map(b => [b.n
     check('barges and colours load for a trader', (await colours(T.page)).length === 2, await colours(T.page));
   });
 
+  /* 8 — a colleague's colour change reaches the screens already showing */
+  await scenario('C8 a colleague\'s change repaints without navigating', async (openT) => {
+    const db = H.createDb({ workspace: seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11')]), realtime: false });
+    const A = await openT(db);
+    const B = await openT(db, 'user-operator2');
+    await B.page.evaluate(() => { calculate(); showPage('timeline'); });
+    await sleep(1200);
+    const seen = () => B.page.evaluate(() => ({ tabs: [...document.querySelectorAll('#tl .barge-tl-tab')].map(t => (t.getAttribute('style') || '').replace(/.*--barge-(\d).*/, '$1')), chips: [...document.querySelectorAll('#tl .tb-bg')].map(c => (c.getAttribute('style') || '').replace(/.*--barge-(\d).*/, '$1')) }));
+    await A.page.evaluate(() => setBargeColor(2, 'olive'));
+    await sleep(1500);
+    await B.page.evaluate(() => { document.activeElement && document.activeElement.blur(); return _pollOnce(true); });
+    await sleep(600);
+    const r = await seen();
+    check('B\'s timeline tabs and chips switch to olive (barge-4) at once, without leaving the page', r.tabs[1] === '4' && r.chips.every(c => c === '1' || c === '4') && r.chips.includes('4'), r);
+  });
+
+  /* 9 — an older build saves the barges without colours */
+  await scenario('C9 an older build\'s save does not reset the colours picked here', async (openT) => {
+    const db = H.createDb({ workspace: seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11'), BARGE(3, 'FNSA 12')]), realtime: false });
+    const A = await openT(db);
+    await A.page.evaluate(() => { setBargeColor(2, 'olive'); setBargeColor(3, 'brown'); });
+    await sleep(1500);
+    // what an older build writes: the same barges, no colour, a changed vessel
+    const row = U.row(db);
+    row.payload.state.barges.forEach(b => { delete b.color; });
+    row.payload.state.vessels[0].agent = 'CHANGED BY OLD BUILD';
+    row.version += 5000; row.payload.version = row.version; row.payload.state.version = row.version;
+    await A.page.evaluate(() => { document.activeElement && document.activeElement.blur(); return _pollOnce(true); });
+    await sleep(700);
+    const r = await A.page.evaluate(() => ({ agent: (captureCurrentState().vessels[0] || {}).agent, colours: captureCurrentState().barges.map(b => b.color) }));
+    check('the change from the older build arrived, and the picked colours stayed (violet, olive, brown)', r.agent === 'CHANGED BY OLD BUILD' && JSON.stringify(r.colours) === JSON.stringify(['violet', 'olive', 'brown']), r);
+  });
+
+  /* 10 — exports stay as they were */
+  await scenario('C10 PDF and image exports carry no barge colours', async (openT) => {
+    const db = H.createDb({ workspace: seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11')]), realtime: false });
+    const A = await openT(db);
+    await A.page.evaluate(() => { calculate(); showPage('schedule'); });
+    await sleep(1200);
+    const r = await A.page.evaluate(async () => {
+      const out = {};
+      const card = document.getElementById('voy-barge-tabs-card');
+      out.liveDots = card.querySelectorAll('.bg-dot').length; out.liveTabs = card.querySelectorAll('.barge-tl-tab[data-bc]').length;
+      window.alert = m => { out.alert = String(m); };
+      // image: what html2canvas is handed
+      _loadHtml2Canvas = async () => async (el) => { out.png = { dots: [...el.querySelectorAll('.bg-dot')].filter(d => d.style.display !== 'none').length, coloured: el.querySelectorAll('[data-bc]').length }; throw new Error('stop'); };
+      await downloadVoyageSchedulePNG();
+      out.afterPng = { dots: [...card.querySelectorAll('.bg-dot')].filter(d => d.style.display === 'none').length, coloured: card.querySelectorAll('[data-bc]').length };
+      // PDF: the HTML put in the off-screen container
+      _loadHtml2Canvas = async () => async (el) => { out.pdf = { dots: el.querySelectorAll('.bg-dot').length, coloured: el.querySelectorAll('[data-bc]').length }; throw new Error('stop'); };
+      _loadJsPDF = async () => function() {};
+      await downloadBargePDF(1, null);
+      return out;
+    });
+    check('before: the screen shows coloured dots and tabs', r.liveDots > 0 && r.liveTabs > 0, r);
+    check('the image is captured without them, and the screen gets them back afterwards', r.png && r.png.dots === 0 && r.png.coloured === 0 && r.afterPng.dots === 0 && r.afterPng.coloured === r.liveTabs, r);
+    check('the PDF table has no barge dots', r.pdf && r.pdf.dots === 0 && r.pdf.coloured === 0, r);
+  }, /stop|Could not/);
+
   await browser.close();
   console.log('BARGE-COLOURS: ' + pass + ' passed, ' + fail + ' failed');
   process.exitCode = fail ? 1 : 0;
