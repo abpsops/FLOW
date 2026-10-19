@@ -254,11 +254,13 @@ const colours = p => p.evaluate(() => captureCurrentState().barges.map(b => [b.n
     });
     let r = await probe();
     check('weekly calendar: each vessel card has its barge pill and colour edge', r.vessels.length === 2 && r.vessels.every(v => /^FNSA 1[01]$/.test(v[0]) && /--barge-/.test(v[1])) && r.vessels.some(v => v[0] === 'FNSA 10' && /--barge-1/.test(v[1])) && r.vessels.some(v => v[0] === 'FNSA 11' && /--barge-2/.test(v[1])), r.vessels);
-    check('weekly calendar: each loading card says which barge — and "No barge" when none is set', r.loads.length === 3 && r.loads.find(l => l[2] === 'vopak')[0] === 'FNSA 10' && r.loads.find(l => l[2] === 'gps')[0] === 'FNSA 11' && r.loads.find(l => l[2] === 'fott')[0] === 'No barge' && /--barge-2/.test(r.loads.find(l => l[2] === 'gps')[1]), r.loads);
+    // a loading that runs past midnight is drawn on both days, so group the cards by loading
+    const byT = {}; r.loads.forEach(l => { (byT[l[2]] = byT[l[2]] || []).push(l); });
+    check('weekly calendar: each loading card says which barge — and "No barge" when none is set', Object.keys(byT).sort().join() === 'fott,gps,vopak' && byT.vopak.every(l => l[0] === 'FNSA 10') && byT.gps.every(l => l[0] === 'FNSA 11' && /--barge-2/.test(l[1])) && byT.fott.every(l => l[0] === 'No barge'), r.loads);
     check('Loading page rows, the loading entries on the Supply Timeline and the dashboard activity feed name the barge too', ['FNSA 10', 'FNSA 11', 'No barge'].every(n => r.rows.includes(n)) && r.tlLoad.some(t => /FNSA 1[01]/.test(t)) && /VOPAK TERMINAL[^|]*FNSA 10/.test(r.feed) && /GPS CHEMOIL TERMINAL[^|]*FNSA 11/.test(r.feed), r);
     await A.page.evaluate(() => setBargeColor(2, 'olive'));
     r = await probe();
-    check('picking olive recolours the calendar cards in place', r.vessels.find(v => v[0] === 'FNSA 11')[1].indexOf('--barge-4') >= 0 && r.loads.find(l => l[2] === 'gps')[1].indexOf('--barge-4') >= 0, r);
+    check('picking olive recolours the calendar cards in place', r.vessels.find(v => v[0] === 'FNSA 11')[1].indexOf('--barge-4') >= 0 && r.loads.filter(l => l[2] === 'gps').every(l => l[1].indexOf('--barge-4') >= 0), r);
   });
 
   /* 12 — a single-barge fleet, before the schedule has been generated */

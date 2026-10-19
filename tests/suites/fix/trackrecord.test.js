@@ -97,17 +97,23 @@ function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + Str
   const btn = await p.evaluate(() => { showPage('checklist'); return /⚠ Dispute/.test(document.body.innerHTML.match(/cl-flag-disputed-[^"]*"[^>]*>[^<]*/) ? document.body.innerHTML.match(/cl-flag-disputed-[^"]*"[^>]*>[^<]*/)[0] : '') || typeof clToggleFlag === 'function'; });
   check(btn, 'checklist ⚠ Dispute button wired');
 
-  // ── 9. Dashboard order: the watchlist sits right under Fuel Type Distribution + Barge Fleet Status ──
+  // ── 9. Dashboard order: Weekly Planned Supply | Barge Fleet Status, then Fuel Type Distribution | Operational
+  //      Activity, then the watchlist right under that row ──
   const order = await p.evaluate(() => {
     showPage('dashboard');
-    const top = id => { const e = document.getElementById(id); const c = e && e.closest('.chart-card'); return c ? c.getBoundingClientRect().top + window.scrollY : null; };
-    const fuel = document.getElementById('chart-fuel-dist-distributed').closest('.chart-card'), fleet = document.getElementById('dash-fleet-status').closest('.chart-card');
-    const wl = document.getElementById('dash-track-record-watchlist').closest('.chart-card'), monthly = document.getElementById('dash-monthly-qty-title').closest('.chart-card');
+    const card = id => document.getElementById(id).closest('.chart-card');
+    const cal = card('week-calendar'), fleet = card('dash-fleet-status'), fuel = card('chart-fuel-dist-distributed'), act = card('dash-activity-feed');
+    const wl = card('dash-track-record-watchlist'), monthly = card('dash-monthly-qty-title');
     const after = (a, b) => !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     const r = e => e.getBoundingClientRect();
-    return { domOrder: after(fuel, wl) && after(fleet, wl) && after(wl, monthly), below: r(wl).top >= Math.max(r(fuel).bottom, r(fleet).bottom) - 1, sameRow: fuel.parentElement === fleet.parentElement && wl.parentElement === fuel.parentElement.parentElement && wl.previousElementSibling === fuel.parentElement };
+    return {
+      domOrder: after(cal, fleet) && after(fleet, fuel) && after(fuel, act) && after(act, wl) && after(wl, monthly),
+      rows: fleet.parentElement === cal.parentElement && act.parentElement === fuel.parentElement && wl.previousElementSibling === fuel.parentElement,
+      fleetAboveActivity: r(fleet).bottom <= r(act).top + 1,
+      watchlistBelow: r(wl).top >= Math.max(r(fuel).bottom, r(act).bottom) - 1,
+    };
   });
-  check(order.domOrder && order.below && order.sameRow, 'Dashboard: Track Record Watchlist comes right after the Fuel Type Distribution / Barge Fleet Status row, before Monthly Quantity ' + JSON.stringify(order));
+  check(order.domOrder && order.rows && order.fleetAboveActivity && order.watchlistBelow, 'Dashboard: Barge Fleet Status sits beside the Weekly Planned Supply, above Operational Activity (which is beside Fuel Type Distribution), and the Track Record Watchlist comes right under that row ' + JSON.stringify(order));
 
   const errs = realErrors(app);
   check(errs.length === 0, 'no page errors ' + JSON.stringify(errs.slice(0, 5)));

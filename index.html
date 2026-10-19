@@ -3113,7 +3113,7 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <!-- Dashboard 2-col: Charts + Activity -->
+  <!-- Dashboard 2-col: Weekly calendar + Barge fleet status -->
   <div class="dash-row-2col" style="margin-bottom:14px">
     <div class="chart-card" style="overflow:visible">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
@@ -3139,21 +3139,15 @@ function flowWelcomeGo(pageId) {
       <div id="free-windows-panel" style="display:none;margin-top:14px"></div>
     </div>
     <div class="chart-card" style="display:flex;flex-direction:column">
-      <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
-      <!-- The feed fills whatever height the row gives this card (it sits next
-           to the taller Weekly Planned Supply calendar) and scrolls inside it,
-           instead of stopping at a fixed 280px and leaving a blank gap. The
-           absolute inner box keeps the feed's own length from stretching the
-           row; min-height covers the single-column (mobile) layout. -->
-      <div style="position:relative;flex:1;min-height:280px">
-        <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
-          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
-        </div>
+      <div class="chart-title">Barge Fleet Status</div>
+      <div class="chart-subtitle" style="margin-bottom:10px">Live ROB &amp; availability</div>
+      <div id="dash-fleet-status" style="flex:1">
+        <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
       </div>
     </div>
   </div>
 
-  <!-- Dashboard 2-col: ROB chart + Fleet status -->
+  <!-- Dashboard 2-col: Fuel type distribution + Operational activity -->
   <div class="dash-row-2col">
     <div class="chart-card">
       <div class="chart-title">Fuel Type Distribution</div>
@@ -3170,10 +3164,16 @@ function flowWelcomeGo(pageId) {
       </div>
     </div>
     <div class="chart-card" style="display:flex;flex-direction:column">
-      <div class="chart-title">Barge Fleet Status</div>
-      <div class="chart-subtitle" style="margin-bottom:10px">Live ROB &amp; availability</div>
-      <div id="dash-fleet-status" style="flex:1">
-        <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
+      <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
+      <!-- The feed fills whatever height the row gives this card (it sits next
+           to the taller Fuel Type Distribution card) and scrolls inside it,
+           instead of stopping at a fixed 280px and leaving a blank gap. The
+           absolute inner box keeps the feed's own length from stretching the
+           row; min-height covers the single-column (mobile) layout. -->
+      <div style="position:relative;flex:1;min-height:280px">
+        <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
+        </div>
       </div>
     </div>
   </div>
