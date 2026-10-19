@@ -5502,7 +5502,7 @@ function renderDashFuelingStatus() {
 function renderDashFleetStatus() {
   const el = document.getElementById('dash-fleet-status');
   if (!el) return;
-  const barges = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const barges = _fleetNow();
   if (!barges.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>';
     return;
@@ -5831,7 +5831,7 @@ function refreshReports() {
 function _resolveRecordBargeName(r) {
   const direct = (r.barge || r.bargeLabel || '').toString().trim();
   if (direct) return direct;
-  const fleet = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const fleet = _fleetNow();
   if (fleet.length === 1 && fleet[0].name) return fleet[0].name;
   return 'Unassigned';
 }
@@ -9073,7 +9073,7 @@ function _dismissTrackingReportAlerts() {
 function _populateLoadingBargeSelect() {
   const sel = document.getElementById('ld-barge');
   if (!sel) return;
-  const fleet = (_bargeConfig && _bargeConfig.length) ? _bargeConfig : (_barges || []);
+  const fleet = _fleetNow();
   const prev = sel.value;
   sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
   if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
@@ -22179,6 +22179,9 @@ function _bargeStyle(name, map) { return _bargeVars((map || _bargeColorMap()).ge
 function _bargeAttrs(name, map) { const st = _bargeStyle(name, map); return st ? ' data-bc="1" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"' : ''; }
 // a small coloured dot before a barge name in lists and tables
 function _bargeDot(name, map) { const st = _bargeStyle(name, map); return st ? '<span class="bg-dot" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"></span>' : ''; }
+// The fleet as configured right now: the ROB engine's copy once the schedule has been generated,
+// before that the barge cards (the `_barges` entries only carry ids — no names).
+function _fleetNow() { return (_bargeConfig && _bargeConfig.length) ? _bargeConfig : getBarges(); }
 // A pill with the barge's name in its colour, for cards that must say WHICH barge. A barge that is not
 // on a card here keeps a plain pill, and a record with no barge says so.
 function _bargePill(name, map, cls) {

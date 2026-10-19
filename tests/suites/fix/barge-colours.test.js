@@ -261,6 +261,28 @@ const colours = p => p.evaluate(() => captureCurrentState().barges.map(b => [b.n
     check('picking olive recolours the calendar cards in place', r.vessels.find(v => v[0] === 'FNSA 11')[1].indexOf('--barge-4') >= 0 && r.loads.find(l => l[2] === 'gps')[1].indexOf('--barge-4') >= 0, r);
   });
 
+  /* 12 — a single-barge fleet, before the schedule has been generated */
+  await scenario('C12 a loading with no barge on a one-barge fleet names that barge straight away', async (openT) => {
+    const iso = h => new Date(Date.now() + h * 3600000).toISOString();
+    const seed = seedOf([BARGE(1, 'FNSA 10')]);
+    seed.state.loadingRecords = [{ id: 'l1', barge: '', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 3840, startAt: iso(1), endAt: iso(7), surveyor: '', notes: '' }];
+    const db = H.createDb({ workspace: seed, realtime: false });
+    const A = await openT(db);
+    await sleep(800);
+    const r = await A.page.evaluate(() => {
+      const out = { cfg: (_bargeConfig || []).length };
+      showPage('dashboard'); try { refreshDashboard(); } catch (e) {}
+      out.cal = [...document.querySelectorAll('.cal-ticket-loading .bg-pill')].map(e => e.textContent.replace(/\s+/g, ' ').trim());
+      out.fleet = [...document.querySelectorAll('#dash-fleet-status .fs-name')].map(e => e.textContent.trim());
+      out.feed = document.getElementById('dash-activity-feed').textContent.replace(/\s+/g, ' ');
+      showPage('loading');
+      out.row = [...document.querySelectorAll('#page-loading .card .bg-pill')].map(e => e.textContent.trim());
+      out.select = [...document.querySelectorAll('#ld-barge option')].map(o => o.value);
+      return out;
+    });
+    check('before Generate: the calendar card, fleet row, Loading row and form all say FNSA 10 (not "No barge" / "Unassigned")', r.cfg === 0 && r.cal[0] === 'FNSA 10' && r.fleet[0] === 'FNSA 10' && r.row[0] === 'FNSA 10' && r.select[0] === 'FNSA 10' && /FNSA 10/.test(r.feed) && !/Unassigned/.test(r.feed), r);
+  });
+
   await browser.close();
   console.log('BARGE-COLOURS: ' + pass + ' passed, ' + fail + ' failed');
   process.exitCode = fail ? 1 : 0;
