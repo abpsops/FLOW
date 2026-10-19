@@ -159,6 +159,29 @@ const colours = p => p.evaluate(() => captureCurrentState().barges.map(b => [b.n
     check('B\'s timeline tabs and chips switch to olive (barge-4) at once, without leaving the page', r.tabs[1] === '4' && r.chips.every(c => c === '1' || c === '4') && r.chips.includes('4'), r);
   });
 
+  /* 8b — the repaint touches nothing else on the page */
+  await scenario('C8b a colleague\'s colour change does not disturb what is being typed or chosen', async (openT) => {
+    const db = H.createDb({ workspace: seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11')]), realtime: false });
+    const A = await openT(db);
+    const B = await openT(db, 'user-operator2');
+    await A.page.evaluate(() => { calculate(); });
+    await sleep(1200);
+    // A is on the Checklist, typing an actual that has not been committed (no change event yet)
+    await A.page.evaluate(() => { showPage('checklist'); const el = document.getElementById('cl-av-n_n1'); el.focus(); el.value = '1234'; window.__row = el; });
+    await B.page.evaluate(() => setBargeColor(2, 'olive'));
+    await sleep(1500);
+    await A.page.evaluate(() => { return _pollOnce(false); }); await sleep(700);
+    const chk = await A.page.evaluate(() => { const el = document.getElementById('cl-av-n_n1'); return { same: el === window.__row, val: el && el.value, focused: document.activeElement === el, dot: [...document.querySelectorAll('#checklist-rows .bg-dot')].map(d => d.getAttribute('style')) }; });
+    check('the half-typed value and focus survive, and the checklist dots take the new colour', chk.same && chk.val === '1234' && chk.focused && chk.dot.some(s => /--barge-4/.test(s)), chk);
+    // A is on the Voyage Schedule with the second barge's tab open and one vessel unticked
+    await A.page.evaluate(() => { showPage('schedule'); switchBargeTbl('2'); const c = document.querySelector('#voy-tab-1 .voy-print-chk, .voy-print-chk'); window.__chk = c; if (c) c.checked = false; });
+    await B.page.evaluate(() => setBargeColor(2, 'brown'));
+    await sleep(1500);
+    await A.page.evaluate(() => _pollOnce(false)); await sleep(700);
+    const v = await A.page.evaluate(() => ({ tab2: document.getElementById('voy-tab-2').style.display !== 'none', tab1hidden: document.getElementById('voy-tab-1').style.display === 'none', unticked: [...document.querySelectorAll('.voy-print-chk')].filter(c => !c.checked).length, same: document.querySelector('.voy-print-chk') === window.__chk, tabStyle: [...document.querySelectorAll('#voy-barge-tabs .barge-tl-tab')].map(t => t.getAttribute('style')) }));
+    check('the Voyage Schedule keeps the chosen barge tab and the Print ticks, and the tab takes the new colour', v.tab2 && v.tab1hidden && v.unticked === 1 && v.same && /--barge-5/.test(v.tabStyle[1]), v);
+  });
+
   /* 9 — an older build saves the barges without colours */
   await scenario('C9 an older build\'s save does not reset the colours picked here', async (openT) => {
     const db = H.createDb({ workspace: seedOf([BARGE(1, 'FNSA 10'), BARGE(2, 'FNSA 11'), BARGE(3, 'FNSA 12')]), realtime: false });

@@ -9989,7 +9989,7 @@ function renderLiveROBDashboard() {
     const mRefillHrs = (b.mrfr||275) > 0 ? mUllage / (b.mrfr||275) : 0;
 
     const robBc = _bargeStyle(rob.bargeName, robMap);
-    html += '<div class="rob-card"' + (robBc ? ' data-bc="1"' : '') + ' style="' + robBc + (robBc ? ';' : '') + 'background:var(--surface);border:none;border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--sh-sm);position:relative;overflow:hidden">' +
+    html += '<div class="rob-card"' + (robBc ? ' data-bc="1" data-bgn="' + esc(String(rob.bargeName).trim()) + '"' : '') + ' style="' + robBc + (robBc ? ';' : '') + 'background:var(--surface);border:none;border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--sh-sm);position:relative;overflow:hidden">' +
       '<div style="position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--azure),var(--teal))"></div>' +
 
       // Header
@@ -14461,7 +14461,7 @@ function buildTL(items, containerId, loadingsForBarge) {
     const mB  = item.mLow?`<span class="tb tb-wm">MGO Alert</span>`:'';
     const paqB= item.paq==='yes'?`<span class="tb tb-ok">PAQ ✓</span>`:`<span class="tb tb-dl">PAQ Pending</span>`;
     const bgSt = _bargeStyle(item.bargeLabel, cmap);
-    const bgB = item.bargeLabel?(bgSt?`<span class="tb tb-bg" style="${bgSt}">${esc(item.bargeLabel)}</span>`:`<span class="tb tb-on">${esc(item.bargeLabel)}</span>`):'';
+    const bgB = item.bargeLabel?(bgSt?`<span class="tb tb-bg" data-bgn="${esc(String(item.bargeLabel).trim())}" style="${bgSt}">${esc(item.bargeLabel)}</span>`:`<span class="tb tb-on">${esc(item.bargeLabel)}</span>`):'';
     const areaLabel = AREA_OPTIONS.find(o=>o.value===item.area)?.label || item.area || '—';
     const vT  = (item.vLow && item.refuelSlot && item.refuelSlot.rfv>0)?`<div class="cat cat-v"><div class="pdot" style="background:var(--red)"></div>VLSFO ROB LOW — refuelling scheduled</div>`:(item.vLow?`<div class="cat cat-v"><div class="pdot" style="background:var(--red)"></div>VLSFO ROB LOW</div>`:'');
     const mT  = (item.mLow && item.refuelSlot && item.refuelSlot.rfm>0)?`<div class="cat cat-m"><div class="pdot" style="background:var(--amber)"></div>MGO ROB LOW — refuelling scheduled</div>`:(item.mLow?`<div class="cat cat-m"><div class="pdot" style="background:var(--amber)"></div>MGO ROB LOW</div>`:'');
@@ -14489,7 +14489,7 @@ function buildTL(items, containerId, loadingsForBarge) {
       </div>` : '';
     const d = document.createElement('div');
     d.className = 'tli';
-    if (bgSt) { d.setAttribute('data-bc', '1'); d.setAttribute('style', bgSt); }
+    if (bgSt) { d.setAttribute('data-bc', '1'); d.setAttribute('data-bgn', String(item.bargeLabel).trim()); d.setAttribute('style', bgSt); }
     d.innerHTML = `<div class="tls"><div class="tld" style="background:${dc}"></div><div class="tll"></div></div>
     <div class="tlc ${cc}">
       <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}</div><div class="br">${_etaFrameTag(item.etaWin)}${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
@@ -22160,9 +22160,9 @@ function _bargeVars(key) { const i = _BARGE_PALETTE.indexOf(key) + 1; return i ?
 // inline-style declarations ('' for an unknown barge)
 function _bargeStyle(name, map) { return _bargeVars((map || _bargeColorMap()).get(String(name == null ? '' : name).trim())); }
 // ` data-bc="1" style="…"` for an element that has no style attribute of its own
-function _bargeAttrs(name, map) { const st = _bargeStyle(name, map); return st ? ' data-bc="1" style="' + st + '"' : ''; }
+function _bargeAttrs(name, map) { const st = _bargeStyle(name, map); return st ? ' data-bc="1" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"' : ''; }
 // a small coloured dot before a barge name in lists and tables
-function _bargeDot(name, map) { const st = _bargeStyle(name, map); return st ? '<span class="bg-dot" style="' + st + '"></span>' : ''; }
+function _bargeDot(name, map) { const st = _bargeStyle(name, map); return st ? '<span class="bg-dot" data-bgn="' + esc(String(name == null ? '' : name).trim()) + '" style="' + st + '"></span>' : ''; }
 function setBargeColor(id, key) {
   if (!_bargeKeyOk(key)) return;
   const inp = document.getElementById('b' + id + '-color'); if (!inp) return;
@@ -22178,19 +22178,19 @@ function _paintBargeCard(id) {
   if (st) { card.setAttribute('data-bc', '1'); card.setAttribute('style', 'margin-top:10px;' + st); }
   card.querySelectorAll('.bg-sw').forEach(function(sw) { sw.classList.toggle('on', sw.getAttribute('data-k') === inp.value); });
 }
-// The screen showing barges follows a colour change (the others redraw when opened). Only the page
-// being looked at is redrawn, so a colour change never builds views — or the ROB engine's barge
-// configuration — that nobody has opened yet.
-function _refreshBargeColours() {
-  const run = function(f) { try { f(); } catch (e) {} };
-  const pg = (typeof _currentPage !== 'undefined') ? _currentPage : '';
-  if (pg === 'timeline' || pg === 'schedule') run(function() { if (_lastSched && _lastSched.length) { let br = getBarges(); if (!br.length) br = (_bargeConfig || []).map(function(b) { return { id: b.id, name: b.name }; }); renderBargeTabsAndTL(_lastSched, br); } });
-  if (pg === 'dashboard') run(renderDashFleetStatus);
-  if (pg === 'bargefleet') run(function() { if (_bargeConfig && _bargeConfig.length) renderLiveROBDashboard(); });
-  if (pg === 'records') run(renderSavedRecords);
-  if (pg === 'checklist') run(function() { renderChecklist(null); }); // null: re-draw only — nothing is injected into the checklist
-  run(_refreshReportViews);
+// A colour change recolours what is already on screen, in place: every coloured element carries its
+// barge name (data-bgn) and takes the colour from the barge cards. Nothing is redrawn, so what
+// someone is typing, the barge tab they chose and their Print ticks are untouched.
+function _repaintBargeColours() {
+  const map = _bargeColorMap();
+  document.querySelectorAll('[data-bgn]').forEach(function(el) {
+    const i = _BARGE_PALETTE.indexOf(map.get(String(el.getAttribute('data-bgn') || '').trim())) + 1;
+    if (!i) return;
+    el.style.setProperty('--bc', 'var(--barge-' + i + ')');
+    el.style.setProperty('--bc-lt', 'var(--barge-' + i + '-lt)');
+  });
 }
+function _refreshBargeColours() { _repaintBargeColours(); }
 function getBarges() {
   return _barges.map(b=>{
     const id=b.id;
