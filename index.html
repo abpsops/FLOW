@@ -3113,23 +3113,6 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <!-- Track Record Watchlist — the standing, passive version of Counterparty
-       Track Record Intelligence. The per-nomination banner only shows when
-       you're actively typing/viewing a specific vessel's name, which
-       means a vessel with a genuinely bad pattern stays invisible unless
-       you happen to go looking for it. This surfaces every vessel that's
-       actually built up enough history (2+ completed deliveries since
-       TRACK_RECORD_START_MONTH) right on the Dashboard, without needing anyone to type
-       anything — reuses the exact same computeVesselTrackRecord() logic,
-       just run across every vessel in the Delivery Log instead of one. -->
-  <div class="chart-card" style="margin-bottom:14px">
-    <div class="chart-title">Track Record Watchlist</div>
-    <div class="chart-subtitle" id="dash-track-record-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries — laycan compliance &amp; disputes</div>
-    <div id="dash-track-record-watchlist">
-      <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>
-    </div>
-  </div>
-
   <!-- Dashboard 2-col: Charts + Activity -->
   <div class="dash-row-2col" style="margin-bottom:14px">
     <div class="chart-card" style="overflow:visible">
@@ -3192,6 +3175,23 @@ function flowWelcomeGo(pageId) {
       <div id="dash-fleet-status" style="flex:1">
         <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
       </div>
+    </div>
+  </div>
+
+  <!-- Track Record Watchlist — the standing, passive version of Counterparty
+       Track Record Intelligence. The per-nomination banner only shows when
+       you're actively typing/viewing a specific vessel's name, which
+       means a vessel with a genuinely bad pattern stays invisible unless
+       you happen to go looking for it. This surfaces every vessel that's
+       actually built up enough history (2+ completed deliveries since
+       TRACK_RECORD_START_MONTH) right on the Dashboard, without needing anyone to type
+       anything — reuses the exact same computeVesselTrackRecord() logic,
+       just run across every vessel in the Delivery Log instead of one. -->
+  <div class="chart-card" style="margin-top:16px">
+    <div class="chart-title">Track Record Watchlist</div>
+    <div class="chart-subtitle" id="dash-track-record-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries — laycan compliance &amp; disputes</div>
+    <div id="dash-track-record-watchlist">
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>
     </div>
   </div>
 
