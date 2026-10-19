@@ -30,6 +30,7 @@ const SUITES = [
   ['fix', 'suites/fix/fix.test.js', 'reports KPIs, checklist dedupe, delivery-log tombstones, nuclear clear'],
   ['xss', 'suites/fix/xss.test.js', 'stored-XSS sweep over every page and modal'],
   ['records-edit', 'suites/fix/records-edit.test.js', 'edited saved records reach Monthly Report / Distributed chart / Reports: port filter scoped, actual vs nominated, archived copies, stale dialog, archive merge, supply date, duplicates, blank actual'],
+  ['barge-colours', 'suites/fix/barge-colours.test.js', 'barge identity colours: palette, defaults, picker, sync, every screen, hostile values, fuel/status colours untouched'],
   ['rob-merge', 'suites/fix/rob-merge.test.js', 'barge ROB when two saves meet: a colleague\'s supply deducted once (different / same grade, save in flight), an emptied barge stays empty, merge rules'],
   ['records-bdn', 'suites/fix/bdn.test.js', 'Saved Supply Records → Edit: BDN numbers (VLSFO / LSMGO), change summary, list, XSS'],
   ['track-record', 'suites/fix/trackrecord.test.js', 'disputes only when marked, vessel names merged, watchlist details'],
