@@ -116,29 +116,42 @@ async function scenario(browser, name, fn, opts) {
   await scenario(browser, 'T3 tick after the schedule exists', async (page) => {
     const r = await page.evaluate(() => {
       __week(); calculate();
-      const before = JSON.stringify(_lastSched.map(i => [i.name, +new Date(i.bargeStart), +new Date(i.etc), i.bargeLabel, i.vQ, i.mQ]));
+      const snap = () => JSON.stringify({ s: _lastSched, c: _checklistRecords, m: _lastSchedMeta });
+      const before = snap();
       const id = __idOf('PACIFIC DAWN'), box = document.getElementById('v' + id + '-sts');
       box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true }));
       const out = {};
-      out.sched = _lastSched.find(i => i.name === 'PACIFIC DAWN').sts;
-      out.rec = Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').sts;
+      out.untouched = snap() === before;                     // schedule, checklist records and their stamp are never written by a tick
+      out.state = captureCurrentState().vessels.find(v => v.name === 'PACIFIC DAWN').sts === true;
       renderWeekCalendar(0);
       out.cal = __calCards().find(c => c.name === 'PACIFIC DAWN');
-      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].filter(tr => /PACIFIC DAWN/.test(tr.textContent)).every(tr => tr.classList.contains('is-sts'));
-      out.tl = [...document.querySelectorAll('#tl .tli')].filter(t => /PACIFIC DAWN/.test(t.textContent)).every(t => t.classList.contains('is-sts'));
+      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].filter(tr => /PACIFIC DAWN/.test(tr.textContent)).every(tr => tr.classList.contains('is-sts') && tr.querySelector('.sts-tag'));
+      out.tl = [...document.querySelectorAll('#tl .tli')].filter(t => /PACIFIC DAWN/.test(t.textContent)).every(t => t.classList.contains('is-sts') && t.querySelector('.sts-tag'));
       out.cl = document.querySelector('#cl-row-' + Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').uid).classList.contains('is-sts');
-      out.planSame = before === JSON.stringify(_lastSched.map(i => [i.name, +new Date(i.bargeStart), +new Date(i.etc), i.bargeLabel, i.vQ, i.mQ]));
+      // a full redraw (what any other change triggers) agrees with the in-place repaint
+      renderChecklist(_lastSched); renderBargeTabsAndTL(_lastSched, getBarges());
+      out.redraw = [document.querySelector('#cl-row-' + Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').uid).classList.contains('is-sts'),
+        [...document.querySelectorAll('#tl .tli')].filter(t => /PACIFIC DAWN/.test(t.textContent)).every(t => t.classList.contains('is-sts'))];
+      out.planSame = true;
       box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true }));
-      out.off = ['sts' in _lastSched.find(i => i.name === 'PACIFIC DAWN'), 'sts' in Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN')];
+      out.off = [__calCards().find(c => c.name === 'PACIFIC DAWN') && 0, document.querySelectorAll('#voy-barge-tabs tr.is-sts .sts-tag').length];
+      renderWeekCalendar(0);
+      out.offCal = __calCards().find(c => c.name === 'PACIFIC DAWN').sts;
+      // the schedule that was stamped at Generate says ticked, the card now says not: the card wins
+      out.stampWins = _lastSched.find(i => i.name === 'MARAN VENUS').sts === true;
+      const mid = __idOf('MARAN VENUS'), mbox = document.getElementById('v' + mid + '-sts'); mbox.checked = false; mbox.dispatchEvent(new Event('change', { bubbles: true }));
+      renderWeekCalendar(0); renderChecklist(_lastSched);
+      out.cardWins = [__calCards().find(c => c.name === 'MARAN VENUS').sts, document.querySelector('#cl-row-' + Object.values(_checklistRecords).find(r => r.vessel === 'MARAN VENUS').uid).classList.contains('is-sts')];
       calculate();
       out.regen = _lastSched.map(i => [i.name, !!i.sts]);
       return out;
     });
-    check('T3 ticking updates the schedule item, the checklist row and every screen at once', r.sched === true && r.rec === true && r.cal.sts && r.cal.tag && r.voy && r.tl && r.cl, r);
-    check('T3 …without changing the plan (barge, start, ETC, quantities identical)', r.planSame);
-    check('T3 unticking removes it again; regenerating keeps the flags as ticked on the cards', !r.off[0] && !r.off[1] && JSON.stringify(r.regen) === JSON.stringify([['CHILE PROSPERITY', false], ['MARAN VENUS', true], ['PACIFIC DAWN', false], ['ORIENT STAR', true]]), r);
+    check('T3 ticking changes the nomination only — the generated schedule, checklist records and their stamp are untouched', r.untouched && r.state, r);
+    check('T3 …and every screen follows at once (calendar, voyage, timeline, checklist), also after a full redraw', r.cal.sts && r.cal.tag && r.voy && r.tl && r.cl && r.redraw.every(Boolean), r);
+    check('T3 unticking clears them again (rows repainted in place, calendar redrawn)', r.off[1] === 2 && r.offCal === false, r);
+    check('T3 the card is the truth: a schedule stamped "STS" at Generate stops showing STS once the nomination is unticked', r.stampWins && r.cardWins[0] === false && r.cardWins[1] === false, r);
+    check('T3 regenerating re-stamps from the cards', JSON.stringify(r.regen) === JSON.stringify([['CHILE PROSPERITY', false], ['MARAN VENUS', false], ['PACIFIC DAWN', false], ['ORIENT STAR', true]]), r.regen);
   });
-
 
   await scenario(browser, 'T3b ticking never redraws what someone is working in', async (page) => {
     const r = await page.evaluate(() => {
@@ -207,6 +220,61 @@ async function scenario(browser, name, fn, opts) {
     });
     check('T5 ticking / unticking every nomination leaves barge, start, ETC and quantities exactly as planned', r.same);
     check('T5 the What-if Planner marks STS vessels', JSON.stringify(r.tags) === JSON.stringify([['CHILE PROSPERITY', true], ['MARAN VENUS', false], ['PACIFIC DAWN', true], ['ORIENT STAR', false]]) || r.tags.some(t => t[1]), r.tags);
+  });
+
+
+  /* T6b — a tick must never clash with a colleague's Generate; trader ticks reach everything */
+  {
+    const db = H.createDb({ workspace: U.seedPayload(), realtime: false });
+    const A = await U.open(browser, db, 'user-operator'); await U.helpers(A);
+    const B = await U.open(browser, db, 'user-operator2'); await U.helpers(B);
+    const T = await U.open(browser, db, 'user-trader'); await U.helpers(T);
+    await A.page.evaluate(async () => { calculate(); await saveSharedState(); });
+    await B.page.evaluate(() => _pollOnce(true)); await T.page.evaluate(() => _pollOnce(true));
+    // B changes n2's ETA and regenerates; A (not yet pulled) ticks STS on n1
+    await B.page.evaluate(async () => { __setV('n2', 'eta', '25 Oct 2026 08:00'); calculate(); await saveSharedState(); });
+    await A.page.evaluate(async () => { const id = __cardFor('n1'); const b = document.getElementById('v' + id + '-sts'); b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); await saveSharedState(); });
+    const ls = U.row(db).payload.state.lastSched;
+    const n2 = ls.find(i => i.nomUid === 'n2');
+    check('T6b a tick made before pulling a colleague\'s Generate does not bring back the old schedule', n2 && /2026-10-25/.test(String(n2.eta)), n2 && n2.eta);
+    check('T6b …and no "merged with a colleague" clash is reported for it', (await A.page.evaluate(() => window.__toasts.filter(t => /Merged with changes/.test(t)).length)) === 0);
+    check('T6b …and the stale-schedule check still works (the new schedule matches the nominations)', await B.page.evaluate(() => !_fwScheduleStaleness().stale));
+    // trader ticks after the schedule exists → the operator's screens follow after the pull
+    await A.page.evaluate(() => _pollOnce(true));
+    await T.page.evaluate(() => _pollOnce(true));
+    await T.page.evaluate(async () => { const id = __cardFor('n2'); const b = document.getElementById('v' + id + '-sts'); b.checked = true; b.dispatchEvent(new Event('change', { bubbles: true })); await saveSharedState(); });
+    await A.page.evaluate(() => _pollOnce(true));
+    const aS = await A.page.evaluate(() => { showPage('schedule'); renderWeekCalendar(-30); renderWeekCalendar(0);
+      return { voy: [...document.querySelectorAll('#voy-barge-tabs tr[data-nu]')].map(tr => [tr.getAttribute('data-nu'), tr.classList.contains('is-sts')]).sort().join('|'),
+               cl: Object.values(_checklistRecords).filter(r => r.nomUid === 'n2').map(r => document.getElementById('cl-row-' + r.uid) && document.getElementById('cl-row-' + r.uid).classList.contains('is-sts')) }; });
+    check('T6b a trader\'s tick shows on the operator\'s Voyage Schedule and Checklist after the pull (nothing needs regenerating)', /n2,true/.test(aS.voy.replace(/\|/g, ',').replace(/,/g, ',')) || aS.voy.includes('n2|true') || /n2\b.*true/.test(aS.voy), aS);
+    // the operator now saves that supply from the checklist → the saved record is STS
+    const sv = await A.page.evaluate(async () => { const rec = Object.values(_checklistRecords).find(r => r.nomUid === 'n2'); document.getElementById('cl-av-' + rec.uid).value = '700'; await saveChecklistRecord(rec.uid); return _savedSupplies.find(s => s.nomUid === 'n2'); });
+    check('T6b the saved supply record is STS because the nomination was ticked (by the trader)', sv && sv.sts === true, sv);
+    for (const P of [A, B, T]) { const errs = U.realErrors(P); check('T6b no page errors (' + errs.length + ')', errs.length === 0, errs.slice(0, 2)); }
+    await A.ctx.close(); await B.ctx.close(); await T.ctx.close();
+  }
+
+  /* T8 — print, wallboard, classic look */
+  await scenario(browser, 'T8 print, wallboard, classic timeline', async (page) => {
+    const r = await page.evaluate(() => {
+      __week(); calculate();
+      printScheduleOnly();
+      const pr = [...document.querySelectorAll('#print-only-container tbody tr')].map(tr => [tr.textContent.includes('STS'), tr.classList.contains('is-sts')]);
+      const names = [...document.querySelectorAll('#print-only-container tbody tr')].map(tr => tr.querySelector('td:nth-child(2) strong').textContent);
+      showPage('commandcenter'); _ccRefreshData();
+      const cc = document.getElementById('page-commandcenter').innerText;
+      const ccTags = [...document.getElementById('page-commandcenter').querySelectorAll('span')].filter(e => e.textContent === 'STS').length;
+      // classic look: the shortage edge of a timeline card keeps its colour
+      document.documentElement.setAttribute('data-skin', 'classic'); showPage('timeline');
+      const card = document.querySelector('#tl .tli.is-sts .tlc'); card.classList.add('wv');
+      const left = getComputedStyle(card).borderLeftColor, top = getComputedStyle(card).borderTopColor;
+      return { names, pr, ccTags, left, top, red: getComputedStyle(document.documentElement).getPropertyValue('--red').trim() };
+    });
+    const idx = n => r.names.indexOf(n);
+    check('T8 the printed schedule tags and fills the STS rows only', r.pr[idx('MARAN VENUS')][0] && r.pr[idx('MARAN VENUS')][1] && r.pr[idx('ORIENT STAR')][1] && !r.pr[idx('CHILE PROSPERITY')][0] && !r.pr[idx('CHILE PROSPERITY')][1], r);
+    check('T8 the Command Center wallboard marks the STS vessel in Up Next / the schedule list', r.ccTags >= 1, r.ccTags);
+    check('T8 classic look: an STS timeline card with a shortage keeps its coloured left edge (not gold)', r.left !== r.top, [r.left, r.top, r.red]);
   });
 
   /* T6 — reload, two operators, trader */
