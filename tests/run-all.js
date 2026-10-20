@@ -37,6 +37,8 @@ const SUITES = [
   ['free-windows', 'suites/fw/fw.test.js', 'Free Windows planner calculations and exports'],
   ['sync-race', 'suites/fw/race.test.js', 'deletions survive a save racing a pull (forced interleavings)'],
   ['reload-planner', 'suites/reload/reload.test.js', 'stock forecast, breaches, reload-by, slot, Plan this loading, alerts'],
+  ['planner-core', 'suites/planner/planner.test.js', 'planSchedule() is the exact planner calculate() always was (300 recorded random weeks) and is pure'],
+  ['what-if-planner', 'suites/planner/sim.test.js', 'What-if sandbox equals the real planner for every kind of change, nothing saved or synced, look-ahead suggestions never worse + apply, limits, traders, phone'],
   ['skin', 'suites/skin/skin.test.js', 'Harbour Light / Classic look switch'],
   ['bunker-modal', 'suites/layout/bunker.test.js', 'Bunker Message opens from dashboard links'],
   ['layout-space', 'suites/layout/space.test.js', 'sidebar and activity feed fill the window'],
