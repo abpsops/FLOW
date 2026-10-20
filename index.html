@@ -14367,25 +14367,25 @@ function _simOnlyPins(ed) {
   return Object.keys(ed.v).every(k => { const e = ed.v[k]; return Object.keys(e).every(f => f === 'pin'); });
 }
 
+// Quantity and barge edits on a copy of the vessel. A grade the nomination does not
+// carry (VLSFO on an MGO-only card, MGO on a VLSFO-only card) can't be added here.
+function _simQtyPin(o, v, e) {
+  if (e.vq != null && v.type !== 'MGO') { o.vq = e.vq; o.vqMin = null; }
+  if (e.mq != null && v.type !== 'VLSFO') { o.mq = e.mq; o.mqMin = null; }
+  if (e.pin !== undefined) o.bargeId = e.pin;
+  return o;
+}
 function _simApplyVessel(v, e) {
   if (e.etaExact === undefined && !e.shiftHrs) {
     // Nothing about the arrival moved: keep the vessel's times exactly as read from its card.
-    const o = Object.assign({}, v);
-    if (e.vq != null) { o.vq = e.vq; o.vqMin = null; }
-    if (e.mq != null) { o.mq = e.mq; o.mqMin = null; }
-    if (e.pin !== undefined) o.bargeId = e.pin;
-    return o;
+    return _simQtyPin(Object.assign({}, v), v, e);
   }
   let eta = e.etaExact instanceof Date ? new Date(e.etaExact.getTime()) : (v.eta || v.effectiveETA);
   let winHrs = v.winHrs, etaWin = v.etaWin;
   if (e.etaExact instanceof Date) { winHrs = 0; etaWin = ''; }       // an exact time replaces a time frame
   if (e.shiftHrs) eta = addHrs(eta, e.shiftHrs);                     // a frame moves as a whole
   const T = _planVesselTimes(eta, winHrs, v.lc, !!etaWin);
-  const o = Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA });
-  if (e.vq != null) { o.vq = e.vq; o.vqMin = null; }
-  if (e.mq != null) { o.mq = e.mq; o.mqMin = null; }
-  if (e.pin !== undefined) o.bargeId = e.pin;
-  return o;
+  return _simQtyPin(Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA }), v, e);
 }
 // The planner's inputs for the snapshot as edited — pure.
 function _simInputs(snap, ed) {
@@ -14428,7 +14428,7 @@ function _simGain(g, m) { return (g.short - m.short) + 25 * (g.wait - m.wait) + 
 function _simCompare(basePlan, scenPlan) {
   const side = (plan, i) => {
     const it = plan.sched[i], m = plan.meta[i];
-    return { barge: it.bargeLabel, bargeId: m.bargeId, start: it.bargeStart, etc: it.etc, vQ: it.vQ, mQ: it.mQ, nomV: it.nomVQ, nomM: it.nomMQ, wait: m.waitHrs, late: m.pastLaycan, eta: it.eta, partial: it.isPartial };
+    return { barge: it.bargeLabel, bargeId: m.bargeId, start: it.bargeStart, etc: it.etc, vQ: it.vQ, mQ: it.mQ, nomV: it.nomVQ, nomM: it.nomMQ, wait: m.waitHrs, late: m.pastLaycan, eta: it.eta, partial: it.isPartial, refuel: it.refuelSlot ? { start: it.refuelSlot.rfStart, end: it.refuelSlot.rfEnd } : null };
   };
   const S = new Map();
   scenPlan.meta.forEach((m, i) => S.set(_simKey(m.vessel), side(scenPlan, i)));
@@ -14537,6 +14537,12 @@ function _simRetake() {
   // Carry what-ifs over only for vessels / barges that still exist.
   const keys = new Set(_sim.snap.vessels.map(_simKey)), ids = new Set(_sim.snap.barges.map(b => String(b.id)));
   Object.keys(ed.v).forEach(k => { if (!keys.has(k)) delete ed.v[k]; else if (ed.v[k].pin && !ids.has(String(ed.v[k].pin))) { delete ed.v[k].pin; if (!Object.keys(ed.v[k]).length) delete ed.v[k]; } });
+  _sim.snap.vessels.forEach(v => {                 // a grade the nomination no longer carries
+    const k = _simKey(v), e = ed.v[k]; if (!e) return;
+    if (v.type === 'MGO') delete e.vq;
+    if (v.type === 'VLSFO') delete e.mq;
+    if (!Object.keys(e).length) delete ed.v[k];
+  });
   Object.keys(ed.b).forEach(k => { if (!ids.has(String(k))) delete ed.b[k]; });
   ed.blocks = ed.blocks.filter(b => ids.has(String(b.bargeId)));
 }
@@ -14544,7 +14550,20 @@ function _simLiveChanged() {
   if (!_sim || !_sim.snap) return false;
   try { return _simSig(_simTake()) !== _sim.sig; } catch (e) { return true; }
 }
-function _simEdited() { _sim.suggest = null; _sim.searchSeq++; _simRender(); }
+/* A box being typed in commits (and the page redraws) the moment the mouse goes down on
+   something else; the redraw can move that something before the mouse comes up, and the
+   browser then drops the click. So while a pointer is down on the page the redraw waits
+   until it is up (with a safety timer in case the release is never seen). */
+let _simPointerDown = false;
+function _simEdited() {
+  _sim.suggest = null; _sim.searchSeq++;
+  if (_simPointerDown) { _sim.dirty = true; clearTimeout(_sim.dirtyTimer); _sim.dirtyTimer = setTimeout(_simFlush, 1500); }
+  else _simRender();
+}
+function _simFlush() {
+  _simPointerDown = false;
+  if (_sim && _sim.dirty) { _sim.dirty = false; clearTimeout(_sim.dirtyTimer); _simRender(); }
+}
 
 function _simVessel(key) { return _sim.snap.vessels.find(v => _simKey(v) === key); }
 function _simEdit(key) { return _sim.edits.v[key] || (_sim.edits.v[key] = {}); }
@@ -14560,17 +14579,17 @@ function _simRender() {
    carrying data-k are matched by that key, the rest by position. */
 function _simMorph(root, html) {
   const tmp = document.createElement('div'); tmp.innerHTML = html;
-  const active = document.activeElement;
   const attrs = (a, b) => {
     Array.from(a.attributes).forEach(at => { if (!b.hasAttribute(at.name)) a.removeAttribute(at.name); });
     Array.from(b.attributes).forEach(at => { if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value); });
   };
   const patch = (x, y) => {
     attrs(x, y);
+    const typing = x === document.activeElement && !x.disabled;      // a box the user is in right now
     if (x.tagName === 'INPUT') {
-      if (x !== active && !x.hasAttribute('data-keep')) { const v = y.getAttribute('value') || ''; if (x.value !== v) x.value = v; }
+      if (!typing && !x.hasAttribute('data-keep')) { const v = y.getAttribute('value') || ''; if (x.value !== v) x.value = v; }
     } else if (x.tagName === 'SELECT') {
-      if (x !== active) { x.innerHTML = y.innerHTML; x.value = y.value; }
+      if (!typing) { x.innerHTML = y.innerHTML; x.value = y.value; }
     } else kids(x, y);
   };
   const compatible = (x, y) => x && x.nodeType === y.nodeType && (x.nodeType !== 1 || (x.tagName === y.tagName && !x.hasAttribute('data-k') && !y.hasAttribute('data-k')));
@@ -14643,11 +14662,13 @@ function _simHtml() {
     let result = '', vs = '';
     if (cancelled) result = '<span class="sim-muted">Cancelled in this what-if</span>';
     else if (s) {
-      result = '<div>' + _bargeDot(s.barge, cmap) + '<strong>' + esc(s.barge) + '</strong></div><div class="sim-sub">' + esc(fmt24(s.start)) + ' → ' + esc(fmt24(s.etc)) + '</div>';
+      result = '<div>' + _bargeDot(s.barge, cmap) + '<strong>' + esc(s.barge) + '</strong></div><div class="sim-sub">' + esc(fmt24(s.start)) + ' → ' + esc(fmt24(s.etc)) + '</div>' + (s.refuel ? '<div class="sim-sub">then refuels until ' + esc(fmt24(s.refuel.end)) + '</div>' : '');
       const c = [];
       if (row.changes.indexOf('barge') >= 0) c.push(chip(bdg(b.bargeId) + ' → ' + bdg(s.bargeId), 'sim-chg'));
-      if (row.changes.indexOf('start') >= 0) c.push(chip('starts ' + _simHrs((s.start - b.start) / 3600000), (s.start > b.start) ? 'sim-bad' : 'sim-good'));
-      else if (row.changes.indexOf('etc') >= 0) c.push(chip('ends ' + _simHrs((s.etc - b.etc) / 3600000), (s.etc > b.etc) ? 'sim-bad' : 'sim-good'));
+      const dS = (s.start - b.start) / 3600000, dE = (s.etc - b.etc) / 3600000, chS = row.changes.indexOf('start') >= 0, chE = row.changes.indexOf('etc') >= 0;
+      if (chS) c.push(chip('starts ' + _simHrs(dS), dS > 0 ? 'sim-bad' : 'sim-good'));
+      if (chE && !(chS && Math.abs(dS - dE) < 1 / 60)) c.push(chip('ends ' + _simHrs(dE), dE > 0 ? 'sim-bad' : 'sim-good'));
+      if (e.etaExact && v0.etaWin) c.push(chip('time frame replaced by an exact time', 'sim-chg'));
       const shortS = (s.nomV - s.vQ) + (s.nomM - s.mQ), shortB = (b.nomV - b.vQ) + (b.nomM - b.mQ);
       if (shortS > 0) c.push(chip('short ' + _simMT(shortS) + ' MT', shortS > shortB ? 'sim-bad' : 'sim-warn'));
       else if (shortB > 0) c.push(chip('no longer short', 'sim-good'));
@@ -14655,7 +14676,7 @@ function _simHtml() {
       if (s.late && !b.late) c.push(chip('starts after laycan', 'sim-bad'));
       else if (!s.late && b.late) c.push(chip('back inside laycan', 'sim-good'));
       vs = c.join(' ');
-      if (row.differs && !c.length) vs = chip('timing changes', 'sim-chg');
+      if (row.differs && !c.length) vs = chip(row.changes.length === 1 && row.changes[0] === 'qty' ? 'quantity changes' : 'timing changes', 'sim-chg');
     }
     const eid = (f) => 'data-sim="' + f + '" data-key="' + esc(key) + '"';
     vesselRows.push('<tr data-k="vr-' + esc(key) + '" class="' + (cancelled ? 'sim-off' : (row && row.differs ? 'sim-diff' : '')) + '">' +
@@ -14720,10 +14741,10 @@ function _simHtml() {
   } else sgHtml = '<div class="sim-sub">Tries every way to share the unpinned vessels between your barges and offers a plan only if it is no worse than the one above on shortfall, vessel waiting or laycan.</div>';
   const canSuggest = snap.barges.length > 1 && !(sg && sg.running);
   const canApply = onlyPins && !liveChanged && Object.keys(ed.v).length > 0;
-  const suggest = '<div class="card sim-card" id="sim-suggest" data-k="suggest"><div class="card-title">Suggest a better barge plan</div>' + sgHtml +
-    '<div class="sim-row" style="margin-top:10px">' + (canSuggest ? '<button class="btn btn-secondary btn-sm" data-sim="suggest">' + (sg && sg.result ? 'Look again' : 'Find a better plan') + '</button>' : '') +
+  const suggest = '<div class="card sim-card" id="sim-suggest" data-k="suggest"><div class="card-title">Suggest a better barge plan</div><div data-k="sg-body">' + sgHtml + '</div>' +
+    '<div class="sim-row" data-k="sg-actions" style="margin-top:10px">' + (canSuggest ? '<button class="btn btn-secondary btn-sm" data-sim="suggest">' + (sg && sg.result ? 'Look again' : 'Find a better plan') + '</button>' : '') +
     (canApply ? '<button class="btn btn-primary btn-sm" data-sim="apply">Apply these barge choices to my real plan…</button>' : '') + '</div>' +
-    (edited && !onlyPins ? '<div class="sim-sub" style="margin-top:6px">Applying to the real plan is offered only when the barge choice is the only thing changed here — other what-ifs (ETAs, quantities, cancellations, out-of-service times) stay in this sandbox.</div>' : '') + '</div>';
+    (edited && !onlyPins ? '<div class="sim-sub" data-k="sg-note" style="margin-top:6px">Applying to the real plan is offered only when the barge choice is the only thing changed here — other what-ifs (ETAs, quantities, cancellations, out-of-service times) stay in this sandbox.</div>' : '') + '</div>';
 
   /* what changed, in words */
   const changed = rows.filter(r => r.differs);
@@ -14731,9 +14752,14 @@ function _simHtml() {
     if (r.cancelled) return '<li><strong>' + esc(r.name) + '</strong> — cancelled; the barge time it held is freed.</li>';
     const parts = [], b = r.base, s = r.scen;
     if (r.changes.indexOf('barge') >= 0) parts.push('moves from ' + bdg(b.bargeId) + ' to ' + bdg(s.bargeId));
-    if (r.changes.indexOf('start') >= 0) parts.push('starts ' + _simDur((s.start - b.start) / 3600000) + (s.start > b.start ? ' later' : ' earlier') + ' (' + esc(fmt24(s.start)) + ')');
-    else if (r.changes.indexOf('etc') >= 0) parts.push('finishes ' + _simDur((s.etc - b.etc) / 3600000) + (s.etc > b.etc ? ' later' : ' earlier'));
-    if (r.changes.indexOf('qty') >= 0) parts.push('supply ' + _simMT(s.vQ + s.mQ) + ' MT (was ' + _simMT(b.vQ + b.mQ) + ' MT)');
+    const wS = r.changes.indexOf('start') >= 0, wE = r.changes.indexOf('etc') >= 0, dS = (s.start - b.start) / 3600000, dE = (s.etc - b.etc) / 3600000;
+    if (wS) parts.push('starts ' + _simDur(dS) + (dS > 0 ? ' later' : ' earlier') + ' (' + esc(fmt24(s.start)) + ')');
+    if (wE && !(wS && Math.abs(dS - dE) < 1 / 60)) parts.push('finishes ' + _simDur(dE) + (dE > 0 ? ' later' : ' earlier'));
+    if (ed.v[r.key] && ed.v[r.key].etaExact && (ed.v[r.key].etaExact instanceof Date) && snap.vessels.some(q => _simKey(q) === r.key && q.etaWin)) parts.push('time frame replaced by the exact time');
+    if (r.changes.indexOf('qty') >= 0) {
+      const dSup = s.vQ + s.mQ, bSup = b.vQ + b.mQ;
+      parts.push(dSup !== bSup ? 'supply ' + _simMT(dSup) + ' MT (was ' + _simMT(bSup) + ' MT)' : 'nominated ' + _simMT(s.nomV + s.nomM) + ' MT (was ' + _simMT(b.nomV + b.nomM) + ' MT)');
+    }
     const own = ed.v[r.key];
     return '<li><strong>' + esc(r.name) + '</strong> — ' + parts.join('; ') + (own ? '' : ' <span class="sim-sub">(knock-on)</span>') + '</li>';
   }).join('') + '</ul>' : '<div class="sim-sub">' + (edited ? 'These changes leave every supply where it is in the current plan.' : 'Nothing changed yet — move an ETA, delay or cancel a vessel, pin a barge or take one out of service to see what happens.') + '</div>';
@@ -14757,6 +14783,10 @@ function _simBind() {
   const root = document.getElementById('sim-root');
   if (!root || _simBound) return;
   _simBound = true;
+  document.addEventListener('pointerdown', ev => { if (root.contains(ev.target)) _simPointerDown = true; }, true);
+  const released = () => { if (_simPointerDown) setTimeout(_simFlush, 0); };
+  document.addEventListener('pointerup', released, true);
+  document.addEventListener('pointercancel', released, true);
   const num = s => { const n = parseFloat(s); return isFinite(n) && n >= 0 ? n : null; };
   root.addEventListener('change', function(ev) {
     const t = ev.target.closest && ev.target.closest('[data-sim]'); if (!t || !_sim || !_sim.snap) return;
@@ -14773,6 +14803,8 @@ function _simBind() {
       const n = num(t.value), e = _simEdit(key), orig = kind === 'vq' ? v.vq : v.mq;
       if (n == null || n === orig) delete e[kind]; else e[kind] = n;
       _simTidy(key);
+      const now = _sim.edits.v[key] && _sim.edits.v[key][kind] != null ? _sim.edits.v[key][kind] : orig;
+      t.value = String(now);                        // never leave rejected text on screen
     } else if (kind === 'pin') {
       const v = _simVessel(key); if (!v) return;
       const e = _simEdit(key);
@@ -14783,6 +14815,7 @@ function _simBind() {
       const n = num(t.value), o = _sim.snap.opening[b.id], f = kind === 'brob-v' ? 'v' : 'm', be = _sim.edits.b[b.id] || (_sim.edits.b[b.id] = {});
       if (n == null || Math.round(n) === Math.round(o[f])) delete be[f]; else be[f] = n;
       if (!Object.keys(be).length) delete _sim.edits.b[b.id];
+      t.value = String(_sim.edits.b[b.id] && _sim.edits.b[b.id][f] != null ? _sim.edits.b[b.id][f] : Math.round(o[f]));
     } else return;
     _simEdited();
   });

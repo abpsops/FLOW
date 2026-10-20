@@ -702,6 +702,89 @@ async function scenario(browser, name, fn, opts) {
     check('S18 the what-ifs were not all no-ops (' + (r.weeks - r.notDifferent) + ' of ' + r.weeks + ' changed the plan)', r.weeks - r.notDifferent >= 40, r.notDifferent);
   });
 
+
+  /* S19 — second review round */
+  await scenario(browser, 'S19 first click, rejected numbers, grades, wording', async (page) => {
+    await page.evaluate(() => { __week(); calculate(); __open(); });
+    const keys = await page.evaluate(() => Object.fromEntries(_sim.snap.vessels.map(v => [v.name, _simKey(v)])));
+    const edits = () => page.evaluate(() => JSON.stringify(Object.fromEntries(Object.entries(_sim.edits.v).map(([k, e]) => [_sim.snap.vessels.find(v => _simKey(v) === k).name, Object.keys(e).sort().join('+')]))));
+    // 1 — type a number, then click another control with the mouse: the first click must work
+    const typeThenClick = async (target, label, expect) => {
+      await page.evaluate(() => { _sim.edits = _simEmptyEdits(); _simRetake(); _simRender(); });
+      const box = `[data-sim="vq"][data-key="${keys['ORIENT STAR']}"]`;
+      await page.click(box, { clickCount: 3 }); await page.keyboard.type('777');
+      await page.click(target);
+      const e = JSON.parse(await edits());
+      check('S19 type a quantity, then ONE mouse click on ' + label + ' works', expect(e), e);
+    };
+    await typeThenClick(`[data-sim="shift"][data-h="6"][data-key="${keys['NORTH SEA']}"]`, '"+6h" on another row', e => /shiftHrs/.test(JSON.stringify(e)) || (e['NORTH SEA'] || '').includes('shiftHrs') && (e['ORIENT STAR'] || '').includes('vq'));
+    await typeThenClick(`[data-sim="cancel"][data-key="${keys['NORTH SEA']}"]`, '"Cancel vessel" on another row', e => (e['NORTH SEA'] || '').includes('cancel') && (e['ORIENT STAR'] || '').includes('vq'));
+    await page.evaluate(() => { _sim.edits = _simEmptyEdits(); _simRetake(); _simRender(); });
+    await page.click('[data-sim="suggest"]');
+    await page.waitForFunction(() => _sim.suggest && _sim.suggest.result);
+    const box2 = `[data-sim="vq"][data-key="${keys['ORIENT STAR']}"]`;
+    await page.click(box2, { clickCount: 3 }); await page.keyboard.type('700');
+    await page.click('[data-sim="suggest"]');
+    const started = await page.waitForFunction(() => _sim.suggest && (_sim.suggest.running || _sim.suggest.result), null, { timeout: 5000 }).then(() => true).catch(() => false);
+    check('S19 type a quantity, then ONE click on "Look again" starts the search', started);
+    // 2 — a rejected number never stays on screen
+    const r2 = await page.evaluate(async () => {
+      _sim.edits = _simEmptyEdits(); _simRetake(); _simRender();
+      const out = {};
+      const maran = _simKey(_sim.snap.vessels.find(v => v.name === 'MARAN VENUS'));
+      const box = __q('[data-sim="vq"][data-key="' + maran + '"]'); box.focus(); box.value = '-5'; box.dispatchEvent(new Event('change', { bubbles: true }));
+      out.neg = box.value;
+      box.value = ''; box.dispatchEvent(new Event('change', { bubbles: true })); out.empty = box.value;
+      const bid = _sim.snap.barges[0].id, rb = __q('[data-sim="brob-v"][data-bid="' + bid + '"]'); rb.focus(); const orig = rb.value; rb.value = ''; rb.dispatchEvent(new Event('change', { bubbles: true }));
+      out.rob = [orig, rb.value];
+      // a focused box that the same redraw disables is refreshed too
+      const north = _simKey(_sim.snap.vessels.find(v => v.name === 'NORTH SEA')), nb = __q('[data-sim="vq"][data-key="' + north + '"]');
+      nb.value = '450'; nb.focus(); __click('[data-sim="cancel"][data-key="' + north + '"]');
+      out.disabledBox = [__q('[data-sim="vq"][data-key="' + north + '"]').disabled, __q('[data-sim="vq"][data-key="' + north + '"]').value];
+      return out;
+    });
+    check('S19 a rejected ("-5") or emptied quantity box goes back to the real value', r2.neg === '4500' && r2.empty === '4500', r2);
+    check('S19 an emptied barge start-fuel box goes back to the real value', r2.rob[0] === r2.rob[1], r2.rob);
+    check('S19 a box disabled by the redraw shows the real value, not stale typing', r2.disabledBox[0] === true && r2.disabledBox[1] === '600', r2.disabledBox);
+  });
+
+  await scenario(browser, 'S19b grade changed underneath, wording, refuel', async (page) => {
+    const r = await page.evaluate(() => {
+      const W = __week(); calculate(); __open();
+      const chile = W.v.chile.uid;
+      __change(__q('[data-sim="vq"][data-key="' + chile + '"]'), '2000'); __change(__q('[data-sim="mq"][data-key="' + chile + '"]'), '150');
+      // colleague turns CHILE into a VLSFO-only nomination
+      const t = document.getElementById('v' + W.v.chile.id + '-type'); t.value = 'VLSFO'; t.dispatchEvent(new Event('change', { bubbles: true }));
+      __click('[data-sim="refresh"]');
+      const ed = _sim.edits.v[chile], item = __scen().sched.find(i => i.name === 'CHILE PROSPERITY');
+      const real = (document.getElementById('v' + W.v.chile.id + '-vlsfo').value = '2000', __live());
+      return { edit: ed && Object.keys(ed).join('+'), mQ: item.mQ, nomM: item.nomMQ, mgoDisabled: __q('[data-sim="mq"][data-key="' + chile + '"]').disabled };
+    });
+    check('S19 a what-if for a grade the nomination no longer carries is dropped on Refresh (VLSFO 2000 kept, MGO 150 dropped)', r.edit === 'vq' && r.mQ === 0 && r.nomM === 0 && r.mgoDisabled, r);
+    const w = await page.evaluate(() => {
+      __reset(); __barge({ name: 'FNSA 10', vrob: 3000, mrob: 800 }); __barge({ name: 'FNSA 11', vrob: 3000, mrob: 800 });
+      const A = __vessel({ name: 'FRAMED ONE', qty: 900, eta: __fmt(new Date(2026, 10, 6, 12, 0)), etaWin: 'PM' });
+      const B = __vessel({ name: 'REFUELLER', qty: 500, etaHrs: 0, refuelChk: true, rfv: 600 });
+      const C = __vessel({ name: 'PLAIN QTY', type: 'BOTH', qty: 800, mgo: 50, etaHrs: 30 });
+      calculate(); __open();
+      const out = {};
+      __change(__q('[data-sim="eta"][data-key="' + A.uid + '"]'), '2026-11-06T12:30');
+      const row = [...document.querySelectorAll('.sim-tbl tbody tr')].find(r => /FRAMED ONE/.test(r.innerText));
+      out.frame = row.querySelector('.sim-vs').innerText;
+      out.frameWords = document.querySelector('[data-k="chg"]').innerText;
+      __click('[data-sim="vreset"][data-key="' + A.uid + '"]');
+      __change(__q('[data-sim="mq"][data-key="' + C.uid + '"]'), '40');
+      const row2 = [...document.querySelectorAll('.sim-tbl tbody tr')].find(r => /PLAIN QTY/.test(r.innerText));
+      out.qty = row2.querySelector('.sim-vs').innerText; out.qtyWords = document.querySelector('[data-k="chg"]').innerText;
+      const row3 = [...document.querySelectorAll('.sim-tbl tbody tr')].find(r => /REFUELLER/.test(r.innerText));
+      out.refuel = row3.querySelector('.sim-res').innerText;
+      return out;
+    });
+    check('S19 an exact ETA on a time-frame vessel says the frame was replaced and reports start AND end separately', /starts/.test(w.frame) && /ends/.test(w.frame) && /time frame replaced/.test(w.frame) && /finishes/.test(w.frameWords), w);
+    check('S19 a quantity-only change is called a quantity change, with an honest sentence', /quantity changes/.test(w.qty) && /(supply|nominated) [\d,]+ MT \(was [\d,]+ MT\)/.test(w.qtyWords) && !/supply ([\d,]+) MT \(was \1 MT\)/.test(w.qtyWords), w);
+    check('S19 a vessel that refuels afterwards shows when the barge is free again', /then refuels until/.test(w.refuel), w.refuel);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
