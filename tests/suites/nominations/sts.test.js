@@ -38,7 +38,7 @@ const HELPERS = () => {
   window.__cardOf = name => [...document.querySelectorAll('.vcard[id^="vessel-"]')].find(c => document.getElementById(c.id.replace('vessel-', 'v') + '-name').value === name);
   window.__idOf = name => __cardOf(name).id.replace('vessel-', '');
   window.__bg = el => getComputedStyle(el).backgroundColor;
-  window.__calCards = () => [...document.querySelectorAll('#week-calendar .cal-vcard')].map(e => ({ name: e.querySelector('div[style*="font-size:10.5px"]').textContent.replace(/\s*STS\s*$/, '').trim(), sts: e.classList.contains('sts'), tag: !!e.querySelector('.sts-tag'), bg: __bg(e) }));
+  window.__calCards = () => [...document.querySelectorAll('#week-calendar .cal-vcard')].map(e => ({ name: e.querySelector('div[style*="font-size:10.5px"]').textContent.replace(/\s*STS\s*$/, '').trim(), sts: e.classList.contains('is-sts'), tag: !!e.querySelector('.sts-tag'), bg: __bg(e) }));
 };
 
 async function scenario(browser, name, fn, opts) {
@@ -88,11 +88,11 @@ async function scenario(browser, name, fn, opts) {
       showPage('dashboard'); renderWeekCalendar(0);
       out.cal = __calCards().sort((a, b) => a.name.localeCompare(b.name));
       showPage('schedule');
-      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].map(tr => [tr.querySelector('td:nth-child(3)').textContent.replace('STS', '').trim(), tr.classList.contains('sts-row'), !!tr.querySelector('.sts-tag'), __bg(tr.querySelector('td:nth-child(3)'))]);
+      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].map(tr => [tr.querySelector('td:nth-child(3)').textContent.replace('STS', '').trim(), tr.classList.contains('is-sts'), !!tr.querySelector('.sts-tag'), __bg(tr.querySelector('td:nth-child(3)'))]);
       showPage('timeline');
-      out.tl = [...document.querySelectorAll('#tl .tli')].map(t => [t.querySelector('.tlvn').textContent.replace('STS', '').replace(/^#\d+ — /, '').trim(), t.classList.contains('sts'), !!t.querySelector('.sts-tag'), __bg(t.querySelector('.tlc'))]);
+      out.tl = [...document.querySelectorAll('#tl .tli')].map(t => [t.querySelector('.tlvn').textContent.replace('STS', '').replace(/^#\d+ — /, '').trim(), t.classList.contains('is-sts'), !!t.querySelector('.sts-tag'), __bg(t.querySelector('.tlc'))]);
       showPage('checklist');
-      out.cl = [...document.querySelectorAll('#page-checklist tbody tr[id^="cl-row-"]')].map(tr => [tr.querySelector('td:nth-child(2)').textContent.replace('STS', '').trim(), tr.classList.contains('sts-row'), !!tr.querySelector('.sts-tag'), __bg(tr.querySelector('td:nth-child(2)'))]);
+      out.cl = [...document.querySelectorAll('#page-checklist tbody tr[id^="cl-row-"]')].map(tr => [tr.querySelector('td:nth-child(2)').textContent.replace('STS', '').trim(), tr.classList.contains('is-sts'), !!tr.querySelector('.sts-tag'), __bg(tr.querySelector('td:nth-child(2)'))]);
       out.recs = Object.values(_checklistRecords).map(r => [r.vessel, r.sts === true ? true : ('sts' in r ? 'bad' : 'absent')]);
       out.token = getComputedStyle(document.documentElement).getPropertyValue('--sts-lt').trim();
       return out;
@@ -124,9 +124,9 @@ async function scenario(browser, name, fn, opts) {
       out.rec = Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').sts;
       renderWeekCalendar(0);
       out.cal = __calCards().find(c => c.name === 'PACIFIC DAWN');
-      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].filter(tr => /PACIFIC DAWN/.test(tr.textContent)).every(tr => tr.classList.contains('sts-row'));
-      out.tl = [...document.querySelectorAll('#tl .tli')].filter(t => /PACIFIC DAWN/.test(t.textContent)).every(t => t.classList.contains('sts'));
-      out.cl = document.querySelector('#cl-row-' + Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').uid).classList.contains('sts-row');
+      out.voy = [...document.querySelectorAll('#voy-barge-tabs .voy-tbl tbody tr')].filter(tr => /PACIFIC DAWN/.test(tr.textContent)).every(tr => tr.classList.contains('is-sts'));
+      out.tl = [...document.querySelectorAll('#tl .tli')].filter(t => /PACIFIC DAWN/.test(t.textContent)).every(t => t.classList.contains('is-sts'));
+      out.cl = document.querySelector('#cl-row-' + Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN').uid).classList.contains('is-sts');
       out.planSame = before === JSON.stringify(_lastSched.map(i => [i.name, +new Date(i.bargeStart), +new Date(i.etc), i.bargeLabel, i.vQ, i.mQ]));
       box.checked = false; box.dispatchEvent(new Event('change', { bubbles: true }));
       out.off = ['sts' in _lastSched.find(i => i.name === 'PACIFIC DAWN'), 'sts' in Object.values(_checklistRecords).find(r => r.vessel === 'PACIFIC DAWN')];
@@ -137,6 +137,26 @@ async function scenario(browser, name, fn, opts) {
     check('T3 ticking updates the schedule item, the checklist row and every screen at once', r.sched === true && r.rec === true && r.cal.sts && r.cal.tag && r.voy && r.tl && r.cl, r);
     check('T3 …without changing the plan (barge, start, ETC, quantities identical)', r.planSame);
     check('T3 unticking removes it again; regenerating keeps the flags as ticked on the cards', !r.off[0] && !r.off[1] && JSON.stringify(r.regen) === JSON.stringify([['CHILE PROSPERITY', false], ['MARAN VENUS', true], ['PACIFIC DAWN', false], ['ORIENT STAR', true]]), r);
+  });
+
+
+  await scenario(browser, 'T3b ticking never redraws what someone is working in', async (page) => {
+    const r = await page.evaluate(() => {
+      __week(); calculate();
+      const rec = Object.values(_checklistRecords).find(x => x.vessel === 'PACIFIC DAWN');
+      showPage('checklist');
+      const inp = document.getElementById('cl-am-' + rec.uid); inp.value = '123'; inp.focus();
+      const row = document.getElementById('cl-row-' + rec.uid);
+      showPage('schedule');
+      const chk = document.querySelector('#voy-barge-tabs .voy-print-chk'); chk.checked = false;
+      const tabs = document.querySelector('#voy-barge-tabs'), tl = document.querySelector('#tl .tli');
+      const id = __idOf('PACIFIC DAWN'), box = document.getElementById('v' + id + '-sts');
+      box.checked = true; box.dispatchEvent(new Event('change', { bubbles: true }));
+      return { typed: document.getElementById('cl-am-' + rec.uid) === inp && inp.value, rowSame: document.getElementById('cl-row-' + rec.uid) === row, rowSts: row.classList.contains('is-sts'),
+        printTick: document.querySelector('#voy-barge-tabs .voy-print-chk') === chk && chk.checked === false, tabsSame: document.querySelector('#voy-barge-tabs') === tabs, tlSame: document.querySelector('#tl .tli') === tl };
+    });
+    check('T3b a half-typed checklist actual survives ticking STS (the row is repainted, not redrawn)', r.typed === '123' && r.rowSame && r.rowSts, r);
+    check('T3b a cleared print tick, the voyage tabs and the timeline cards are the same elements afterwards', r.printTick && r.tabsSame && r.tlSame, r);
   });
 
   await scenario(browser, 'T4 saved record, trash, calendar without a schedule', async (page) => {
@@ -153,7 +173,7 @@ async function scenario(browser, name, fn, opts) {
       await saveChecklistRecord(plain.uid);
       out.plainSaved = 'sts' in _savedSupplies.find(s => s.checklistUid === plain.uid);
       showPage('records'); renderSavedRecords();
-      out.rows = [...document.querySelectorAll('#page-records .saved-record-row')].map(r => [r.querySelector('.saved-record-vessel').textContent.replace('STS', '').trim().split('\n')[0].trim(), r.classList.contains('sts'), !!r.querySelector('.sts-tag')]);
+      out.rows = [...document.querySelectorAll('#page-records .saved-record-row')].map(r => [r.querySelector('.saved-record-vessel').textContent.replace('STS', '').trim().split('\n')[0].trim(), r.classList.contains('is-sts'), !!r.querySelector('.sts-tag')]);
       // remove a ticked nomination, restore it from the trash bin → still ticked
       const id = __idOf('ORIENT STAR'); const uidBefore = document.getElementById('vessel-' + id).dataset.nomUid;
       rmV(+id); await new Promise(r => setTimeout(r, 600));
