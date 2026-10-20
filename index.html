@@ -14350,7 +14350,7 @@ function _simTake() {
 function _simSig(snap) {
   const t = d => d ? +d : 0;
   return JSON.stringify([
-    snap.vessels.map(v => [v.nomUid || v.id, v.name, v.type, v.vq, v.mq, t(v.eta), t(v.effectiveETA), v.etaWin, v.bargeId, v.refuel, v.rfv, v.rfm, v.lc ? t(v.lc.from) : 0, v.lc ? t(v.lc.to) : 0]),
+    snap.vessels.map(v => [v.nomUid || v.id, v.name, v.type, v.vq, v.mq, t(v.eta), t(v.effectiveETA), v.etaWin, v.bargeId, v.refuel, v.rfv, v.rfm, v.rfvr, v.rfmr, v.lc ? t(v.lc.from) : 0, v.lc ? t(v.lc.to) : 0]),
     snap.barges.map(b => [b.id, b.name, b.vcap, b.mcap, b.vbuf, b.mbuf, b.vtph, b.mtph]),
     snap.opening, snap.hoseHrs, snap.travelHrs,
     snap.blocks.map(b => [b.id, b.bargeId, b.start, b.end])
@@ -14368,6 +14368,14 @@ function _simOnlyPins(ed) {
 }
 
 function _simApplyVessel(v, e) {
+  if (e.etaExact === undefined && !e.shiftHrs) {
+    // Nothing about the arrival moved: keep the vessel's times exactly as read from its card.
+    const o = Object.assign({}, v);
+    if (e.vq != null) { o.vq = e.vq; o.vqMin = null; }
+    if (e.mq != null) { o.mq = e.mq; o.mqMin = null; }
+    if (e.pin !== undefined) o.bargeId = e.pin;
+    return o;
+  }
   let eta = e.etaExact instanceof Date ? new Date(e.etaExact.getTime()) : (v.eta || v.effectiveETA);
   let winHrs = v.winHrs, etaWin = v.etaWin;
   if (e.etaExact instanceof Date) { winHrs = 0; etaWin = ''; }       // an exact time replaces a time frame
@@ -14501,6 +14509,7 @@ function _simDtl(d) {
 function _simParseDtl(s) {
   const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(String(s || ''));
   if (!m) return null;
+  if (+m[1] < 2000 || +m[1] > 2100) return null;      // a half-typed year (0002, 0020 …) is not a date yet
   const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
   return isNaN(d.getTime()) ? null : d;
 }
@@ -14543,18 +14552,61 @@ function _simTidy(key) { const e = _sim.edits.v[key]; if (e && !Object.keys(e).l
 
 function _simRender() {
   const root = document.getElementById('sim-root');
-  if (!root) return;
+  if (root) _simMorph(root, _simHtml());
+}
+/* Make `root` show `html` while reusing the elements that can stay, so the
+   box being typed in keeps focus and its text, a button keeps focus after it
+   is pressed, and the out-of-service date boxes keep what was typed. Elements
+   carrying data-k are matched by that key, the rest by position. */
+function _simMorph(root, html) {
+  const tmp = document.createElement('div'); tmp.innerHTML = html;
+  const active = document.activeElement;
+  const attrs = (a, b) => {
+    Array.from(a.attributes).forEach(at => { if (!b.hasAttribute(at.name)) a.removeAttribute(at.name); });
+    Array.from(b.attributes).forEach(at => { if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value); });
+  };
+  const patch = (x, y) => {
+    attrs(x, y);
+    if (x.tagName === 'INPUT') {
+      if (x !== active && !x.hasAttribute('data-keep')) { const v = y.getAttribute('value') || ''; if (x.value !== v) x.value = v; }
+    } else if (x.tagName === 'SELECT') {
+      if (x !== active) { x.innerHTML = y.innerHTML; x.value = y.value; }
+    } else kids(x, y);
+  };
+  const compatible = (x, y) => x && x.nodeType === y.nodeType && (x.nodeType !== 1 || (x.tagName === y.tagName && !x.hasAttribute('data-k') && !y.hasAttribute('data-k')));
+  const kids = (a, b) => {
+    const old = Array.from(a.childNodes), want = Array.from(b.childNodes);
+    const keyed = new Map(), loose = [];
+    old.forEach(n => { if (n.nodeType === 1 && n.hasAttribute('data-k')) keyed.set(n.getAttribute('data-k'), n); else loose.push(n); });
+    const out = want.map(y => {
+      let x = null;
+      if (y.nodeType === 1 && y.hasAttribute('data-k')) {
+        x = keyed.get(y.getAttribute('data-k')) || null;
+        if (x && x.tagName !== y.tagName) x = null;
+      } else {
+        while (loose.length && !x) { const c = loose.shift(); if (compatible(c, y)) x = c; }
+      }
+      if (!x) return y.cloneNode(true);
+      if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; return x; }
+      patch(x, y);
+      return x;
+    });
+    out.forEach((n, i) => { if (a.childNodes[i] !== n) a.insertBefore(n, a.childNodes[i] || null); });
+    while (a.childNodes.length > out.length) a.removeChild(a.lastChild);
+  };
+  kids(root, tmp);
+}
+function _simHtml() {
   const note = (msg, extra) => '<div class="sim-note">' + msg + (extra || '') + '</div>';
-  if (!_sim || !_sim.snap) { root.innerHTML = note(esc(_sim && _sim.error ? _sim.error : 'Add vessel nominations and barges first.'), ' <button class="btn btn-secondary btn-sm" data-sim="refresh">Try again</button>'); return; }
+  if (!_sim || !_sim.snap) return note(esc(_sim && _sim.error ? _sim.error : 'Add vessel nominations and barges first.'), ' <button class="btn btn-secondary btn-sm" data-sim="refresh">Try again</button>');
   const snap = _sim.snap, ed = _sim.edits;
-  if (!snap.vessels.length || !snap.barges.length) { root.innerHTML = note('Add at least one vessel nomination and one barge, then come back — this page plans a copy of them.'); return; }
+  if (!snap.vessels.length || !snap.barges.length) return note('Add at least one vessel nomination and one barge, then come back — this page plans a copy of them.');
   let basePlan, scenPlan;
   try {
     basePlan = planSchedule(_simInputs(snap, _simEmptyEdits()));
     scenPlan = planSchedule(_simInputs(snap, ed));
   } catch (e) {
-    root.innerHTML = note('That combination can’t be planned: ' + esc((e && e.message) || e) + ' ', '<button class="btn btn-secondary btn-sm" data-sim="reset">Undo all what-ifs</button>');
-    return;
+    return note('That combination can’t be planned: ' + esc((e && e.message) || e) + ' ', '<button class="btn btn-secondary btn-sm" data-sim="reset">Undo all what-ifs</button>');
   }
   const rows = _simCompare(basePlan, scenPlan), mb = _simMetrics(basePlan), ms = _simMetrics(scenPlan);
   const cmap = _bargeColorMap(), bname = id => { const b = snap.barges.find(x => String(x.id) === String(id)); return b ? b.name : ''; };
@@ -14570,7 +14622,7 @@ function _simRender() {
       '<span class="sim-kpi-d">' + (d === 0 ? 'same as current plan' : (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + (unit || '') + ' vs ' + fmt(a) + (unit || '') + ' now') + '</span></div>';
   };
   const mtf = n => _simMT(n), hf = n => (Math.round(n * 10) / 10).toLocaleString() + ' h', nf = n => String(Math.round(n));
-  const summary = '<div class="sim-kpis">' +
+  const summary = '<div class="sim-kpis" data-k="kpis">' +
     kpi('Delivered', mb.delV + mb.delM, ms.delV + ms.delM, mtf, false, ' MT') +
     kpi('Short of nominated', mb.short, ms.short, mtf, true, ' MT') +
     kpi('Vessel waiting for a barge', mb.wait, ms.wait, hf, true, '') +
@@ -14606,21 +14658,21 @@ function _simRender() {
       if (row.differs && !c.length) vs = chip('timing changes', 'sim-chg');
     }
     const eid = (f) => 'data-sim="' + f + '" data-key="' + esc(key) + '"';
-    vesselRows.push('<tr class="' + (cancelled ? 'sim-off' : (row && row.differs ? 'sim-diff' : '')) + '">' +
+    vesselRows.push('<tr data-k="vr-' + esc(key) + '" class="' + (cancelled ? 'sim-off' : (row && row.differs ? 'sim-diff' : '')) + '">' +
       '<td class="sno">' + (idx + 1) + '</td>' +
       '<td><strong>' + esc(v0.name) + '</strong><div class="sim-sub">' + tags + '</div>' +
         '<div class="sim-quick"><button class="sim-qb" ' + eid(cancelled ? 'restore' : 'cancel') + '>' + (cancelled ? 'Restore vessel' : 'Cancel vessel') + '</button>' +
         (e && Object.keys(e).length && !cancelled ? '<button class="sim-qb" ' + eid('vreset') + '>Undo changes</button>' : '') + '</div></td>' +
-      '<td><input type="datetime-local" class="sim-in' + (etaEdited ? ' sim-edited' : '') + '" ' + eid('eta') + ' value="' + esc(_simDtl(etaShown)) + '"' + (cancelled ? ' disabled' : '') + ' aria-label="ETA of ' + esc(v0.name) + '">' +
+      '<td><input type="datetime-local" min="2000-01-01T00:00" max="2100-12-31T23:59" class="sim-in' + (etaEdited ? ' sim-edited' : '') + '" ' + eid('eta') + ' value="' + esc(_simDtl(etaShown)) + '"' + (cancelled ? ' disabled' : '') + ' aria-label="ETA of ' + esc(v0.name) + '">' +
         '<div class="sim-quick">' + [6, 12, 24].map(h => '<button class="sim-qb" ' + eid('shift') + ' data-h="' + h + '"' + (cancelled ? ' disabled' : '') + '>+' + h + 'h</button>').join('') +
         (etaEdited ? '<button class="sim-qb" ' + eid('eta-reset') + '>reset</button>' : '') + '</div>' +
         (etaEdited ? '<div class="sim-sub">was ' + esc(fmt24(v0.eta || v0.effectiveETA)) + '</div>' : '') + '</td>' +
-      '<td><input type="number" min="0" step="50" class="sim-in sim-qty' + (e.vq != null ? ' sim-edited' : '') + '" ' + eid('vq') + ' value="' + esc(sv.vq || 0) + '"' + (cancelled ? ' disabled' : '') + ' aria-label="VLSFO of ' + esc(v0.name) + '"></td>' +
-      '<td><input type="number" min="0" step="25" class="sim-in sim-qty' + (e.mq != null ? ' sim-edited' : '') + '" ' + eid('mq') + ' value="' + esc(sv.mq || 0) + '"' + (cancelled ? ' disabled' : '') + ' aria-label="MGO of ' + esc(v0.name) + '"></td>' +
+      '<td><input type="number" min="0" step="50" class="sim-in sim-qty' + (e.vq != null ? ' sim-edited' : '') + '" ' + eid('vq') + ' value="' + esc(sv.vq || 0) + '"' + (cancelled || v0.type === 'MGO' ? ' disabled' : '') + (v0.type === 'MGO' ? ' title="MGO-only nomination"' : '') + ' aria-label="VLSFO of ' + esc(v0.name) + '"></td>' +
+      '<td><input type="number" min="0" step="25" class="sim-in sim-qty' + (e.mq != null ? ' sim-edited' : '') + '" ' + eid('mq') + ' value="' + esc(sv.mq || 0) + '"' + (cancelled || v0.type === 'VLSFO' ? ' disabled' : '') + (v0.type === 'VLSFO' ? ' title="VLSFO-only nomination"' : '') + ' aria-label="MGO of ' + esc(v0.name) + '"></td>' +
       '<td><select class="sim-in' + (e.pin !== undefined ? ' sim-edited' : '') + '" ' + eid('pin') + (cancelled ? ' disabled' : '') + ' aria-label="Barge for ' + esc(v0.name) + '">' + barOpts(e.pin !== undefined ? e.pin : v0.bargeId) + '</select></td>' +
       '<td class="sim-res">' + result + '</td><td class="sim-vs">' + vs + '</td></tr>');
   });
-  const vesselTbl = '<div class="voy-wrap sim-wrap"><table class="voy-tbl sim-tbl"><thead><tr><th>#</th><th>Vessel</th><th>ETA</th><th>VLSFO MT</th><th>MGO MT</th><th>Barge</th><th>What-if plan</th><th>Compared with the current plan</th></tr></thead><tbody>' + vesselRows.join('') + '</tbody></table></div>';
+  const vesselTbl = '<div class="voy-wrap sim-wrap" data-k="vessels"><table class="voy-tbl sim-tbl"><thead><tr><th>#</th><th>Vessel</th><th>ETA</th><th>VLSFO MT</th><th>MGO MT</th><th>Barge</th><th>What-if plan</th><th>Compared with the current plan</th></tr></thead><tbody>' + vesselRows.join('') + '</tbody></table></div>';
 
   /* barges */
   const firstEta = snap.vessels.reduce((m, v) => { const t = +(v.eta || v.effectiveETA); return t && (!m || t < m) ? t : m; }, 0);
@@ -14629,15 +14681,15 @@ function _simRender() {
     const be = ed.b[b.id] || {}, o = snap.opening[b.id];
     const mine = ed.blocks.filter(x => String(x.bargeId) === String(b.id));
     const live = snap.blocks.filter(x => String(x.bargeId) === String(b.id) || (x.bargeId == null || x.bargeId === '') && x.bargeName === b.name);
-    return '<div class="sim-barge"' + _bargeAttrs(b.name, cmap) + '><div class="sim-barge-h">' + _bargeDot(b.name, cmap) + '<strong>' + esc(b.name) + '</strong>' +
+    return '<div class="sim-barge" data-k="bc-' + esc(b.id) + '"' + _bargeAttrs(b.name, cmap) + '><div class="sim-barge-h">' + _bargeDot(b.name, cmap) + '<strong>' + esc(b.name) + '</strong>' +
         '<span class="sim-sub">on board now ' + _simMT(o.v) + ' VLSFO · ' + _simMT(o.m) + ' MGO</span></div>' +
       '<div class="sim-row"><label>Start with VLSFO <input type="number" min="0" step="50" class="sim-in sim-qty' + (be.v != null ? ' sim-edited' : '') + '" data-sim="brob-v" data-bid="' + esc(b.id) + '" value="' + esc(be.v != null ? be.v : Math.round(o.v)) + '"></label>' +
         '<label>MGO <input type="number" min="0" step="25" class="sim-in sim-qty' + (be.m != null ? ' sim-edited' : '') + '" data-sim="brob-m" data-bid="' + esc(b.id) + '" value="' + esc(be.m != null ? be.m : Math.round(o.m)) + '"></label>' +
         (be.v != null || be.m != null ? '<button class="sim-qb" data-sim="brob-reset" data-bid="' + esc(b.id) + '">reset</button>' : '') + '</div>' +
       live.map(x => '<div class="sim-sub">Already blocked: ' + esc(x.reason || 'Unavailable') + ' · ' + esc(fmt24(new Date(x.start))) + ' → ' + esc(fmt24(new Date(x.end))) + '</div>').join('') +
-      mine.map(x => '<div class="sim-blk">Out of service (what-if): ' + esc(fmt24(new Date(x.start))) + ' → ' + esc(fmt24(new Date(x.end))) + ' <button class="sim-qb" data-sim="blk-del" data-id="' + esc(x.id) + '">remove</button></div>').join('') +
-      '<div class="sim-row"><label>Out of service from <input type="datetime-local" class="sim-in" id="sim-blk-from-' + esc(b.id) + '" value="' + esc(_simDtl(defFrom)) + '"></label>' +
-        '<label>until <input type="datetime-local" class="sim-in" id="sim-blk-to-' + esc(b.id) + '" value="' + esc(_simDtl(new Date(defFrom.getTime() + 24 * 3600000))) + '"></label>' +
+      mine.map(x => '<div class="sim-blk" data-k="blk-' + esc(x.id) + '">Out of service (what-if): ' + esc(fmt24(new Date(x.start))) + ' → ' + esc(fmt24(new Date(x.end))) + ' <button class="sim-qb" data-sim="blk-del" data-id="' + esc(x.id) + '">remove</button></div>').join('') +
+      '<div class="sim-row"><label>Out of service from <input type="datetime-local" class="sim-in" data-keep="1" min="2000-01-01T00:00" max="2100-12-31T23:59" id="sim-blk-from-' + esc(b.id) + '" value="' + esc(_simDtl(defFrom)) + '"></label>' +
+        '<label>until <input type="datetime-local" class="sim-in" data-keep="1" min="2000-01-01T00:00" max="2100-12-31T23:59" id="sim-blk-to-' + esc(b.id) + '" value="' + esc(_simDtl(new Date(defFrom.getTime() + 24 * 3600000))) + '"></label>' +
         '<button class="btn btn-secondary btn-sm" data-sim="blk-add" data-bid="' + esc(b.id) + '">Take out of service</button></div></div>';
   }).join('');
 
@@ -14668,7 +14720,7 @@ function _simRender() {
   } else sgHtml = '<div class="sim-sub">Tries every way to share the unpinned vessels between your barges and offers a plan only if it is no worse than the one above on shortfall, vessel waiting or laycan.</div>';
   const canSuggest = snap.barges.length > 1 && !(sg && sg.running);
   const canApply = onlyPins && !liveChanged && Object.keys(ed.v).length > 0;
-  const suggest = '<div class="card sim-card" id="sim-suggest"><div class="card-title">Suggest a better barge plan</div>' + sgHtml +
+  const suggest = '<div class="card sim-card" id="sim-suggest" data-k="suggest"><div class="card-title">Suggest a better barge plan</div>' + sgHtml +
     '<div class="sim-row" style="margin-top:10px">' + (canSuggest ? '<button class="btn btn-secondary btn-sm" data-sim="suggest">' + (sg && sg.result ? 'Look again' : 'Find a better plan') + '</button>' : '') +
     (canApply ? '<button class="btn btn-primary btn-sm" data-sim="apply">Apply these barge choices to my real plan…</button>' : '') + '</div>' +
     (edited && !onlyPins ? '<div class="sim-sub" style="margin-top:6px">Applying to the real plan is offered only when the barge choice is the only thing changed here — other what-ifs (ETAs, quantities, cancellations, out-of-service times) stay in this sandbox.</div>' : '') + '</div>';
@@ -14686,16 +14738,18 @@ function _simRender() {
     return '<li><strong>' + esc(r.name) + '</strong> — ' + parts.join('; ') + (own ? '' : ' <span class="sim-sub">(knock-on)</span>') + '</li>';
   }).join('') + '</ul>' : '<div class="sim-sub">' + (edited ? 'These changes leave every supply where it is in the current plan.' : 'Nothing changed yet — move an ETA, delay or cancel a vessel, pin a barge or take one out of service to see what happens.') + '</div>';
 
-  const banner = '<div class="sim-banner"><strong>Private sandbox.</strong> Nothing here is saved, shared with colleagues or sent. Copy taken ' + esc(fmt24(snap.takenAt)) + '.' +
+  let schedNote = '';
+  try { const st = _fwScheduleStaleness(); if (st && st.stale) schedNote = ' <span class="sim-bad">The saved Schedule Planner is out of date' + (st.reasons && st.reasons.length ? ' (' + esc(st.reasons.join(', ')) + ')' : '') + ' — “current plan” here is what Generate would produce right now.</span>'; } catch (e) {}
+  const banner = '<div class="sim-banner" data-k="banner"><strong>Private sandbox.</strong> Nothing here is saved, shared with colleagues or sent. Copy taken ' + esc(fmt24(snap.takenAt)) + '.' + schedNote +
     (liveChanged ? ' <span class="sim-bad">The live nominations or barges have changed since — refresh to plan the latest.</span>' : '') +
     ' <button class="btn btn-secondary btn-sm" data-sim="refresh">Refresh from live data</button>' +
     (edited ? ' <button class="btn btn-ghost btn-sm" data-sim="reset">Undo all what-ifs</button>' : '') + '</div>';
 
-  root.innerHTML = banner + summary +
-    '<div class="sec-hdr"><span class="sec-label">Vessels</span><span class="sim-sub">' + (edited ? changedRows + ' of ' + rows.length + ' supplies differ from the current plan' : 'Same as the current plan') + '</span></div>' + vesselTbl +
-    '<div class="sec-hdr"><span class="sec-label">What changes</span></div><div class="card sim-card">' + words + '</div>' +
-    '<div class="sec-hdr"><span class="sec-label">Barges</span></div><div class="sim-barges">' + bargeCards + '</div>' +
-    '<div class="sec-hdr"><span class="sec-label">Look ahead</span></div>' + suggest;
+  return banner + summary +
+    '<div class="sec-hdr" data-k="h-ves"><span class="sec-label">Vessels</span><span class="sim-sub">' + (edited ? changedRows + ' of ' + rows.length + ' supplies differ from the current plan' : 'Same as the current plan') + '</span></div>' + vesselTbl +
+    '<div class="sec-hdr" data-k="h-chg"><span class="sec-label">What changes</span></div><div class="card sim-card" data-k="chg">' + words + '</div>' +
+    '<div class="sec-hdr" data-k="h-bar"><span class="sec-label">Barges</span></div><div class="sim-barges" data-k="barges">' + bargeCards + '</div>' +
+    '<div class="sec-hdr" data-k="h-look"><span class="sec-label">Look ahead</span></div>' + suggest;
 }
 
 let _simBound = false;
@@ -14709,8 +14763,10 @@ function _simBind() {
     const kind = t.dataset.sim, key = t.dataset.key, bid = t.dataset.bid;
     if (kind === 'eta') {
       const v = _simVessel(key); if (!v) return;
-      const d = _simParseDtl(t.value), e = _simEdit(key);
-      if (d) { e.etaExact = d; delete e.shiftHrs; } else { delete e.etaExact; delete e.shiftHrs; }
+      const d = _simParseDtl(t.value);
+      if (!d) return;                                   // incomplete while typing — "reset" is the way back
+      const e = _simEdit(key);
+      e.etaExact = d; delete e.shiftHrs;
       _simTidy(key);
     } else if (kind === 'vq' || kind === 'mq') {
       const v = _simVessel(key); if (!v) return;
@@ -14798,9 +14854,12 @@ function _simApplyPins() {
   const lines = todo.map(t => '• ' + t.v.name + ': ' + (t.pin === '' ? 'Auto' : nm(t.pin))).join('\n');
   if (!confirm('Set these barge choices on your real nominations and regenerate the schedule?\n\n' + lines + '\n\nEach one stays pinned to that barge until you set it back to Auto on its nomination card.')) return;
   const sels = [];
+  const cards = Array.from(document.querySelectorAll('.vcard[id^="vessel-"]'));
   for (const t of todo) {
-    const card = document.getElementById('vessel-' + t.v.id), sel = document.getElementById('v' + t.v.id + '-barge');
-    if (!card || !sel || (card.dataset.nomUid || '') !== (t.v.nomUid || '')) { showToast('A nomination changed while you were deciding — nothing was applied. Refresh and try again.', 'warning'); return; }
+    // By nomination id: card numbers are re-dealt whenever a colleague's save rebuilds the cards.
+    const card = t.v.nomUid ? cards.find(c => (c.dataset.nomUid || '') === t.v.nomUid) : cards.find(c => c.id === 'vessel-' + t.v.id && !c.dataset.nomUid);
+    const sel = card ? document.getElementById('v' + card.id.replace('vessel-', '') + '-barge') : null;
+    if (!card || !sel) { showToast('A nomination changed while you were deciding — nothing was applied. Refresh and try again.', 'warning'); return; }
     sels.push([sel, t.pin]);
   }
   sels.forEach(([sel, pin]) => { sel.value = pin; if (sel.value !== pin) sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });

@@ -373,7 +373,8 @@ async function scenario(browser, name, fn, opts) {
       __change(__q('[data-sim="vq"][data-key="' + ve + '"]'), '4500'); out.same = E();
       __change(__q('[data-sim="eta"][data-key="' + ve + '"]'), ''); out.clearedEta = E();
       __click('[data-sim="shift"][data-h="6"][data-key="' + ve + '"]'); const shifted = E();
-      __change(__q('[data-sim="eta"][data-key="' + ve + '"]'), ''); out.shiftUndone = E();
+      __change(__q('[data-sim="eta"][data-key="' + ve + '"]'), ''); out.clearKeeps = E() === shifted;
+      __click('[data-sim="eta-reset"][data-key="' + ve + '"]'); out.shiftUndone = E();
       document.getElementById('sim-blk-from-' + W.a).value = '2026-11-05T20:00'; document.getElementById('sim-blk-to-' + W.a).value = '2026-11-05T10:00';
       window.__toastsSeen = []; const ot = showToast; showToast = function (m) { window.__toastsSeen.push(String(m)); return ot.apply(this, arguments); };
       __click('[data-sim="blk-add"][data-bid="' + W.a + '"]'); out.badBlock = { blocks: _sim.edits.blocks.length, toast: window.__toastsSeen.join('|') };
@@ -393,7 +394,7 @@ async function scenario(browser, name, fn, opts) {
     });
     const empty = JSON.stringify({ v: {}, b: {}, blocks: [] });
     check('S9 a negative or unreadable quantity is ignored; the original value is not an edit', r.neg === empty && r.nan === empty && r.same === empty, [r.neg, r.nan, r.same]);
-    check('S9 clearing the ETA box puts the vessel back', r.clearedEta === empty && r.shiftUndone === empty, [r.clearedEta, r.shiftUndone]);
+    check('S9 a half-typed (empty) ETA box is ignored; "reset" puts the vessel back', r.clearedEta === empty && r.clearKeeps && r.shiftUndone === empty, [r.clearedEta, r.clearKeeps, r.shiftUndone]);
     check('S9 an out-of-service time that ends before it starts, or is empty, is refused', r.badBlock.blocks === 0 && /later end/.test(r.badBlock.toast) && r.emptyBlock === 0, r.badBlock);
     check('S9 both barges out for a month: still plans, vessels wait it out', r.bothParked.rows === 5, r.bothParked);
     check('S9 every vessel cancelled: empty plan, zero deliveries, no error', r.allCancelled.scen === 0 && r.allCancelled.rows === 5 && r.allCancelled.kpi[0] === '0 MT', r.allCancelled);
@@ -464,6 +465,242 @@ async function scenario(browser, name, fn, opts) {
     });
     check('S13 ' + w + 'px: the page itself never scrolls sideways (the table scrolls inside its frame)', r.over <= 0 && r.kpiW, r);
   }, { viewport: { width: w, height: 900 } });
+
+
+  /* S14 — typing, focus and keyboard (the page is re-drawn after every edit; it must not steal focus) */
+  await scenario(browser, 'S14 keyboard and focus', async (page) => {
+    await page.evaluate(() => { __week(); calculate(); __open(); });
+    const eta = '[data-sim="eta"][data-key]';
+    const key = await page.evaluate(() => _simKey(_sim.snap.vessels.find(v => v.name === 'MARAN VENUS')));
+    const etaSel = `[data-sim="eta"][data-key="${key}"]`;
+    // type a full date with real key presses (month, day, year, hour, minute, AM/PM)
+    await page.click(etaSel, { position: { x: 12, y: 10 } });
+    await page.keyboard.type('11072026');
+    await page.keyboard.type('0415PM');
+    const t = await page.evaluate((sel) => ({ val: document.querySelector(sel).value, active: document.activeElement === document.querySelector(sel), edit: _sim.edits.v[Object.keys(_sim.edits.v)[0]] && _sim.edits.v[Object.keys(_sim.edits.v)[0]].etaExact && _simDtl(_sim.edits.v[Object.keys(_sim.edits.v)[0]].etaExact), keys: Object.keys(_sim.edits.v).length }), etaSel);
+    check('S14 typing a date by keyboard ends on exactly that date (no 1902 / wrong-month commit on the way)', t.val === '2026-11-07T16:15' && t.edit === '2026-11-07T16:15' && t.keys === 1, t);
+    check('S14 …and the box keeps focus while the plan updates around it', t.active, t);
+    const yr = await page.evaluate(() => { const bad = [..._sim.snap.vessels].map(v => 0); return { years: Object.values(_sim.edits.v).map(e => e.etaExact && e.etaExact.getFullYear()) }; });
+    check('S14 the stored what-if year is sane', yr.years.every(y => y === 2026), yr);
+    // buttons keep focus: Enter twice on +6h adds 12 h
+    const pb = `[data-sim="shift"][data-h="6"][data-key="${key}"]`;
+    await page.focus(pb); await page.keyboard.press('Enter'); await page.keyboard.press('Enter');
+    const b = await page.evaluate((sel) => ({ shift: Object.values(_sim.edits.v)[0].shiftHrs, active: document.activeElement === document.querySelector(sel) }), pb);
+    check('S14 pressing Enter on "+6h" twice with the keyboard adds 12 h and keeps focus on the button', b.shift === 12 && b.active, b);
+    // number box: type, Tab → focus moves to the next control, not to the page top
+    const vq = `[data-sim="vq"][data-key="${key}"]`;
+    await page.click(vq, { clickCount: 3 });
+    await page.keyboard.type('3000'); await page.keyboard.press('Tab');
+    const n = await page.evaluate(() => ({ tag: document.activeElement && document.activeElement.tagName, sim: document.activeElement && document.activeElement.dataset && document.activeElement.dataset.sim, vq: Object.values(_sim.edits.v)[0].vq }));
+    check('S14 typing a quantity then Tab commits it and moves on to the next control (the MGO box is off for a VLSFO-only nomination, so the barge list)', n.vq === 3000 && n.sim === 'pin', n);
+    await page.focus(vq); await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowUp'); await page.keyboard.press('ArrowUp');
+    const up = await page.evaluate(() => Object.values(_sim.edits.v)[0].vq);
+    check('S14 ArrowUp three times steps the quantity three times (box is not rebuilt under the cursor)', up === 3150, up);
+  });
+
+  /* S15 — what the user typed survives the page being re-drawn */
+  await scenario(browser, 'S15 typed text survives', async (page) => {
+    const r = await page.evaluate(async () => {
+      const W = __week(); calculate(); __open();
+      const out = {};
+      // draft out-of-service times on both barges; an unrelated edit re-draws the page
+      document.getElementById('sim-blk-from-' + W.a).value = '2026-11-06T01:00'; document.getElementById('sim-blk-to-' + W.a).value = '2026-11-06T05:00';
+      document.getElementById('sim-blk-from-' + W.b).value = '2026-11-06T02:00';
+      __click('[data-sim="shift"][data-h="6"][data-key="' + W.v.north.uid + '"]');
+      out.draft = [document.getElementById('sim-blk-from-' + W.a).value, document.getElementById('sim-blk-to-' + W.a).value, document.getElementById('sim-blk-from-' + W.b).value];
+      // adding the block for barge A keeps B's draft
+      __click('[data-sim="blk-add"][data-bid="' + W.a + '"]');
+      out.draftB = document.getElementById('sim-blk-from-' + W.b).value;
+      out.blocks = _sim.edits.blocks.length;
+      // a half-typed quantity (focused, not committed) survives the search finishing
+      const box = __q('[data-sim="vq"][data-key="' + W.v.orient.uid + '"]'); box.focus(); box.value = '777';
+      __click('[data-sim="suggest"]');
+      await new Promise(r => { const t = setInterval(() => { if (_sim.suggest && _sim.suggest.result) { clearInterval(t); r(); } }, 30); });
+      out.typed = { v: document.activeElement === box ? box.value : 'lost-focus', same: document.activeElement === box, inDom: document.body.contains(box) };
+      return out;
+    });
+    check('S15 typed out-of-service times are kept when another edit re-draws the page', r.draft[0] === '2026-11-06T01:00' && r.draft[1] === '2026-11-06T05:00' && r.draft[2] === '2026-11-06T02:00', r.draft);
+    check('S15 adding barge A\'s outage keeps barge B\'s half-filled boxes', r.blocks === 1 && r.draftB === '2026-11-06T02:00', r);
+    check('S15 a quantity being typed survives the look-ahead finishing', r.typed.same && r.typed.v === '777' && r.typed.inDom, r.typed);
+  });
+
+  /* S16 — the redraw is a faithful picture of the state */
+  await scenario(browser, 'S16 redraw fidelity', async (page) => {
+    const r = await page.evaluate(async () => {
+      const W = __week(); calculate(); __open();
+      const bad = [];
+      const same = label => {
+        const tmp = document.createElement('div'); tmp.innerHTML = _simHtml();
+        const root = document.getElementById('sim-root');
+        if (document.activeElement && root.contains(document.activeElement)) document.activeElement.blur();
+        // same elements, text and attributes (attribute order is irrelevant)
+        const norm = n => n.nodeType === 3 ? n.nodeValue : n.nodeType !== 1 ? '' : '<' + n.tagName + [...n.attributes].map(a => a.name + '=' + a.value).sort().join(' ') + '>' + [...n.childNodes].map(norm).join('') + '</' + n.tagName + '>';
+        if (norm(root) !== norm(tmp).replace(/^<DIV>/, '<DIV>').replace(/^<DIV>/, '<DIV id=sim-root>')) { if ([...root.childNodes].map(norm).join('') !== [...tmp.childNodes].map(norm).join('')) bad.push(label); }
+      };
+      same('start');
+      const steps = [
+        () => __click('[data-sim="shift"][data-h="12"][data-key="' + W.v.maran.uid + '"]'),
+        () => __click('[data-sim="cancel"][data-key="' + W.v.north.uid + '"]'),
+        () => __change(__q('[data-sim="pin"][data-key="' + W.v.chile.uid + '"]'), String(W.a)),
+        () => __change(__q('[data-sim="vq"][data-key="' + W.v.orient.uid + '"]'), '200'),
+        () => { document.getElementById('sim-blk-from-' + W.b).value = '2026-11-05T09:00'; document.getElementById('sim-blk-to-' + W.b).value = '2026-11-05T13:00'; __click('[data-sim="blk-add"][data-bid="' + W.b + '"]'); },
+        () => __change(__q('[data-sim="brob-v"][data-bid="' + W.a + '"]'), '700'),
+        () => __click('[data-sim="restore"][data-key="' + W.v.north.uid + '"]'),
+        () => __click('[data-sim="blk-del"]'),
+        () => __click('[data-sim="vreset"][data-key="' + W.v.maran.uid + '"]'),
+        () => __click('[data-sim="reset"]'),
+      ];
+      for (let i = 0; i < steps.length; i++) { steps[i](); same('step ' + i); }
+      __click('[data-sim="suggest"]'); await new Promise(r => { const t = setInterval(() => { if (_sim.suggest && _sim.suggest.result) { clearInterval(t); r(); } }, 30); });
+      same('suggest');
+      if (_sim.suggest.result.status === 'found') { __click('[data-sim="suggest-try"]'); same('try'); }
+      return bad;
+    });
+    check('S16 after every kind of edit the page equals a fresh draw of the same state', r.length === 0, r);
+  });
+
+  /* S17 — Apply survives card renumbering; stale detection covers every planning field */
+  await scenario(browser, 'S17 apply and stale fields', async (page) => {
+    const r = await page.evaluate(async () => {
+      const W = __week();
+      document.getElementById('vessel-' + W.v.pacific.id).remove();      // card numbers are now 1,2,4,5
+      calculate(); __open();
+      __change(__q('[data-sim="pin"][data-key="' + W.v.north.uid + '"]'), String(W.a));
+      __change(__q('[data-sim="pin"][data-key="' + W.v.orient.uid + '"]'), String(W.b));
+      const sand = __rows(__scen().sched);
+      const idsBefore = [...document.querySelectorAll('.vcard[id^="vessel-"]')].map(c => c.id).join();
+      applyState(captureCurrentState(), true);                           // what a colleague's save does: cards rebuilt and renumbered
+      const idsAfter = [...document.querySelectorAll('.vcard[id^="vessel-"]')].map(c => c.id).join();
+      const offered = !!document.querySelector('[data-sim="apply"]') || (_simRender(), !!document.querySelector('[data-sim="apply"]'));
+      __click('[data-sim="apply"]');
+      await new Promise(r => setTimeout(r, 300));
+      return { idsBefore, idsAfter, offered, sand, real: __rows(_lastSched), page: _currentPage };
+    });
+    check('S17 a colleague\'s save renumbers the cards (setup)', r.idsBefore !== r.idsAfter, [r.idsBefore, r.idsAfter]);
+    check('S17 Apply still works after the cards were renumbered, and lands on the plan that was shown', r.offered && r.page === 'schedule' && r.real === r.sand, { offered: r.offered, page: r.page, sand: r.sand, real: r.real });
+    const f = await page.evaluate(() => {
+      const out = {};
+      for (const f of ['vlsfo', 'mgo', 'rfv', 'rfm', 'rfvr', 'rfmr']) {
+        const W = __week(); const c = W.v.chile.id;
+        document.getElementById('v' + c + '-refuel-chk').checked = true;
+        document.getElementById('v' + c + '-rfv').value = '600'; document.getElementById('v' + c + '-rfm').value = '50';
+        calculate(); __open();
+        const el = document.getElementById('v' + c + '-' + f); el.value = String((parseFloat(el.value) || 0) + 37);
+        out[f] = _simLiveChanged();
+      }
+      return out;
+    });
+    check('S17 changing any planning field on a card — quantities, refuel amounts AND refuel load rates — marks the copy as out of date', Object.values(f).every(Boolean), f);
+    const st = await page.evaluate(() => {
+      const W = __week(); calculate();
+      document.getElementById('v' + W.v.maran.id + '-eta').value = __fmt(__at(33));
+      __open();
+      return document.querySelector('.sim-banner').innerText;
+    });
+    check('S17 when the saved Schedule Planner is out of date the page says "current plan" means "if you Generate now"', /Schedule Planner is out of date/.test(st) && /Generate would produce/.test(st), st);
+    const l = await page.evaluate(() => {
+      __reset(); __barge({ name: 'B1' });
+      const x = __vessel({ name: 'LAYCAN ONLY', lc: '8-10 Nov 2026', eta: '', qty: 500 });
+      __vessel({ name: 'TIMED ONE', qty: 400, etaHrs: 3 });
+      calculate(); __open();
+      const v = _sim.snap.vessels.find(q => q.name === 'LAYCAN ONLY');
+      const o = _simApplyVessel(v, { pin: '' }), p = _simApplyVessel(v, { vq: 100 });
+      return { sameTimes: [o, p].every(z => z.eta === v.eta && +z.effectiveETA === +v.effectiveETA && z.noFirmETA === v.noFirmETA && z.isDelayed === v.isDelayed && z.isEarly === v.isEarly) };
+    });
+    check('S17 pinning or changing a quantity never re-derives the arrival of a laycan-only vessel', l.sameTimes, l);
+  });
+
+
+  /* S18 — property test: random weeks, random what-ifs; the sandbox plan must equal the real planner's after the same changes on the real cards */
+  await scenario(browser, 'S18 random what-ifs', async (page) => {
+    const r = await page.evaluate(async () => {
+      const mulberry = seed => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; };
+      const pad = n => String(n).padStart(2, '0');
+      const NAMES = ['ALPHA STAR', 'BRAVO WAVE', 'CORAL SEA', 'DELTA QUEEN', 'EAGLE ONE', 'FJORD PRIDE', 'GALAXY TIDE', 'HARBOR MIST'];
+      const FR = [['EAM', 0], ['AM', 6], ['NOON', 11], ['PM', 12], ['LPM', 18]];
+      const res = { weeks: 0, edits: 0, mismatch: [], notDifferent: 0, errors: [] };
+      for (let seed = 1; seed <= 80; seed++) {
+        try {
+          __reset();
+          const R = mulberry(9000 + seed), ri = (a, b) => a + Math.floor(R() * (b - a + 1)), pick = a => a[Math.floor(R() * a.length)], chance = q => R() < q;
+          _calcParams.hoseHrs = pick([4, 6, 8]); _calcParams.travelHrs = pick([0, 1, 2]);
+          const nb = pick([2, 2, 3]), bids = [];
+          for (let i = 0; i < nb; i++) { addBarge({ name: 'FNSA ' + (10 + i), vcap: 5000, mcap: 1000, vrob: ri(0, 100) * 50, mrob: ri(0, 40) * 25, vbuf: pick([0, 150, 500]), mbuf: pick([0, 50, 150]), vtph: pick([300, 200]), mtph: pick([100, 60]) }); bids.push(_barges[_barges.length - 1].id); }
+          const base = new Date(2026, 10, 5, 0, 0, 0, 0), nv = ri(3, 8), cards = [];
+          for (let i = 0; i < nv; i++) {
+            const type = pick(['VLSFO', 'VLSFO', 'MGO', 'BOTH']);
+            const eta = new Date(base.getTime() + ri(0, 6) * 86400000 + ri(6, 22) * 3600000 + ri(0, 11) * 5 * 60000);
+            let etaWin = '';
+            if (chance(0.15)) { const f = pick(FR); eta.setHours(f[1], 0, 0, 0); etaWin = f[0]; } else if (chance(0.08)) eta.setHours(0, 0, 0, 0);
+            const d0 = new Date(eta); d0.setHours(0, 0, 0, 0);
+            const lc = chance(0.65) ? (() => { const from = d0.getDate() + pick([-3, -2, -1, 0, 0, 1]); return from + '-' + (from + 2) + ' Nov 2026'; })() : '';
+            const def = { name: NAMES[i], type, qty: type === 'MGO' ? 0 : ri(1, 24) * 50, mgo: type === 'VLSFO' ? 0 : ri(1, 10) * 25, eta: __fmt(eta), lc, area: 'FUJ-A', paq: 'no' };
+            if (etaWin) def.etaWin = etaWin;
+            if (chance(0.2)) { def.refuelChk = true; def.rfv = ri(2, 40) * 50; def.rfm = chance(0.5) ? ri(1, 12) * 25 : 0; def.rfvr = pick([750, 400]); }
+            if (chance(0.15)) def.bargeId = String(pick(bids));
+            if (chance(0.25)) _bargeBlocks.push({ id: 'pre' + i, bargeId: pick(bids), start: new Date(base.getTime() + ri(0, 5) * 86400000).toISOString(), end: new Date(base.getTime() + ri(6, 8) * 86400000).toISOString(), reason: 'pre' });
+            const c = __vessel(def); c.type = type; c.etaWin = etaWin; c.eta = eta; cards.push(c);
+          }
+          if (_bargeBlocks.length) _bargeBlocks.forEach(b => { b.bargeName = _barges.find(x => String(x.id) === String(b.bargeId)).name; });
+          calculate(); __open();
+          const snap = _sim.snap, ed = _sim.edits, real = [];            // real = functions that make the same change on the real cards
+          const nEd = ri(1, 4);
+          for (let k = 0; k < nEd; k++) {
+            const c = pick(cards), v = snap.vessels.find(x => x.nomUid === c.uid), key = _simKey(v);
+            const kind = pick(['shift', 'exact', 'qty', 'cancel', 'pin', 'block', 'brob']);
+            if (ed.v[key] && ed.v[key].cancel && kind !== 'block' && kind !== 'brob') continue;
+            const e = () => (ed.v[key] = ed.v[key] || {});
+            if (kind === 'shift') {
+              const h = c.etaWin ? 24 : pick([6, 12, 24, 30]);
+              e().shiftHrs = (e().shiftHrs || 0) + h;
+              real.push(() => { const el = document.getElementById('v' + c.id + '-eta'); const cur = c.etaWin ? new Date(ed.v[key].etaExact || c.eta) : (ed.v[key].etaExact || c.eta); });
+              real.push({ kind, c, key });
+            } else if (kind === 'exact') {
+              const d = new Date(base.getTime() + ri(0, 7) * 86400000 + ri(1, 23) * 3600000 + ri(0, 59) * 60000); d.setSeconds(0, 0);
+              const prev = e(); prev.etaExact = d; delete prev.shiftHrs; real.push({ kind, c, key });
+            } else if (kind === 'qty') {
+              const g = c.type === 'MGO' ? 'mq' : c.type === 'VLSFO' ? 'vq' : pick(['vq', 'mq']);
+              e()[g] = ri(0, 30) * (g === 'vq' ? 50 : 25); real.push({ kind, c, key, g });
+            } else if (kind === 'cancel') { e().cancel = true; real.push({ kind, c, key }); }
+            else if (kind === 'pin') { e().pin = pick(['', ...bids.map(String)]); real.push({ kind, c, key }); }
+            else if (kind === 'block') {
+              const bi = ri(0, nb - 1), s = new Date(base.getTime() + ri(0, 5 * 24) * 3600000), en = new Date(s.getTime() + ri(3, 40) * 3600000);
+              ed.blocks.push({ id: 'sim-f' + k, bargeId: bids[bi], bargeName: _barges.find(x => x.id === bids[bi]).name, start: s.toISOString(), end: en.toISOString(), reason: 'f' }); real.push({ kind, blk: ed.blocks[ed.blocks.length - 1] });
+            } else if (kind === 'brob') {
+              const bi = ri(0, nb - 1), f = pick(['v', 'm']); ed.b[bids[bi]] = ed.b[bids[bi]] || {}; ed.b[bids[bi]][f] = f === 'v' ? ri(0, 100) * 50 : ri(0, 40) * 25; real.push({ kind, bid: bids[bi], f });
+            }
+          }
+          for (const k of Object.keys(ed.v)) if (!Object.keys(ed.v[k]).length) delete ed.v[k];
+          const sand = __rows(__scen().sched), before = __rows(__base().sched);
+          // now the same changes on the real cards (only the descriptors; the closures above were placeholders)
+          real.filter(x => x && x.kind).forEach(x => {
+            if (x.kind === 'shift' || x.kind === 'exact') return;                  // done below, once per vessel, from the final edit state
+            if (x.kind === 'qty') { const id = x.c.id; const e = ed.v[x.key]; if (!e) return; const val = e[x.g]; if (val == null) return; document.getElementById('v' + id + '-' + (x.g === 'vq' ? 'vlsfo' : 'mgo')).value = String(val); }
+            else if (x.kind === 'cancel') { if (ed.v[x.key] && ed.v[x.key].cancel) { const el = document.getElementById('vessel-' + x.c.id); if (el) el.remove(); } }
+            else if (x.kind === 'pin') { const e = ed.v[x.key]; if (e && e.pin !== undefined) document.getElementById('v' + x.c.id + '-barge').value = e.pin; }
+            else if (x.kind === 'block') _bargeBlocks.push(Object.assign({}, x.blk));
+            else if (x.kind === 'brob') { document.getElementById('b' + x.bid + '-' + (x.f === 'v' ? 'vrob' : 'mrob')).value = String(ed.b[x.bid][x.f]); }
+          });
+          Object.keys(ed.v).forEach(key => {
+            const e = ed.v[key], v = snap.vessels.find(q => _simKey(q) === key), c = cards.find(q => q.uid === v.nomUid);
+            if (e.cancel || (e.etaExact === undefined && !e.shiftHrs)) return;
+            let eta = e.etaExact ? new Date(e.etaExact) : new Date(v.eta);
+            if (e.etaExact && c.etaWin) { const chk = document.getElementById('v' + c.id + '-etawin-chk'); chk.checked = false; chk.dispatchEvent(new Event('change', { bubbles: true })); }
+            if (e.shiftHrs) eta = new Date(eta.getTime() + e.shiftHrs * 3600000);
+            document.getElementById('v' + c.id + '-eta').value = __fmt(eta);
+          });
+          const live = __live();
+          res.weeks++; res.edits += nEd;
+          if (sand !== live) res.mismatch.push({ seed, sand: sand.slice(0, 400), live: live.slice(0, 400), ed: JSON.stringify(ed).slice(0, 400) });
+          if (sand === before) res.notDifferent++;
+        } catch (e) { res.errors.push(seed + ': ' + String(e && e.stack || e).split('\n').slice(0, 2).join(' | ')); }
+      }
+      return res;
+    });
+    check('S18 80 random weeks with 1–4 random what-ifs each ran without error', r.errors.length === 0 && r.weeks === 80, r.errors.slice(0, 3));
+    check('S18 every random what-if gives exactly the plan the real planner gives after the same change on the real cards', r.mismatch.length === 0, r.mismatch.slice(0, 2));
+    check('S18 the what-ifs were not all no-ops (' + (r.weeks - r.notDifferent) + ' of ' + r.weeks + ' changed the plan)', r.weeks - r.notDifferent >= 40, r.notDifferent);
+  });
 
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
