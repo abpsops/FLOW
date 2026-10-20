@@ -225,6 +225,9 @@ function _chartTextColor() {
   --fuel-m-lt: #FAEEE1;
   --fuel-m-bd: #E4B98C;
 
+  /* ── STS (ship-to-ship) operations — one gold fill wherever an STS supply is shown ── */
+  --sts:    #8A5A00;  --sts-lt: #FFEFB8;  --sts-bd: #E2B63C;  --sts-on: #FFFFFF;
+
   /* ── Barge identity colours — one per barge, never used for fuel or status ── */
   --barge-1: #7C4DDB;  --barge-1-lt: #F0EAFB;   /* violet */
   --barge-2: #D6336C;  --barge-2-lt: #FCE8EF;   /* pink   */
@@ -349,6 +352,7 @@ html[data-theme="dark"] {
   --barge-3: #9FB1C4;  --barge-3-lt: rgba(159,177,196,.16);
   --barge-4: #B4C34D;  --barge-4-lt: rgba(180,195,77,.16);
   --barge-5: #C99A76;  --barge-5-lt: rgba(201,154,118,.16);
+  --sts: #E9C25B;  --sts-lt: rgba(233,194,91,.18);  --sts-bd: rgba(233,194,91,.50);  --sts-on: #1B1403;
 
   --bg:        #0A101C;
   --surface:   #10192A;
@@ -1323,6 +1327,23 @@ html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6p
 .cal-vcard .bg-pill,.cal-ticket-loading .bg-pill{white-space:normal;line-height:1.25;word-break:break-word}
 .bg-pill.on-fill{background:var(--surface)}
 .bg-pill.on-fill.none{background:var(--surface);color:var(--sub)}
+
+/* ════════════════════════════════════════
+   STS — ship-to-ship supply. Ticked on the nomination; the whole card / row / pill
+   is filled gold everywhere the operation shows (never used for fuel, barge or status).
+════════════════════════════════════════ */
+.sts-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.08em;line-height:1.55;padding:0 6px;border-radius:4px;background:var(--sts);color:var(--sts-on);border:1px solid var(--sts);vertical-align:middle;margin-left:6px;white-space:nowrap;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.vhdr-l .sts-chk{display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 9px 2px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--sub);cursor:pointer;user-select:none}
+.vhdr-l .sts-chk input{width:14px;height:14px;margin:0;accent-color:var(--sts);cursor:pointer}
+.vhdr-l .sts-chk:hover{border-color:var(--sts-bd)}
+.vcard[data-sts] .sts-chk{background:var(--sts);color:var(--sts-on);border-color:var(--sts)}
+.vcard[data-sts]{background:var(--sts-lt);border-color:var(--sts-bd)}
+.voy-tbl tbody tr.sts-row td,.cl-tbl tbody tr.sts-row td,tr.sts-row > td{background:var(--sts-lt)!important;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.tli.sts .tlc{background:var(--sts-lt);border-color:var(--sts-bd)}
+.cal-vcard.sts{background:var(--sts-lt)!important;border-color:var(--sts-bd)!important}
+.saved-record-row.sts{background:var(--sts-lt);border-color:var(--sts-bd)}
+html[data-skin="harbour"] .vcard[data-sts],html[data-skin="harbour"] .tli.sts .tlc,html[data-skin="harbour"] .saved-record-row.sts{background:var(--sts-lt);box-shadow:inset 0 0 0 1.5px var(--sts-bd),var(--hl-shadow)}
+html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.sts .tlc:hover{box-shadow:inset 0 0 0 1.5px var(--sts-bd),var(--hl-shadow-up)}
 .cal-vcard[data-bc]{box-shadow:inset -3px 0 0 var(--bc)}
 .cal-vcard[data-bc]:hover{box-shadow:inset -3px 0 0 var(--bc),var(--sh-xs)}
 @media print{.bg-pill{border-color:#999!important;background:#fff!important;color:#000!important}.bg-pill .bg-dot{display:none!important}}
@@ -1561,7 +1582,7 @@ html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6p
   @page{size:A4 landscape;margin:10mm 8mm}
   /* Paper is white: print with the light-theme tokens even when the screen
      is in dark mode (mirrors :root — keep in sync if those values change). */
-  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
+  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#8A5A00;--sts-lt:#FFEFB8;--sts-bd:#E2B63C;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
   body>*{display:none!important}
   #print-only-container{display:block!important;position:static!important;width:100%!important}
   #print-only-container *{display:revert}
@@ -9494,7 +9515,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -11698,6 +11719,25 @@ function _itemEtaTxt(item) {
 }
 // Fields to store on a vessel record: {etaWin} only for a time-frame ETA ({} otherwise).
 function _cardEtaWinFields(id) { const w = _cardEtaWin(id); return w ? { etaWin: w } : {}; }
+// STS (ship-to-ship) supply: stored on the nomination only when ticked, like etaWin.
+function _cardSts(id) { const el = document.getElementById('v' + id + '-sts'); return !!(el && el.checked); }
+function _cardStsFields(id) { return _cardSts(id) ? { sts: true } : {}; }
+// The tick on a nomination card: tint the card, carry the flag onto what is already
+// planned (so the calendar, schedule, timeline and checklist change at once — it
+// does not affect planning, so nothing needs regenerating), and save.
+function toggleSts(id) {
+  const card = document.getElementById('vessel-' + id); if (!card) return;
+  const on = _cardSts(id);
+  if (on) card.setAttribute('data-sts', '1'); else card.removeAttribute('data-sts');
+  const uid = card.dataset.nomUid || '';
+  if (uid) {
+    (_lastSched || []).forEach(function(it) { if (it && it.nomUid === uid) { if (on) it.sts = true; else delete it.sts; } });
+    Object.keys(_checklistRecords || {}).forEach(function(k) { const r = _checklistRecords[k]; if (r && r.nomUid === uid && !r.lockedAt) { if (on) r.sts = true; else delete r.sts; } });
+  }
+  try { if (typeof refreshAllModules === 'function') refreshAllModules(); } catch (e) { console.warn('ABPS: STS refresh failed', e); }
+  saveSharedState();
+}
+function _stsTag(o) { return o && o.sts ? '<span class="sts-tag" title="Ship-to-ship supply">STS</span>' : ''; }
 // Latest arrival of a schedule item: frame END for a time-frame ETA, else the ETA.
 function _itemEtaEnd(item) {
   if (!item || !item.eta) return item ? item.eta : null;
@@ -12266,7 +12306,7 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details.
-    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id))
+    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -13784,15 +13824,17 @@ function addVessel(def = {}) {
   // ETA given only as a part of the day (AM / PM …) — see ETA_TIME_FRAMES.
   const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
+  const sts = !!def.sts;
   const rfv = def.rfv || 0, rfm = def.rfm || 0, rfvr = def.rfvr || 750, rfmr = def.rfmr || 275;
 
   const c = document.createElement('div');
   c.className = 'vcard'; c.id = `vessel-${id}`;
   c.dataset.nomUid = nomUid;
+  if (sts) c.setAttribute('data-sts', '1');
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
   <div class="vcard-hdr">
-    <div class="vhdr-l"><span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span><span class="vid-badge" id="v${id}-idbadge"></span></div>
+    <div class="vhdr-l"><span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span><span class="vid-badge" id="v${id}-idbadge"></span><label class="sts-chk" title="Tick if this nomination is a ship-to-ship (STS) supply"><input type="checkbox" id="v${id}-sts" ${sts ? 'checked' : ''} onchange="toggleSts(${id})" aria-label="STS operation">STS</label></div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="send-email-btn" id="v${id}-send-email-btn" onclick="sendNominationEmailForCard(${id})">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
@@ -14022,7 +14064,8 @@ function getVessels(quiet) {
     const imo     = document.getElementById(`v${id}-imo`)?.value     || '';
     const mmsi    = (document.getElementById(`v${id}-mmsi`)?.value   || '').trim();
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
-    out.push({id, name, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
+    const sts     = _cardSts(id);
+    out.push({id, name, sts, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
               refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, mmsi, remarks, etaWin, winHrs,
               vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
@@ -14211,6 +14254,7 @@ function planSchedule(inp) {
     if (v.vqMin != null) { rangeF.nomVMin = Math.round(v.vqMin); rangeF.nomVMax = Math.round(v.vq || 0); }
     if (v.mqMin != null) { rangeF.nomMMin = Math.round(v.mqMin); rangeF.nomMMax = Math.round(v.mq || 0); }
     // Time-frame ETA rides along on the item (only when set): eta = frame start.
+    if (v.sts) rangeF.sts = true;          // ship-to-ship supply — rides along for display only
     if (v.etaWin) { rangeF.etaWin = v.etaWin; rangeF.supplyHrs = P.hoseHrs + Math.max(v.vq / (barge.vtph || 300), v.mq / (barge.mtph || 100)); }
     sched.push(Object.assign({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot}, rangeF));
     bs.rv=rva; bs.rm=rma;
@@ -14658,7 +14702,7 @@ function _simHtml() {
     const sv = scenByKey.get(key) || _simApplyVessel(v0, e);
     const cancelled = !!e.cancel, etaShown = sv.eta || sv.effectiveETA;
     const etaEdited = !!(e.etaExact || e.shiftHrs), s = row && row.scen, b = row && row.base;
-    const tags = (sv.etaWin ? chip(esc(sv.etaWin) + ' frame') : '') + (sv.noFirmETA ? chip('No firm ETA') : '') + (sv.isDelayed ? chip('After laycan', 'sim-warn') : '') + (sv.isEarly ? chip('Before laycan') : '');
+    const tags = (sv.sts ? '<span class="sts-tag" style="margin:0 3px 3px 0">STS</span>' : '') + (sv.etaWin ? chip(esc(sv.etaWin) + ' frame') : '') + (sv.noFirmETA ? chip('No firm ETA') : '') + (sv.isDelayed ? chip('After laycan', 'sim-warn') : '') + (sv.isEarly ? chip('Before laycan') : '');
     let result = '', vs = '';
     if (cancelled) result = '<span class="sim-muted">Cancelled in this what-if</span>';
     else if (s) {
@@ -15085,13 +15129,13 @@ function buildVoyRows(items) {
     const pl = `<span class="stag" style="${seqStyle}">${esc(plan)}</span>`;
     const paqT = item.paq==='yes'?'<span class="stag st-ok">Received</span>':'<span class="stag st-dl">Pending</span>';
     const rowBg = item.noFirmETA ? 'background:rgba(240,230,255,.35)' : '';
-    const cls = ` style="${rowBg}"`;
+    const cls = ` style="${rowBg}"` + (item.sts ? ' class="sts-row"' : '');
     const areaS = areaShort(item.area);
     const etaDisplay = item.noFirmETA
       ? `<span style="color:var(--purple);font-style:italic">${_itemEtaTxt(item)} <span style="font-size:9px;font-weight:700">(NO FIRM ETA)</span></span>`
       : _itemEtaTxt(item);
     const chkCell = `<td style="text-align:center;padding:6px 4px"><input type="checkbox" class="voy-print-chk" data-sno="${esc(item.sno)}" checked style="width:15px;height:15px;accent-color:var(--azure);cursor:pointer" title="Include in print"></td>`;
-    return `<tr${cls}>${chkCell}<td class="sno">${esc(item.sno)}</td><td><strong>${esc(item.name)}</strong></td><td style="font-size:11px;font-weight:700;font-family:DM Mono,monospace">${esc(areaS)}</td><td>${fo}</td><td>${mo}</td><td style="font-size:11px">${esc(item.spec||'—')}</td><td>${lcStr}</td><td>${etaDisplay}</td><td>${fmt24(item.bargeStart)}</td><td>${fmt24(item.etc)}</td><td>${pl}</td><td>${st}</td><td>${paqT}</td><td>${esc(item.agent||'—')}</td><td style="font-size:11px">${_bargeDot(item.bargeLabel, cmapV)}${esc(item.bargeLabel||'—')}</td><td style="font-size:11px">${esc(item.mani||'—')}</td></tr>`;
+    return `<tr${cls}>${chkCell}<td class="sno">${esc(item.sno)}</td><td><strong>${esc(item.name)}</strong>${_stsTag(item)}</td><td style="font-size:11px;font-weight:700;font-family:DM Mono,monospace">${esc(areaS)}</td><td>${fo}</td><td>${mo}</td><td style="font-size:11px">${esc(item.spec||'—')}</td><td>${lcStr}</td><td>${etaDisplay}</td><td>${fmt24(item.bargeStart)}</td><td>${fmt24(item.etc)}</td><td>${pl}</td><td>${st}</td><td>${paqT}</td><td>${esc(item.agent||'—')}</td><td style="font-size:11px">${_bargeDot(item.bargeLabel, cmapV)}${esc(item.bargeLabel||'—')}</td><td style="font-size:11px">${esc(item.mani||'—')}</td></tr>`;
   }).join('');
 }
 
@@ -15206,11 +15250,11 @@ function buildTL(items, containerId, loadingsForBarge) {
         </div>
       </div>` : '';
     const d = document.createElement('div');
-    d.className = 'tli';
+    d.className = 'tli' + (item.sts ? ' sts' : '');
     if (bgSt) { d.setAttribute('data-bc', '1'); d.setAttribute('data-bgn', String(item.bargeLabel).trim()); d.setAttribute('style', bgSt); }
     d.innerHTML = `<div class="tls"><div class="tld" style="background:${dc}"></div><div class="tll"></div></div>
     <div class="tlc ${cc}">
-      <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}</div><div class="br">${_etaFrameTag(item.etaWin)}${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
+      <div class="tlch"><div class="tlvn">#${esc(item.sno)} — ${esc(item.name)}${_stsTag(item)}</div><div class="br">${_etaFrameTag(item.etaWin)}${dlB}${supB}${vB}${mB}${paqB}${bgB}</div></div>
       <div class="tlm">
         <div class="tmi"><label>Laycan</label><span>${fmtLC(item.lc)}</span></div>
         <div class="tmi"><label>Actual ETA</label><span>${_itemEtaTxt(item)}</span></div>
@@ -19520,6 +19564,8 @@ function _clStampRange(rec, item) {
   });
   // Time-frame ETA (AM / PM …) rides along for display only.
   if (item && item.etaWin && _etaFrame(item.etaWin)) rec.etaWin = item.etaWin; else delete rec.etaWin;
+  // Ship-to-ship supply: same treatment.
+  if (item && item.sts) rec.sts = true; else delete rec.sts;
 }
 // Actual vs nominated badge. For a ranged nomination anything inside
 // min–max is OK; below min is short by (min − actual); above max is over.
@@ -19666,9 +19712,9 @@ function renderChecklist(sched) {
 
       const devBadge = (act, nom, g) => _clDevBadge(act, nom, _nomRange(rec, g));
 
-      return `<tr style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
+      return `<tr${rec.sts && !isLocked ? ' class="sts-row"' : ''} style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
         <td style="padding:9px 12px;color:var(--muted);font-weight:700;font-family:DM Mono,monospace">${idx + 1}</td>
-        <td style="padding:9px 12px;font-weight:600">${esc(rec.vessel)}${lockBadge}</td>
+        <td style="padding:9px 12px;font-weight:600">${esc(rec.vessel)}${_stsTag(rec)}${lockBadge}</td>
         <td style="padding:9px 12px;font-family:DM Mono,monospace;font-size:11px;white-space:nowrap">${_sd ? fmt24(_sd) : '—'}${rec.etaWin ? '<div style="margin-top:3px">' + _etaFrameTag(rec.etaWin) + '</div>' : ''}</td>
 
         <td style="padding:9px 12px;text-align:center">
@@ -19974,6 +20020,7 @@ async function saveChecklistRecord(uid) {
     notes:    rec.notes || '',
     supplied: true,
   };
+  if (rec.sts) supplyRec.sts = true;   // ship-to-ship supply
 
   // Replace existing saved record for this exact checklist entry (stable uid),
   // never by vessel+date — date formatting can shift between schedule runs and
@@ -21276,10 +21323,10 @@ function renderSavedRecords() {
   }
   const srMap = _bargeColorMap();
   el.innerHTML = [..._savedSupplies].sort((a,b) => new Date(a.supplyDate) - new Date(b.supplyDate)).map(r => `
-    <div class="saved-record-row" id="srrow-${esc(r.id)}">
+    <div class="saved-record-row${r.sts ? ' sts' : ''}" id="srrow-${esc(r.id)}">
       <div class="saved-record-info">
         <div class="saved-record-vessel">
-          ${esc(r.vessel)}
+          ${esc(r.vessel)}${_stsTag(r)}
           <span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px;background:${r.supplied?'var(--green-lt)':'var(--amber-lt)'};color:${r.supplied?'var(--green)':'var(--amber)'};border:1px solid ${r.supplied?'var(--green-bd)':'var(--amber-bd)'}">${r.supplied?'Completed':'Pending'}</span>
         </div>
         <div class="saved-record-meta">
@@ -22244,6 +22291,7 @@ function renderWeekCalendar(offsetDays) {
       const d     = parseDT(document.getElementById('v'+cid+'-eta')?.value || '');
       const fb    = { name, vQ:v, mQ:m, _etaDate:new Date(d), bargeLabel:'', area:'' };
       const fbWin = _cardEtaWin(cid); if (fbWin) fb.etaWin = fbWin;
+      if (_cardSts(cid)) fb.sts = true;
       if (v && vP.min != null) { fb.nomVMin = vP.min; fb.nomVMax = vP.max; }
       if (m && mP.min != null) { fb.nomMMin = mP.min; fb.nomMMax = mP.max; }
       if ((v||m) && d) fallbackItems.push(fb);
@@ -22404,8 +22452,8 @@ function renderWeekCalendar(offsetDays) {
             const hasSno = item.sno !== undefined && item.sno !== null;
             const calBst = barge ? _bargeStyle(barge, calMap) : '';
             return `<div ${calBst ? 'data-bc="1" data-bgn="' + esc(String(barge).trim()) + '"' : ''} style="${calBst}${calBst ? ';' : ''}
-              background:var(--bg);
-              border:1px solid var(--border);
+              background:${item.sts ? 'var(--sts-lt)' : 'var(--bg)'};
+              border:1px solid ${item.sts ? 'var(--sts-bd)' : 'var(--border)'};
               border-left:3px solid ${gc.border};
               border-radius:3px;
               padding:6px 7px;
@@ -22413,13 +22461,13 @@ function renderWeekCalendar(offsetDays) {
               box-sizing:border-box;
               ${hasSno?'cursor:pointer':'cursor:default'};
               transition:border-color .12s, transform .12s;
-            " class="${hasSno?'cal-ticket-clickable ':''}cal-vcard" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${(item.etaWin && _etaFrame(item.etaWin)) ? etaTime + ' ' + _etaFrameHours(item.etaWin) + ' (time frame)' : etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
+            " class="${hasSno?'cal-ticket-clickable ':''}cal-vcard${item.sts ? ' sts' : ''}" ${hasSno?`onclick="_globalSearchGoSchedule('${escJs(String(item.sno))}')"`:''} title="${esc(item.name)}&#10;ETA: ${(item.etaWin && _etaFrame(item.etaWin)) ? etaTime + ' ' + _etaFrameHours(item.etaWin) + ' (time frame)' : etaTime}${etcDisplay?'&#10;ETC: '+etcDisplay:''}&#10;VLSFO: ${esc(_nomQtyTxt(item,'V',calNomV))} MT | MGO: ${esc(_nomQtyTxt(item,'M',calNomM))} MT${loc?'&#10;'+esc(loc):''}${barge?'&#10;'+esc(barge):''}${hasSno?'&#10;Click to open in Schedule':''}">
               <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                 <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:var(--muted);display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0">${ICO_CLOCK}${etaTime}</span>
                 ${item.isDelayed?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--red);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">DELAYED</span>`:item.isEarly?`<span style="font-size:7.5px;font-weight:700;padding:1px 4px;border-radius:2px;color:#fff;background:var(--teal);letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0">BEFORE LAYCAN</span>`:''}
                 <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid ${gc.border};border-radius:2px;color:${gc.text};letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">${gc.label}</span>
               </div>
-              <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(item.name)}</div>
+              <div style="font-size:10.5px;font-weight:700;color:var(--ink);white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(item.name)}${_stsTag(item)}</div>
               <div style="display:flex;flex-wrap:wrap;row-gap:2px;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
                 ${calNomV>0?`<span style="color:var(--fuel-v)">V&nbsp;${esc(_nomQtyTxt(item,'V',calNomV))}</span>`:''}
                 ${calNomM>0?`<span style="color:var(--fuel-m)">M&nbsp;${esc(_nomQtyTxt(item,'M',calNomM))}</span>`:''}
