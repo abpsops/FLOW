@@ -225,8 +225,8 @@ function _chartTextColor() {
   --fuel-m-lt: #FAEEE1;
   --fuel-m-bd: #E4B98C;
 
-  /* ── STS (ship-to-ship) operations — one gold fill wherever an STS supply is shown ── */
-  --sts:    #8A5A00;  --sts-lt: #FFEFB8;  --sts-bd: #E2B63C;  --sts-on: #FFFFFF;
+  /* ── STS (ship-to-ship) operations — one green fill wherever an STS supply is shown ── */
+  --sts:    #2E7D1E;  --sts-lt: #D6F1C2;  --sts-bd: #78C257;  --sts-on: #FFFFFF;
 
   /* ── Barge identity colours — one per barge, never used for fuel or status ── */
   --barge-1: #7C4DDB;  --barge-1-lt: #F0EAFB;   /* violet */
@@ -352,7 +352,7 @@ html[data-theme="dark"] {
   --barge-3: #9FB1C4;  --barge-3-lt: rgba(159,177,196,.16);
   --barge-4: #B4C34D;  --barge-4-lt: rgba(180,195,77,.16);
   --barge-5: #C99A76;  --barge-5-lt: rgba(201,154,118,.16);
-  --sts: #E9C25B;  --sts-lt: rgba(233,194,91,.18);  --sts-bd: rgba(233,194,91,.50);  --sts-on: #1B1403;
+  --sts: #86D860;  --sts-lt: rgba(134,216,96,.17);  --sts-bd: rgba(134,216,96,.50);  --sts-on: #0B1A06;
 
   --bg:        #0A101C;
   --surface:   #10192A;
@@ -1330,7 +1330,7 @@ html[data-skin="harbour"] .barge-card[data-bc]{border-left:0;box-shadow:inset 6p
 
 /* ════════════════════════════════════════
    STS — ship-to-ship supply. Ticked on the nomination; the whole card / row / pill
-   is filled gold everywhere the operation shows (never used for fuel, barge or status).
+   is filled green everywhere the operation shows (a leaf green — apart from the pale mint of status 'OK').
 ════════════════════════════════════════ */
 .sts-tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.08em;line-height:1.55;padding:0 6px;border-radius:4px;background:var(--sts);color:var(--sts-on);border:1px solid var(--sts);vertical-align:middle;margin-left:6px;white-space:nowrap;text-transform:uppercase;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .vhdr-l .sts-chk{display:inline-flex;align-items:center;gap:6px;margin-left:10px;padding:2px 9px 2px 7px;border:1px solid var(--border);border-radius:999px;background:var(--surface);font-size:10.5px;font-weight:800;letter-spacing:.08em;color:var(--sub);cursor:pointer;user-select:none}
@@ -1584,7 +1584,7 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
   @page{size:A4 landscape;margin:10mm 8mm}
   /* Paper is white: print with the light-theme tokens even when the screen
      is in dark mode (mirrors :root — keep in sync if those values change). */
-  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#8A5A00;--sts-lt:#FFEFB8;--sts-bd:#E2B63C;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
+  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#2E7D1E;--sts-lt:#D6F1C2;--sts-bd:#78C257;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
   body>*{display:none!important}
   #print-only-container{display:block!important;position:static!important;width:100%!important}
   #print-only-container *{display:revert}
@@ -11770,7 +11770,7 @@ function _repaintSts(nomUid) {
   });
 }
 function _stsTag(o) { return o && o.sts ? '<span class="sts-tag" title="Ship-to-ship supply">STS</span>' : ''; }
-function _stsTagDark() { return '<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.08em;padding:0 6px;margin-left:6px;border-radius:4px;background:#E9C25B;color:#1B1403;vertical-align:middle">STS</span>'; }
+function _stsTagDark() { return '<span style="display:inline-block;font-size:9px;font-weight:800;letter-spacing:.08em;padding:0 6px;margin-left:6px;border-radius:4px;background:#86D860;color:#0B1A06;vertical-align:middle">STS</span>'; }
 // Latest arrival of a schedule item: frame END for a time-frame ETA, else the ETA.
 function _itemEtaEnd(item) {
   if (!item || !item.eta) return item ? item.eta : null;
@@ -15515,7 +15515,7 @@ function _ccRefreshData() {
         // instead of fighting for fixed table-column widths that always
         // eventually clip something in a narrow sub-column.
         const ccSts = _stsOf(_ccStsL, item);
-        return `<div style="padding:6px 0 6px ${ccSts ? '8px' : '0'};border-top:1px solid #222;${ccSts ? 'background:rgba(233,194,91,.14);border-left:3px solid #E9C25B' : ''}">
+        return `<div style="padding:6px 0 6px ${ccSts ? '8px' : '0'};border-top:1px solid #222;${ccSts ? 'background:rgba(134,216,96,.14);border-left:3px solid #86D860' : ''}">
           <div style="color:#EEE;font-size:11.5px;font-weight:700;white-space:normal;word-break:break-word;line-height:1.35">${esc(item.name)}${ccSts ? _stsTagDark() : ''}</div>
           <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px;font-size:10.5px">
             <span style="color:#CCC;white-space:nowrap">${fmtWB(item.bargeStart)}${item.etaWin && _etaFrame(item.etaWin) ? ' · ' + _etaFrameTxt(item.etaWin) : ''}</span>
@@ -15619,7 +15619,7 @@ function _ccRefreshData() {
             const d = new Date(r.savedAt);
             const v = _recActQty(r, 'v');
             const m = _recActQty(r, 'm');
-            return `<div style="padding:5px 0 5px ${r.sts ? '8px' : '0'};border-top:1px solid #222;${r.sts ? 'background:rgba(233,194,91,.14);border-left:3px solid #E9C25B' : ''}">
+            return `<div style="padding:5px 0 5px ${r.sts ? '8px' : '0'};border-top:1px solid #222;${r.sts ? 'background:rgba(134,216,96,.14);border-left:3px solid #86D860' : ''}">
               <div style="font-size:11.5px;color:#EEE;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${esc(r.vessel || 'Vessel')}">${esc(r.vessel || 'Vessel')}${r.sts ? _stsTagDark() : ''}</div>
               <div style="font-size:10.5px;color:#3ECF6E;margin-top:2px">${v ? v.toLocaleString() + ' VLSFO ' : ''}${m ? m.toLocaleString() + ' LSMGO' : ''} · ${fmt24(d)}</div>
             </div>`;
@@ -19752,7 +19752,7 @@ function renderChecklist(sched) {
       const devBadge = (act, nom, g) => _clDevBadge(act, nom, _nomRange(rec, g));
 
       const recSts = _stsOf(stsL, rec);
-      return `<tr${recSts ? ' class="is-sts"' : ''}${!isLocked && rec.nomUid ? ` data-nu="${esc(rec.nomUid)}"` : ''} style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
+      return `<tr${recSts && !isLocked ? ' class="is-sts"' : ''}${!isLocked && rec.nomUid ? ` data-nu="${esc(rec.nomUid)}"` : ''} style="border-bottom:1px solid var(--border2);${rowBg}" id="cl-row-${uA}">
         <td style="padding:9px 12px;color:var(--muted);font-weight:700;font-family:DM Mono,monospace">${idx + 1}</td>
         <td style="padding:9px 12px;font-weight:600">${esc(rec.vessel)}<span data-sts-slot>${_stsTag({ sts: recSts })}</span>${lockBadge}</td>
         <td style="padding:9px 12px;font-family:DM Mono,monospace;font-size:11px;white-space:nowrap">${_sd ? fmt24(_sd) : '—'}${rec.etaWin ? '<div style="margin-top:3px">' + _etaFrameTag(rec.etaWin) + '</div>' : ''}</td>
