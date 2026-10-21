@@ -2,7 +2,7 @@
    • tick box on the card → saved on the nomination only when ticked (like etaWin)
    • survives reload, two-device merge (tick AND untick), the trader save path, trash/restore
    • rides onto the planned schedule, the checklist row and the saved record
-   • the WHOLE card / row / pill is filled gold on: nomination card, Weekly Planned Supply
+   • the WHOLE card / row / pill is filled green on: nomination card, Weekly Planned Supply
      calendar, Voyage Schedule, Supply Timeline, Checklist, Saved Records (+ What-if Planner)
    • ticking after a schedule exists updates those screens at once (it does not affect planning)
    • planning is unchanged by the tick
@@ -110,7 +110,7 @@ async function scenario(browser, name, fn, opts) {
     check('T2 Supply Timeline: STS cards carry the tag and the fill', t.sts.length === 2 && t.sts.every(x => x[1] && x[2]) && t.plain.every(x => !x[1] && !x[2]) && t.sts.every(x => x[3] !== t.plain[0][3]), r.tl);
     const c = fillOf(r.cl);
     check('T2 Checklist: STS rows carry the tag and the fill', c.sts.length === 2 && c.sts.every(x => x[1] && x[2]) && c.plain.every(x => !x[1] && !x[2]) && c.sts.every(x => x[3] !== c.plain[0][3]), r.cl);
-    check('T2 one colour token drives them all (a gold, not transparent)', /^#[0-9a-f]{3,8}$/i.test(r.token) && r.token.toLowerCase() !== '#ffffff', r.token);
+    check('T2 one colour token drives them all (a colour, not transparent)', /^#[0-9a-f]{3,8}$/i.test(r.token) && r.token.toLowerCase() !== '#ffffff', r.token);
   });
 
   await scenario(browser, 'T3 tick after the schedule exists', async (page) => {
