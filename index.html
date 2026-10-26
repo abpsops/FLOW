@@ -5182,7 +5182,7 @@ function renderActionQueue() {
 
   // Projected barge shortfalls (reload planner, next 7 days).
   _rlQueueCount = 0;
-  if (typeof _rlAlerts === 'function') {
+  if (!isTrader() && typeof _rlAlerts === 'function') {
     try {
       _rlAlerts().forEach(function(a) {
         _rlQueueCount++;
@@ -6509,7 +6509,7 @@ function computeGlobalAlerts() {
   });
   // Projected shortfalls from the reload planner (next 7 days), one per
   // barge + grade + nomination; `go` = barge id to open the forecast at.
-  if (typeof _rlAlerts === 'function') {
+  if (!isTrader() && typeof _rlAlerts === 'function') {
     try { _rlAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: reload alerts failed', e); }
   }
   // Upcoming nominations without a valid IMO or MMSI — one per nomination
@@ -16640,10 +16640,9 @@ function renderReloadPlanner(hostId) {
 function renderDashReloadPlanner() {
   var card = document.getElementById('dash-reload-planner');
   if (!card) return;
-  // Operators have the full planner on Barge Fleet; traders can't open that page.
-  if (!isTrader()) { card.style.display = 'none'; return; }
-  card.style.display = '';
-  renderReloadPlanner('dash-reload-planner-body');
+  // Not shown on the dashboard: operators have the planner on Barge Fleet and
+  // traders don't need it.
+  card.style.display = 'none';
 }
 function _rlRenderAllHosts() {
   if (_currentPage === 'bargefleet') renderReloadPlanner('reload-planner-body');
@@ -22365,6 +22364,7 @@ function renderWeekCalendar(offsetDays) {
   // Build HTML — 7 columns, ruled like a spec table rather than soft cards
   let colsHtml = '';
   let totalV7=0, totalM7=0, totalOps7=0;
+  const bargeWk = {}; // barge label -> { v, m } supplied this week
   const calMap = _bargeColorMap();
 
   days.forEach((day, dayIdx) => {
@@ -22375,7 +22375,12 @@ function renderWeekCalendar(offsetDays) {
       .sort((a,b) => a._etaDate - b._etaDate);
 
     totalOps7 += dayItems.length;
-    dayItems.forEach(x => { totalV7+=((x.nomVQ!==undefined&&x.nomVQ!==null)?x.nomVQ:(x.vQ||0)); totalM7+=((x.nomMQ!==undefined&&x.nomMQ!==null)?x.nomMQ:(x.mQ||0)); });
+    dayItems.forEach(x => {
+      const xv = (x.nomVQ!==undefined&&x.nomVQ!==null)?x.nomVQ:(x.vQ||0), xm = (x.nomMQ!==undefined&&x.nomMQ!==null)?x.nomMQ:(x.mQ||0);
+      totalV7+=xv; totalM7+=xm;
+      const bl = String(x.bargeLabel || '').trim();
+      if (bl) { const b = bargeWk[bl] || (bargeWk[bl] = { v:0, m:0 }); b.v+=xv; b.m+=xm; }
+    });
 
     const dayTotalV = dayItems.reduce((s,x)=>s+((x.nomVQ!==undefined&&x.nomVQ!==null)?x.nomVQ:(x.vQ||0)),0);
     const dayTotalM = dayItems.reduce((s,x)=>s+((x.nomMQ!==undefined&&x.nomMQ!==null)?x.nomMQ:(x.mQ||0)),0);
@@ -22538,6 +22543,10 @@ function renderWeekCalendar(offsetDays) {
     ${totalV7>0?`<div style="display:flex;align-items:center;gap:6px;padding-left:14px;border-left:1px solid var(--border)"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span><span style="font-size:11.5px;font-family:'DM Mono',monospace;color:var(--fuel-v);font-weight:700;font-variant-numeric:tabular-nums">${totalV7.toLocaleString()} MT</span><span style="font-size:10px;color:var(--muted);font-weight:600">VLSFO</span></div>`:''}
     ${totalM7>0?`<div style="display:flex;align-items:center;gap:6px;padding-left:14px;border-left:1px solid var(--border)"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span><span style="font-size:11.5px;font-family:'DM Mono',monospace;color:var(--fuel-m);font-weight:700;font-variant-numeric:tabular-nums">${totalM7.toLocaleString()} MT</span><span style="font-size:10px;color:var(--muted);font-weight:600">LSMGO</span></div>`:''}
     ${!totalOps7?`<span style="font-size:11.5px;color:var(--muted);font-weight:600">No supplies scheduled this week — generate a schedule to populate the calendar</span>`:''}
+    ${Object.keys(bargeWk).sort().map(function(bn) {
+      const b = bargeWk[bn];
+      return `<div style="display:flex;align-items:center;gap:6px;padding-left:14px;border-left:1px solid var(--border)">${_bargePill(bn, calMap, 'sm')}${b.v>0?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--fuel-v);font-weight:700;font-variant-numeric:tabular-nums">V·${b.v.toLocaleString()}</span>`:''}${b.m>0?`<span style="font-size:11px;font-family:'DM Mono',monospace;color:var(--fuel-m);font-weight:700;font-variant-numeric:tabular-nums">M·${b.m.toLocaleString()}</span>`:''}</div>`;
+    }).join('')}
     <span style="margin-left:auto;display:flex;gap:14px">
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span>VLSFO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span>LSMGO</span>

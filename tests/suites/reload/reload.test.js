@@ -335,7 +335,8 @@ const SEED_MAIN = () => {
     check('R8 a planned loading before the job clears that alert (bell + section re-rendered)', r2.alerts.length === 1 && /VLSFO/.test(r2.alerts[0]) && r2.rows === 0 && r2.bell === 1, r2);
   });
 
-  /* 9 — trader: sees the forecast (dashboard copy) but no plan button */
+  /* 9 — trader: no reload planner anywhere (dashboard card hidden, no reload
+     alerts in the bell or Needs Attention, no plan button) */
   await scenario(browser, 'R9 trader view', async (A, { db, open }) => {
     await A.page.evaluate(async (seed) => { eval('(' + seed + ')')(); await saveSharedState(); await _waitForSaveIdle(); }, SEED_MAIN.toString());
     const T = await open('user-trader');
@@ -347,15 +348,15 @@ const SEED_MAIN = () => {
       const n0 = _loadingRecords.length;
       rlPlanLoading(String(_bargeConfig[0].id), 'reload|' + _bargeConfig[0].id + '|LSMGO|x', 168);
       _refreshGlobalAlertsBell();
-      const link = document.querySelector('#global-alerts-list .ga-link');
-      if (link) link.click();
-      return { shown: getComputedStyle(card).display !== 'none', cards: card.querySelectorAll('.rl-card').length, recs: card.querySelectorAll('.rl-rec').length,
-        btns: document.querySelectorAll('.rl-plan-btn').length, page: _currentPage, n: _loadingRecords.length, n0, link: !!link,
-        fleetNav: getComputedStyle(document.getElementById('nav-bargefleet')).display };
+      renderActionQueue();
+      return { shown: getComputedStyle(card).display !== 'none', cards: card.querySelectorAll('.rl-card').length,
+        btns: document.querySelectorAll('.rl-plan-btn').length, n: _loadingRecords.length, n0,
+        alerts: computeGlobalAlerts().filter(a => a.kind === 'reload').length,
+        aq: [...document.querySelectorAll('#dash-action-queue .aq-row')].filter(x => /RELOAD/.test(x.textContent)).length };
     });
-    check('R9 trader dashboard shows the forecast with its recommendations', r.shown && r.cards === 2 && r.recs === 2, r);
+    check('R9 trader dashboard does not show the stock forecast & reload plan', !r.shown && r.cards === 0, r);
     check('R9 trader gets no Plan this loading button and the call is a no-op', r.btns === 0 && r.n === r.n0, r);
-    check('R9 trader alert click stays on the dashboard copy (Barge Fleet is hidden for traders)', r.link && r.page === 'dashboard' && r.fleetNav === 'none', r);
+    check('R9 trader gets no reload alerts in the bell or Needs Attention', r.alerts === 0 && r.aq === 0, r);
     const opCard = await A.page.evaluate(() => { showPage('dashboard'); return getComputedStyle(document.getElementById('dash-reload-planner')).display; });
     check('R9 operator dashboard does not duplicate the planner (it lives on Barge Fleet)', opCard === 'none', opCard);
   });
