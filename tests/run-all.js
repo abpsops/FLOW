@@ -50,6 +50,7 @@ const SUITES = [
   ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
   ['eta-timeframe', 'suites/nominations/timeframe.test.js', 'ETA / loading time frames (AM, PM…): card, schedule, sync, loading, parser'],
   ['sts-operations', 'suites/nominations/sts.test.js', 'STS tick on a nomination: stored only when ticked, merges between devices and via trader, green fill on card / calendar / voyage / timeline / checklist / saved records, plan unchanged'],
+  ['fix-small', 'suites/fix2/small.test.js', 'audit fixes: import never freezes, Auto stays Auto (no preferred barge), reload saved once, Save Parameters keeps the ROB correction, barge removal asks + cleans up'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];
 

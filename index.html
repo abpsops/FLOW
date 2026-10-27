@@ -13245,6 +13245,9 @@ function _niParseBlock(text, opts, ctx) {
       const re = new RegExp('(?:^|[\\s(,])(?=\\d{1,2}(?:st|nd|rd|th)?[\\s\\-./]*' + _NI_MON + '|\\d{1,2}[\\/.]\\d{1,2}(?:[\\/.]\\d{2,4})?(?![\\d\\/.])|' + _NI_MON + '\\.?\\s*\\d{1,2}\\b|\\d{4}-\\d{2}-\\d{2})', 'gi');
       let m;
       while ((m = re.exec(l)) && !d.eta) {
+        // A match at the start of the line is zero-width: step past it, or a
+        // rejected token there ("0.5% VLSFO…", "31/02") is matched forever.
+        if (!m[0]) re.lastIndex++;
         const pos = m.index + m[0].length, rest = l.slice(pos);
         const pre = l.slice(0, pos);
         if (/\d\s*$/.test(pre) || /(?:vlsfo|lsmgo|mgo|qty)\s*[:\-]?\s*$/i.test(pre)) continue;
@@ -14013,8 +14016,8 @@ function addVessel(def = {}) {
   if (typeof _refreshSendEmailButtonState === 'function') _refreshSendEmailButtonState(id);
   if (typeof _refreshCancelEmailButtonState === 'function') _refreshCancelEmailButtonState(id);
   // FT84 FIX (Issue 4): Restore per-vessel manual barge assignment from saved state.
-  // populateBargeDropdowns() applies a global preferred-barge fallback which overwrites
-  // individual assignments. We must apply def.bargeId AFTER the dropdown is populated.
+  // The card's select has no options until populateBargeDropdowns() has run, so
+  // def.bargeId is applied AFTER the dropdown is populated.
   if (def.bargeId) {
     const bargeSel = document.getElementById(`v${id}-barge`);
     if (bargeSel && Array.from(bargeSel.options).some(o => String(o.value) === String(def.bargeId))) {
@@ -22619,8 +22622,15 @@ async function saveReloadQty() {
 
   const addV = parseFloat(document.getElementById('reload-vlsfo').value) || 0;
   const addM = parseFloat(document.getElementById('reload-mgo').value) || 0;
+  if (addV < 0 || addM < 0) { alert('Reloaded quantities cannot be negative.'); return; }
   if (addV <= 0 && addM <= 0) { alert('Enter at least one reloaded quantity greater than zero.'); return; }
 
+  // From here on this reload is being recorded: a second click on Save
+  // (double-click, slow connection) must find nothing left to record.
+  _reloadBargeId = null;
+  const saveBtn = document.querySelector('#reload-modal button[onclick="saveReloadQty()"]');
+  if (saveBtn) saveBtn.disabled = true;
+  try {
   const liveROBs = getAllLiveROBs();
   const rob = liveROBs[bargeId];
   const curV = rob ? rob.liveV : 0;
@@ -22659,6 +22669,9 @@ async function saveReloadQty() {
 
   // Confirmation
   showToast('Reload saved — ' + b.name + ': VLSFO ' + Math.round(newV).toLocaleString() + ' MT | MGO ' + Math.round(newM).toLocaleString() + ' MT', 'success');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 function openCalcParamsEdit() {
   document.getElementById('calc-hose-input').value   = _calcParams.hoseHrs;
@@ -22733,7 +22746,7 @@ function addBarge(def = {}) {
         <svg id="b${id}-hide-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         <span id="b${id}-hide-label">Hide</span>
       </button>
-      <button class="rm-btn" onclick="rmBarge(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
+      <button class="rm-btn" onclick="confirmRemoveBarge(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
     </div>
   </div>
 
@@ -22790,6 +22803,7 @@ function addBarge(def = {}) {
 
 /* ── Barge card state helpers ── */
 const _bargeEditMode = {}; // {id: bool}
+const _bargeEditOpening = {}; // {id: {v, m}} — Opening ROB fields when Edit was opened
 const _bargeHidden   = {}; // {id: bool}
 
 function _chip(label, val, color) {
@@ -22842,6 +22856,7 @@ function toggleBargeEdit(id) {
     cancelBargeEdit(id); return;
   }
   _bargeEditMode[id] = true;
+  _bargeEditOpening[id] = { v: parseFloat(document.getElementById(`b${id}-vrob`)?.value) || 0, m: parseFloat(document.getElementById(`b${id}-mrob`)?.value) || 0 };
   if (paramsEl) paramsEl.style.display = '';
   if (viewEl)   viewEl.style.display   = 'none';
   if (editBtn)  editBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel`;
@@ -22870,10 +22885,16 @@ function saveBargeEdit(id) {
   // Two-way ROB sync: editing the Opening ROB here is a fresh declaration of
   // truth for this barge, so clear any older manual override from the Live
   // Barge ROB Summary panel — otherwise that panel would keep showing its
-  // own stale override instead of the value just entered here.
+  // own stale override instead of the value just entered here. Only when the
+  // Opening ROB was actually changed: saving a buffer, rate or capacity must
+  // not throw away a dip correction made with "Update ROB".
   const newVrob = parseFloat(document.getElementById(`b${id}-vrob`)?.value) || 0;
   const newMrob = parseFloat(document.getElementById(`b${id}-mrob`)?.value) || 0;
-  if (_manualROB) {
+  const cfgNow = (_bargeConfig || []).find(x => x.id == id);
+  const wasOpening = _bargeEditOpening[id] || (cfgNow ? { v: cfgNow.vrob, m: cfgNow.mrob } : null);
+  delete _bargeEditOpening[id];
+  const openingChanged = !wasOpening || newVrob !== wasOpening.v || newMrob !== wasOpening.m;
+  if (_manualROB && openingChanged) {
     delete _manualROB[id + '_final'];
     delete _manualROB[id + '_pre'];
   }
@@ -22949,7 +22970,36 @@ function updateRefillPreview(id) {
   grid.innerHTML=cell('VLSFO ROB',vrob.toLocaleString()+' MT',`Cap: ${vcap.toLocaleString()} MT`)+cell('VLSFO Ullage',vUllage.toLocaleString()+' MT','to fill')+cell('VLSFO Refill',vUllage>0?durStr(vRefillHrs):'—',`@ ${vrfr} MT/hr`)+cell('MGO Ullage',mUllage.toLocaleString()+' MT','to fill')+cell('MGO Refill',mUllage>0?durStr(mRefillHrs):'—',`@ ${mrfr} MT/hr`);
 }
 
-function rmBarge(id) { document.getElementById(`barge-${id}`)?.remove(); _barges=_barges.filter(b=>b.id!==id); populateBargeDropdowns(); saveSharedState(); }
+function rmBarge(id) {
+  const name = (document.getElementById(`b${id}-name`)?.value || '').trim();
+  document.getElementById(`barge-${id}`)?.remove(); _barges=_barges.filter(b=>b.id!==id);
+  // What hangs off this barge's id goes with it: after a reload a barge added
+  // later can be given the same id, and would otherwise inherit the removed
+  // barge's ROB correction, baked supplies and Unavailable blocks. (Its reload
+  // events are dropped by captureCurrentState with the barge.)
+  if (_manualROB) Object.keys(_manualROB).forEach(k => { if (k.startsWith(id + '_')) delete _manualROB[k]; });
+  if (_bakedSupplyIds) delete _bakedSupplyIds[id];
+  const gone = new Set(_blocksForBarge(id, name).map(bk => bk.id));
+  if (gone.size) _bargeBlocks = _bargeBlocks.filter(bk => !gone.has(bk && bk.id));
+  try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB || {})); } catch(e) {}
+  populateBargeDropdowns(); saveSharedState();
+}
+// The card's Remove button: removing a barge is synced to every device and
+// cannot be undone, so say what goes with it first.
+function confirmRemoveBarge(id) {
+  const name = (document.getElementById(`b${id}-name`)?.value || `Barge ${id}`).trim();
+  const pinned = Array.from(document.querySelectorAll('[id^="v"][id$="-barge"]')).filter(s => s.value === String(id)).length;
+  const reloads = (_bargeReloads || []).filter(rl => String(rl.bargeId) === String(id)).length;
+  const blocks = _blocksForBarge(id, name).length;
+  const hasFix = !!(_manualROB && Object.keys(_manualROB).some(k => k.startsWith(id + '_')));
+  const lost = [];
+  if (pinned) lost.push(pinned + ' nomination' + (pinned === 1 ? '' : 's') + ' assigned to it go back to Auto');
+  if (reloads) lost.push('its ' + reloads + ' recorded reload' + (reloads === 1 ? '' : 's') + ' are deleted');
+  if (hasFix) lost.push('its manual ROB correction is deleted');
+  if (blocks) lost.push('its ' + blocks + ' Unavailable block' + (blocks === 1 ? '' : 's') + ' are deleted');
+  if (!confirm('Remove barge "' + name + '" for everyone?\n\n' + (lost.length ? '• ' + lost.join('\n• ') + '\n\n' : '') + 'Saved supply records are kept. This cannot be undone.')) return;
+  rmBarge(id);
+}
 function renameBargeDropdowns() { populateBargeDropdowns(); clearTimeout(upd._t); upd._t=setTimeout(saveSharedState,1500); }
 /* ── Barge colours ──────────────────────────────────────────────────────
    Each barge has one identity colour (a palette KEY, saved with the barge and synced).
@@ -23036,8 +23086,6 @@ function getBarges() {
   • 4 < gap < 24   → "After [Prev Vessel Name]" with timed window
   First vessel in sequence always = "On Arrival"
 */
-const PREF_BARGE_KEY = 'abps_preferred_barge';
-
 function classifySeq(item, idx, items) {
   if (idx === 0) return { label: 'On Arrival', type: 'arrival', prevName: null };
   const prev  = items[idx - 1];
@@ -23050,31 +23098,18 @@ function classifySeq(item, idx, items) {
   return { label: 'After ' + prev.name, type: 'after', prevName: prev.name, gapHrs: gapHrs };
 }
 
-/* ─── BARGE SELECTION PERSISTENCE ─── */
-function savePreferredBarge(bargeId) {
-  try { localStorage.setItem(PREF_BARGE_KEY, String(bargeId)); } catch(e) {}
-}
-function loadPreferredBarge() {
-  try { return localStorage.getItem(PREF_BARGE_KEY) || ''; } catch(e) { return ''; }
-}
-
+/* ─── BARGE DROPDOWNS on the nomination cards ─── */
 function populateBargeDropdowns() {
   const barges = getBarges();
-  const preferred = loadPreferredBarge();
   document.querySelectorAll('[id^="v"][id$="-barge"]').forEach(sel => {
-    // Determine value to select: explicit current value > preferred > empty (auto)
+    // Keep each card's own choice; '' (Auto) stays Auto. (A remembered
+    // "preferred barge" used to fill every Auto card here, silently pinning
+    // the whole register to one barge on the next save.)
     const cur = sel.value || '';
-    // Find a valid match
-    const selectVal = cur && barges.find(b => String(b.id) === cur) ? cur
-                    : preferred && barges.find(b => String(b.id) === preferred) ? preferred
-                    : '';
+    const selectVal = cur && barges.find(b => String(b.id) === cur) ? cur : '';
     sel.innerHTML = '<option value="">Auto (any barge)</option>' +
       barges.map(b => '<option value="' + esc(b.id) + '"' + (String(b.id) === selectVal ? ' selected' : '') + '>' + esc(b.name) + '</option>').join('');
-    // Save preference whenever user changes selection
-    sel.onchange = function() {
-      saveSharedState();
-      if (this.value) savePreferredBarge(this.value);
-    };
+    sel.onchange = function() { saveSharedState(); };
   });
 }
 
