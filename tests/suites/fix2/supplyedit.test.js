@@ -23,6 +23,9 @@
      keeps the supplies before it out of later corrections (S15); a re-tag to a name no barge has
      keeps the supply on its barge (S16); two devices correcting different supplies: both count (S17);
      a tab on the previous build edits first: no double correction (S18, with PREV_APP_DIR)
+   • moved off a barge that is then renamed: a notes edit moves nothing (S19); a supply that ran
+     the barge empty: only giving back below what it took moves ROB (S20); an MGO-only
+     measurement leaves VLSFO corrections alone (S21); two devices, two fields of one record (S22)
    node suites/fix2/supplyedit.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]); // r3/util.js's U.open reads APP_DIR
@@ -465,6 +468,74 @@ function rec(o) {
     await editRecord(A.page, 'r1', { 'er-vlsfo-act': '700' });
     check('S18 this build then 800 → 700: 3300, not 3500 (here and on a fresh device)', same(await live(A.page), [3300, 800]) && same(await fresh(openT, db), [3300, 800]), [await live(A.page), cloudBarge(db)]);
     await O.ctx.close();
+  });
+
+  /* S19 — a supply moved to Barge 2; Barge 2 renamed; then a notes-only edit of it */
+  await scenario('S19 moved, barge renamed, notes edit', async (openT) => {
+    const s = seed({ two: true });
+    s.state.barges[0].vrob = 3000;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000 })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    await editRecord(A.page, 'r1', { 'er-barge': 'Barge 2' });
+    check('S19 precondition: moved — Barge 1 4000, Barge 2 2000', same([await live(A.page, 1), await live(A.page, 2)], [[4000, 800], [2000, 500]]), [await live(A.page, 1), await live(A.page, 2)]);
+    await A.page.evaluate(async () => { toggleBargeEdit(2); document.getElementById('b2-name').value = 'Sea Star'; saveBargeEdit(2); await _waitForSaveIdle(); });
+    await editRecord(A.page, 'r1', { 'er-notes': 'BDN received' });
+    check('S19 Barge 2 renamed, then only the notes edited: Barge 1 stays 4000 (here and on a fresh device)', same(await live(A.page, 1), [4000, 800]) && same((await fresh(openT, db, [1, 2]))[0], [4000, 800]), [await live(A.page, 1), await live(A.page, 2)]);
+  });
+
+  /* S20 — a supply that ran the barge empty (took 300 of 500), a reload, then edits */
+  await scenario('S20 supply larger than the barge held, then a reload', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 300;
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    await logSupply(A.page, 'n2', 500, 0);
+    const id = await recId(A.page, 'BRAVO');
+    await A.page.evaluate(async () => { _bargeReloads.push({ id: 'rl_t1', bargeId: 1, v: 2000, m: 0, at: Date.now(), note: 'Reload' }); await saveSharedState(); await _waitForSaveIdle(); });
+    check('S20 precondition: 300 − 500 stops at 0, then reload +2000 → 2000', same(await live(A.page), [2000, 800]), await live(A.page));
+    await editRecord(A.page, id, { 'er-notes': 'BDN 123' });
+    check('S20 notes-only edit: stays 2000', same(await live(A.page), [2000, 800]) && same(await fresh(openT, db), [2000, 800]), await live(A.page));
+    await editRecord(A.page, id, { 'er-vlsfo-act': '450' });
+    check('S20 500 → 450 (still more than the 300 there was): stays 2000', same(await live(A.page), [2000, 800]), await live(A.page));
+    await editRecord(A.page, id, { 'er-vlsfo-act': '200' });
+    check('S20 450 → 200: gives back 100 → 2100 (here and on a fresh device)', same(await live(A.page), [2100, 800]) && same(await fresh(openT, db), [2100, 800]), await live(A.page));
+  });
+
+  /* S21 — Save Parameters changing only the MGO opening */
+  await scenario('S21 MGO-only measurement', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 3000; s.state.barges[0].mrob = 700;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000, m: 100 })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    await A.page.evaluate(async () => { toggleBargeEdit(1); document.getElementById('b1-mrob').value = '750'; saveBargeEdit(1); await _waitForSaveIdle(); });
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '800', 'er-mgo-act': '50' });
+    check('S21 MGO measured 750, then r1 1000/100 → 800/50: VLSFO +200 → 3200, MGO stays 750', same(await live(A.page), [3200, 750]) && same(await fresh(openT, db), [3200, 750]), await live(A.page));
+  });
+
+  /* S22 — two devices change DIFFERENT fields of the same baked record before they sync */
+  await scenario('S22 two devices, two fields of one record', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 3000; s.state.barges[0].mrob = 700;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000, m: 100 })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    const B = await openT(db, 'user-operator2');
+    await generate(A.page); await generate(B.page);
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '800' });
+    await editRecord(B.page, 'r1', { 'er-mgo-act': '50' });
+    await pull(A.page); await pull(B.page);
+    const r = { A: await live(A.page), B: await live(B.page), F: await fresh(openT, db), rec: U.row(db).payload.records.map(x => [x.vlsfoAct, x.mgoAct]) };
+    check('S22 both count: VLSFO 1000 → 800 (+200) and MGO 100 → 50 (+50): 3200 / 750 everywhere', same(r.rec, [[800, 50]]) && same(r.A, [3200, 750]) && same(r.B, [3200, 750]) && same(r.F, [3200, 750]), r);
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '900' });
+    check('S22 …and a later edit corrects from there: 900 → 3100 / 750', same(await live(A.page), [3100, 750]) && same(await fresh(openT, db), [3100, 750]), await live(A.page));
   });
 
   await browser.close();
