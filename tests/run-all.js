@@ -123,7 +123,7 @@ function runOne([name, file]) {
   for (const r of failed) {
     let txt = '';
     try { txt = fs.readFileSync(path.join(OUT, r.name + '.log'), 'utf8'); } catch (e) {}
-    const bad = txt.split('\n').filter(l => /\bFAIL\b|\(threw\)|Error:/.test(l)).slice(0, 15);
+    const bad = txt.split('\n').filter(l => /\bFAIL\b|\(threw\)|Error\b|destroyed|Timeout|at .*\.test\.js:\d+/.test(l)).slice(0, 15);
     if (bad.length) console.log('\n' + r.name + ':\n  ' + bad.map(l => l.slice(0, 400)).join('\n  '));
   }
   process.exit(failed.length ? 1 : 0);
