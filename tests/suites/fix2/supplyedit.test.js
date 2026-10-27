@@ -1,10 +1,11 @@
 /* Editing, moving or deleting a SAVED supply moves the barge ROB, on every device.
    A saved supply is folded ('baked') into the barge's opening ROB, so computeLiveROB
    skips it: an edit / move / delete of it never moved live ROB, and Delete + re-save
-   deducted the delivery twice. Now each barge keeps, per baked record, what the bake
-   really took off (state.bakedSupplyQty); live ROB gets the difference from what the
-   record takes now, on every device, and the next bake (a new supply) folds it into
-   the opening. 'fresh device' = what the cloud row gives a device that just loaded it.
+   deducted the delivery twice. Now the barge's current ROB becomes live ROB + the
+   difference — a "current ROB" figure (manualROB '<id>_final', editedBy 'Supply
+   correction') that syncs like Update ROB and is folded in by the next bake — the
+   difference measured against what the bake really took off (record.robTook).
+   'fresh device' = what the cloud row gives a device that just loaded it.
    • edit 1000 → 800: +200 here, in the cloud, on a colleague's device after sync and on a fresh one
    • a larger actual takes ROB down (clamped at 0 like a supply)
    • move barge A → B (and back): each barge right
@@ -117,9 +118,9 @@ function rec(o) {
     check('S1 …on the colleague\'s device after sync (3200)', same(await live(B.page), [3200, 800]), await live(B.page));
     check('S1 …and on a fresh device (3200)', same(await fresh(openT, db), [3200, 800]));
 
-    const led = (U.row(db).payload.state.bakedSupplyQty || {})['1'] || {}, en = led[id];
-    check('S1 the ledger entry of Barge 1 for this record: baked as 1000, takes 800 now (no reload event)', en && en.qv === 1000 && en.tv === 1000 && en.cv === 800 && en.qm === 0 &&
-      en.at === new Date(U.row(db).payload.records.find(x => x.id === id).supplyDate).getTime() && !(U.row(db).payload.state.bargeReloads || []).length, led);
+    const fin = U.row(db).payload.state.manualROB['1_final'], took = (U.row(db).payload.records.find(x => x.id === id).robTook || {})['1'];
+    check('S1 in the cloud: Barge 1\'s current ROB 3200 as a supply correction, the record took 800 now (no reload event)', fin && fin.v === 3200 && fin.m === 800 && fin.editedBy === 'Supply correction' &&
+      Array.isArray(took) && took[0] === 800 && took[1] === 0 && took[3] === 'Barge 1' && !(U.row(db).payload.state.bargeReloads || []).length, { fin, took });
     const audit = U.row(db).payload.state.robAuditLog.filter(e => /CORRECTION/.test(e.field));
     check('S1 the ROB audit log says correction 3000 → 3200 (not RELOAD)', audit.length === 1 && audit[0].field === 'VLSFO CORRECTION' && audit[0].oldVal === 3000 && audit[0].newVal === 3200 && /ALPHA supply edited/.test(audit[0].reason), audit);
 
@@ -132,8 +133,8 @@ function rec(o) {
       const h = all.history.filter(x => x.source !== 'opening');
       return { h: h.map(x => [x.label, x.source]), supplied: all.totalSuppliedV, count: all.completedCount, live: Math.round(all.liveV), txt };
     }, id);
-    check('S1 Live ROB history: "Correction (+200 VLSFO / +0 MGO) — ALPHA supply edited …", source Correction, not Reload / Supply',
-      lbl.h.length === 1 && /^Correction \(\+200 VLSFO \/ \+0 MGO\) — ALPHA supply edited: VLSFO 1,000 → 800 MT$/.test(lbl.h[0][0]) && lbl.h[0][1] === 'correction' &&
+    check('S1 Live ROB history: "Correction — ALPHA supply edited: VLSFO 1,000 → 800 MT", source Correction, not Reload / Supply / Manual',
+      lbl.h.length === 1 && /^Correction — ALPHA supply edited: VLSFO 1,000 → 800 MT$/.test(lbl.h[0][0]) && lbl.h[0][1] === 'correction' &&
       lbl.supplied === 0 && lbl.count === 0 && /Correction/.test(lbl.txt) && !/Reload/.test(lbl.txt), lbl);
 
     await editRecord(A.page, id, { 'er-vlsfo-act': '1200' });
@@ -142,8 +143,8 @@ function rec(o) {
     check('S1 editing only notes / status leaves ROB alone (2800)', same(await live(A.page), [2800, 800]) && same(await fresh(openT, db), [2800, 800]), [await live(A.page), cloudBarge(db)]);
     // The next bake (a new supply) folds the correction into the opening — once.
     await logSupply(A.page, 'n2', 500, 0);
-    const f = (U.row(db).payload.state.bakedSupplyQty || {})['1'][id];
-    check('S1 BRAVO 500 logged: the bake folds the correction in — opening 2300 in the cloud, live 2300 everywhere, ALPHA\'s entry now 1200 / 1200 / 1200', same(await live(A.page), [2300, 800]) && same(cloudBarge(db), [2300, 800]) && same(await fresh(openT, db), [2300, 800]) && f.qv === 1200 && f.tv === 1200 && f.cv === 1200, [await live(A.page), cloudBarge(db), f]);
+    const f = (U.row(db).payload.records.find(x => x.id === id).robTook || {})['1'], fin2 = U.row(db).payload.state.manualROB['1_final'];
+    check('S1 BRAVO 500 logged: the bake folds the correction in — opening 2300 in the cloud, live 2300 everywhere, ALPHA took 1200', same(await live(A.page), [2300, 800]) && same(cloudBarge(db), [2300, 800]) && same(await fresh(openT, db), [2300, 800]) && f[0] === 1200 && !fin2, [await live(A.page), cloudBarge(db), f, fin2]);
   });
 
   /* S2 — a negative correction stops at 0 like a supply */
@@ -223,7 +224,7 @@ function rec(o) {
     const pre = { live: await live(A.page), baked: await A.page.evaluate(() => (_bakedSupplyIds[1] || []).includes('r1')) };
     check('S6 precondition: not baked, ROB 3000', !pre.baked && same(pre.live, [3000, 800]), pre);
     await editRecord(A.page, 'r1', { 'er-vlsfo-act': '800' });
-    const r = { A: await live(A.page), cloud: cloudBarge(db), corr: await A.page.evaluate(() => Object.keys(_bakedSupplyQty[1] || {}).filter(k => k !== 'r1' || _bakedSupplyQty[1].r1.cv !== 800).length) };
+    const r = { A: await live(A.page), cloud: cloudBarge(db), corr: await A.page.evaluate(() => Object.keys(_manualROB).filter(k => /_final$/.test(k)).length) };
     check('S6 edit 1000 → 800: ROB 3200 exactly once (no correction), cloud 3200, fresh device 3200', same(r.A, [3200, 800]) && same(r.cloud, [3200, 800]) && r.corr === 0 && same(await fresh(openT, db), [3200, 800]), r);
   });
 

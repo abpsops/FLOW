@@ -7707,8 +7707,6 @@ function _mergePayloads(base, local, remote) {
     merged = _mergeBakes(bd, ld, rd, _merge3(bd, ld, rd, '', ctx, ''), ctx);
   }
   merged.state.version = (remote && remote.version) || (remote && remote.state && remote.state.version) || 0;
-  // A baked-supply ledger entry changed on both sides keeps the newest (bookkeeping, not a user's edit).
-  ctx.conflicts = ctx.conflicts.filter(function(p) { return String(p).indexOf('state.bakedSupplyQty') !== 0; });
   return { merged: merged, conflicts: ctx.conflicts };
 }
 /* A barge's opening ROB and the supplies / reloads already folded into it (bakedSupplyIds)
@@ -7772,8 +7770,6 @@ function _mergeBakes(b, l, r, m, ctx) {
   // its opening. A grade whose merged opening is such a device's gets that copy back and the
   // merged record's taken off instead: ROB = opening − the one record, deducted once.
   const recIn = function(d, id) { return ((d && d.records) || []).find(function(x) { return x && String(x.id) === id; }); };
-  const ledger = _isPlainObj(m.state.bakedSupplyQty) ? m.state.bakedSupplyQty : null;
-  let ledgerOut = null;
   bids.forEach(function(bid) {
     const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid), m0 = bargeOf(m, bid), i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
     if (!bb || !lb || !rb || !m0 || i < 0) return;
@@ -7794,26 +7790,61 @@ function _mergeBakes(b, l, r, m, ctx) {
       mb[g[0]] = Math.max(0, Math.round((parseFloat(mb[g[0]]) || 0) + d));
     });
     if (mb) { barges[i] = mb; changed = true; }
-    // Such a record's ledger entry (_bakedSupplyQty) may be either device's
-    // copy: the opening now holds the merged record, so that is what it took
-    // — or computeLiveROB would correct the difference a second time.
-    const L = ledger && _isPlainObj(ledger[bid]) ? ledger[bid] : null;
-    if (!L) return;
-    list(mB, bid).forEach(function(id) {
-      const e = L[id], merged = recs.find(function(x) { return x && String(x.id) === id; });
-      if (!_isPlainObj(e) || e.abs || inB.has(id) || recIn(b, id) || !recIn(l, id) || !recIn(r, id) || !merged) return;
-      const v = took(merged, 'vlsfoAct', barges[i].name), mm = took(merged, 'mgoAct', barges[i].name);
-      if (e.qv === v && e.tv === v && e.cv === v && e.qm === mm && e.tm === mm && e.cm === mm) return;
-      ledgerOut = ledgerOut || Object.assign({}, ledger);
-      ledgerOut[bid] = Object.assign({}, ledgerOut[bid]);
-      ledgerOut[bid][id] = Object.assign({}, e, { qv: v, tv: v, cv: v, qm: mm, tm: mm, cm: mm, b: String(merged.barge || '').trim() });
+  });
+  // A "current ROB" figure (_manualROB '<id>_final': Update ROB or a supply
+  // correction) new on one device replaces live ROB after the events it knew
+  // (atIds). What that device baked before setting it is inside the figure:
+  // keep it baked. What the other device baked meanwhile is not: unbake it so
+  // computeLiveROB deducts it after the figure.
+  const mrOf = function(d) { return _isPlainObj(d && d.state && d.state.manualROB) ? d.state.manualROB : {}; };
+  const bM = mrOf(b), lM = mrOf(l), rM = mrOf(r), mM = mrOf(m);
+  let bakedOut = null;
+  bids.forEach(function(bid) {
+    const k = bid + '_final', fin = mM[k];
+    if (!_isPlainObj(fin)) return;
+    const fromL = _sameJSON(fin, lM[k]) && !_sameJSON(lM[k], bM[k]), fromR = _sameJSON(fin, rM[k]) && !_sameJSON(rM[k], bM[k]);
+    if (fromL === fromR) return;
+    const base = new Set(list(bB, bid)), known = new Set((Array.isArray(fin.atIds) ? fin.atIds : []).map(String));
+    const own = list(fromL ? lB : rB, bid).filter(function(id) { return !base.has(id); });
+    const theirs = list(fromL ? rB : lB, bid).filter(function(id) { return !base.has(id) && !known.has(id) && own.indexOf(id) === -1; });
+    const raw = function(o) { return Array.isArray(o[bid]) ? o[bid] : []; }; // the ids as stored (a number stays a number)
+    const cur = raw(bakedOut || mB), curS = cur.map(String);
+    const next = cur.concat(raw(fromL ? lB : rB).filter(function(id) { return own.indexOf(String(id)) !== -1 && curS.indexOf(String(id)) === -1; }))
+      .filter(function(id) { return theirs.indexOf(String(id)) === -1; });
+    if (key(next.map(String)) === key(curS)) return;
+    bakedOut = bakedOut || Object.assign({}, mB);
+    bakedOut[bid] = next;
+  });
+  // A baked record deleted on one device and edited on the other comes back
+  // with the edit (the merge keeps edits). When the figure kept is the
+  // deleting device's supply correction, it gave that record's fuel back:
+  // take what the record (as edited) takes off again.
+  let manualOut = null;
+  bids.forEach(function(bid) {
+    const k = bid + '_final', fin = mM[k], i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
+    if (!_isPlainObj(fin) || fin.editedBy !== 'Supply correction' || i < 0) return;
+    const fromL = _sameJSON(fin, lM[k]) && !_sameJSON(lM[k], bM[k]), fromR = _sameJSON(fin, rM[k]) && !_sameJSON(rM[k], bM[k]);
+    if (fromL === fromR) return;
+    const gone = fromL ? l : r, inList = list(bakedOut || mB, bid);
+    let v = parseFloat(fin.v) || 0, mm = parseFloat(fin.m) || 0, n = 0;
+    recs.forEach(function(rec) {
+      const id = rec && String(rec.id);
+      if (!id || !recIn(b, id) || recIn(gone, id) || inList.indexOf(id) === -1) return;
+      const st = rec.robTook && rec.robTook[bid];
+      v -= Array.isArray(st) ? parseFloat(st[0]) || 0 : took(rec, 'vlsfoAct', barges[i].name);
+      mm -= Array.isArray(st) ? parseFloat(st[1]) || 0 : took(rec, 'mgoAct', barges[i].name);
+      n++;
     });
+    if (!n) return;
+    manualOut = manualOut || Object.assign({}, mM);
+    manualOut[k] = Object.assign({}, fin, { v: Math.max(0, v), m: Math.max(0, mm) });
   });
   if (ctx && Array.isArray(ctx.conflicts) && Object.keys(resolved).length) ctx.conflicts = ctx.conflicts.filter(function(p) { return !resolved[p]; });
-  if (!changed && !ledgerOut) return m;
+  if (!changed && !bakedOut && !manualOut) return m;
   const st = Object.assign({}, m.state);
   if (changed) st.barges = barges;
-  if (ledgerOut) st.bakedSupplyQty = ledgerOut;
+  if (bakedOut) st.bakedSupplyIds = bakedOut;
+  if (manualOut) st.manualROB = manualOut;
   return Object.assign({}, m, { state: st });
 }
 
@@ -7835,7 +7866,6 @@ function _buildLocalPayload() {
   state.manualROB      = Object.assign({}, _manualROB || {});
   state.robAuditLog    = _robAuditLog || [];
   state.bakedSupplyIds = _bakedSupplyIds || {};
-  state.bakedSupplyQty = _bakedSupplyQty || {};
   state.checklistRecords = _activeChecklistRecords();
   return _deepClone({ state: state, records: _savedSupplies || [], checklistRecords: _activeChecklistRecords() });
 }
@@ -7853,7 +7883,7 @@ function _markUnsynced(on) {
 // Data derived from those edits (schedule, bake bookkeeping, ROB audit log)
 // isn't counted again; a trader only ever writes nominations. 0 = no base
 // to compare against (or nothing changed).
-const _CHANGE_COUNT_SKIP = { lastSched: 1, lastSchedMeta: 1, bakedSupplyIds: 1, bakedSupplyQty: 1, robAuditLog: 1, checklistRecords: 1 };
+const _CHANGE_COUNT_SKIP = { lastSched: 1, lastSchedMeta: 1, bakedSupplyIds: 1, robAuditLog: 1, checklistRecords: 1 };
 function _countLocalChanges() {
   if (!_lastSyncedPayload) return 0;
   const b = _mergeDoc(_lastSyncedPayload), l = _mergeDoc(_buildLocalPayload());
@@ -7943,7 +7973,6 @@ function _applyPayload(payload, replaceUnions) {
     if (Array.isArray(st.loadingRecords)) _loadingRecords = _deepClone(st.loadingRecords);
     if (_isPlainObj(st.fuelingInitiated)) _fuelingInitiated = _deepClone(st.fuelingInitiated);
     if (_isPlainObj(st.bakedSupplyIds)) _bakedSupplyIds = _deepClone(st.bakedSupplyIds);
-    if (_isPlainObj(st.bakedSupplyQty)) _bakedSupplyQty = _deepClone(st.bakedSupplyQty);
   }
   applyState(st, !!replaceUnions); // a merge result or the cloud row itself: no zero-ROB guard
   if (Array.isArray(st.loadingRecords)) _saveLoadingToLocal();
@@ -8056,13 +8085,10 @@ function _buildSavePayload() {
 
     // Only re-bake when there's a genuinely NEW completed supply / reload to
     // fold in since this barge's last bake.
-    // (A corrected baked supply alone does not re-bake: computeLiveROB applies
-    // it from the ledger on every device, and the next bake folds it in.
-    // Re-baking for it would clash with a colleague's bake of a new supply.)
     if (!hasNewToBake) return b;
 
     _bakedSupplyIds[b.id] = Array.from(new Set(prevBaked.concat(matchedIds)));
-    _bakeSupplyLedger(b.id, b.name, prevBaked, matchedIds, rob.took);
+    _stampRobTook(b.id, prevBaked, matchedIds, rob.took);
     bakedNow.add(String(b.id));
     const nv = Math.round(rob.liveV), nm = Math.round(rob.liveM);
     // Write the baked opening back to the barge card inputs and the ROB
@@ -8076,7 +8102,6 @@ function _buildSavePayload() {
     return Object.assign({}, b, { vrob: nv, mrob: nm });
   });
   state.bakedSupplyIds = _bakedSupplyIds;
-  state.bakedSupplyQty = _bakedSupplyQty;
 
   // Strip the manual-override keys (pre / after-each / final) ONLY for the
   // barges baked in THIS call — their new opening already reflects them.
@@ -9902,19 +9927,6 @@ function applyState(state, trusted) {
       _bakedSupplyIds[bid] = Array.from(new Set(existing.concat(incoming)));
     });
   }
-  if (_isPlainObj(state.bakedSupplyQty)) {
-    // Per entry, the newer of this device's and the incoming one.
-    Object.keys(state.bakedSupplyQty).forEach(function(bid) {
-      const inc = state.bakedSupplyQty[bid];
-      if (!_isPlainObj(inc)) return;
-      const L = Object.assign({}, _bakedSupplyQty[bid] || {});
-      Object.keys(inc).forEach(function(id) {
-        const a = inc[id], o = L[id];
-        if (_isPlainObj(a) && (!o || (parseFloat(a.updatedAt) || 0) >= (parseFloat(o.updatedAt) || 0))) L[id] = a;
-      });
-      _bakedSupplyQty[bid] = L;
-    });
-  }
   if (state.manualROB) {
     // Adopt as-is. Overrides used to be stripped here for any barge that had
     // EVER been baked — which deleted every override made after the first
@@ -10128,42 +10140,19 @@ let _manualROB   = {};   // {bargeId: {v: number|null, m: number|null}}  null = 
 // manual override, exactly once each. {bargeId: [recordId, ...]}
 let _bakedSupplyIds = {};
 
-// What the bake took off a barge for each saved supply it folded in, so that
-// editing, moving or deleting that supply afterwards still moves live ROB —
-// once, and by no more than was really taken:
-// {bargeId: {recordId: {qv, qm, tv, tm, cv, cm, b, at, abs, note, updatedAt}}}
-//   qv/qm  the record's quantities when baked   tv/tm  what the bake took off (stops at 0)
-//   cv/cm  what the record takes now (set when it is edited / moved / deleted)
-//   b      the record's barge text when baked   at     supply time (ms)
-//   abs    a ROB measured later (Update ROB, a new opening) already shows the real fuel
-// Absolute figures per barge and record, not deltas: two devices making the same
-// change agree, and the merge keeps one entry (the newest updatedAt). Live ROB
-// gets tv − cv once cv differs from qv (_bakedCorrection, computeLiveROB).
-let _bakedSupplyQty = {};
-// What a baked record takes off this barge now: read from the record while it
-// is in Saved Records — still this barge's when it keeps the barge text it was
-// baked with (the barge renamed since) or now names this barge (e.g. an
-// unassigned record tagged with it) — else the figure last set for it (cv/cm:
-// 0 once deleted; an archived record keeps its last figure).
-function _bakedTakeNow(e, r, bargeName, onlyBarge) {
-  if (!r) return e;
-  const aV = parseFloat(r.vlsfoAct) || 0, aM = parseFloat(r.mgoAct) || 0, rb = String(r.barge || '').trim();
-  const mine = (aV || aM) && (rb === (e.b || '') || (rb === '' ? onlyBarge : rb === bargeName));
-  return Object.assign({}, e, { cv: mine ? aV : 0, cm: mine ? aM : 0 });
+// When barge bid's ROB was last measured — Update ROB, a new opening typed
+// in Save Parameters, or the barge removed (one added back with its id is a
+// fresh figure): _manualROB['<bid>_measured'] = {at}. A supply baked into
+// the opening before then is already in that figure, so correcting it later
+// moves nothing (_correctBakedSupply). It is not an override: computeLiveROB
+// and the bake leave the key alone.
+function _robMeasured(bid) {
+  if (!_manualROB) _manualROB = {};
+  _manualROB[bid + '_measured'] = { at: Date.now() };
 }
-function _bakedCorrection(e) {
-  if (!e || e.abs) return [0, 0];
-  const f = function(q, t, c) { q = parseFloat(q) || 0; t = parseFloat(t) || 0; c = parseFloat(c) || 0; return c === q ? 0 : t - c; };
-  return [f(e.qv, e.tv, e.cv), f(e.qm, e.tm, e.cm)];
-}
-// A measured ROB now stands for barge bid (its opening was set, or it was
-// removed): later corrections of the supplies it already holds move nothing.
-function _absorbBakedSupplies(bid) {
-  const ids = ((_bakedSupplyIds && _bakedSupplyIds[bid]) || []).map(String);
-  if (!ids.length) return;
-  const L = Object.assign({}, _bakedSupplyQty[bid] || {}), now = Date.now();
-  ids.forEach(function(id) { if (!L[id] || !L[id].abs) L[id] = Object.assign({}, L[id] || {}, { abs: 1, updatedAt: now }); });
-  _bakedSupplyQty[bid] = L;
+// A real manual override of barge bid (not the measured-time marker).
+function _hasManualOverride(bid) {
+  return Object.keys(_manualROB || {}).some(function(k) { return k.startsWith(bid + '_') && k !== bid + '_measured'; });
 }
 
 // Barge reloads as dated events: [{id, bargeId, v, m, at, by, note}].
@@ -10247,26 +10236,11 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
     if (String(rl.bargeId) !== String(bargeId) || bakedIds.has(rl.id)) return false;
     return !(upToDate && rl.at && new Date(rl.at) > upToDate);
   });
-  // A baked supply edited, moved or deleted since (_bakedSupplyQty): the
-  // difference, at the supply's own time.
-  const bakedStr = new Set(Array.from(bakedIds).map(String));
-  const ledger = (_bakedSupplyQty && _bakedSupplyQty[bargeId]) || {};
-  const ledgerIds = Object.keys(ledger).filter(function(id) { return bakedStr.has(id) && ledger[id] && !ledger[id].abs; });
-  const recOf = {};
-  if (ledgerIds.length) (_savedSupplies || []).forEach(function(r) { if (r && r.id != null && !recOf[String(r.id)]) recOf[String(r.id)] = r; });
-  const corrections = ledgerIds.map(function(id) {
-    const e = _bakedTakeNow(ledger[id], recOf[id], bargeName, isOnlyBarge), d = _bakedCorrection(e);
-    if (!d[0] && !d[1]) return null;
-    if (upToDate && e.at && e.at > upToDate.getTime()) return null;
-    return { id: id, e: e, dv: d[0], dm: d[1] };
-  }).filter(Boolean);
-
   // One chronological event list: supplies (by supply date) and reloads (by
   // when they happened).
   const tOf = function(d) { const t = d ? new Date(d).getTime() : 0; return isNaN(t) ? 0 : t; };
   const events = completed.map(function(r) { return { kind: 'supply', id: r.id, t: tOf(r.supplyDate), r: r }; })
     .concat(reloads.map(function(rl) { return { kind: 'reload', id: rl.id, t: tOf(rl.at), rl: rl }; }))
-    .concat(corrections.map(function(c) { return { kind: 'correction', id: 'corr:' + c.id, t: parseFloat(c.e.at) || 0, c: c }; }))
     .sort(function(a, b) { return a.t - b.t; });
 
   var bCfg=(_bargeConfig||[]).find(function(b){return b.id==bargeId;});
@@ -10288,19 +10262,19 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
   }
 
   const applyEvent = function(ev) {
-    if (ev.kind === 'correction') {
-      // Like a supply, a correction that takes fuel off stops at 0.
-      const c = ev.c, sgn = function(x) { return (x < 0 ? '−' : '+') + Math.abs(x).toLocaleString(); };
-      rv = Math.max(0, rv + c.dv); rm = Math.max(0, rm + c.dm);
-      const cd = c.e.at ? new Date(c.e.at) : null;
-      history.push({ label: 'Correction (' + sgn(c.dv) + ' VLSFO / ' + sgn(c.dm) + ' MGO)' + (c.e.note ? ' — ' + c.e.note : ''),
-        dateStr: cd && !isNaN(cd) ? fmt24(cd) : '', v: rv, m: rm, source: 'correction', recordId: c.id });
-      return;
-    }
     if (ev.kind === 'reload') {
       const addV = parseFloat(ev.rl.v) || 0, addM = parseFloat(ev.rl.m) || 0;
-      rv = rv + addV; rm = rm + addM;
       const rd = ev.rl.at ? new Date(ev.rl.at) : null;
+      if (ev.rl.kind === 'correction') {
+        // A supply correction saved as an event by the build of 27 Oct 2026
+        // (now a "current ROB" figure, _correctBakedSupply). Like a supply it stops at 0.
+        rv = Math.max(0, rv + addV); rm = Math.max(0, rm + addM);
+        const sgn = function(x) { return (x < 0 ? '−' : '+') + Math.abs(x).toLocaleString(); };
+        history.push({ label: 'Correction (' + sgn(addV) + ' VLSFO / ' + sgn(addM) + ' MGO)' + (ev.rl.note ? ' — ' + ev.rl.note : ''),
+          dateStr: rd && !isNaN(rd) ? fmt24(rd) : '', v: rv, m: rm, source: 'correction', reloadId: ev.rl.id });
+        return;
+      }
+      rv = rv + addV; rm = rm + addM;
       history.push({ label: 'Reload (+' + addV.toLocaleString() + ' VLSFO / +' + addM.toLocaleString() + ' MGO)' + (ev.rl.note ? ' — ' + ev.rl.note : ''),
         dateStr: rd && !isNaN(rd) ? fmt24(rd) : '', v: rv, m: rm, source: 'reload', reloadId: ev.rl.id });
       return;
@@ -10333,7 +10307,9 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
   const applyFinal = function(manFinal) {
     if (manFinal.v !== null && manFinal.v !== undefined) { rv = manFinal.v; }
     if (manFinal.m !== null && manFinal.m !== undefined) { rm = manFinal.m; }
-    history.push({ label: 'Manual Override (current)', v: rv, m: rm, source: 'manual' });
+    // A supply correction (_correctBakedSupply) is labelled as one.
+    const corr = manFinal.editedBy === 'Supply correction';
+    history.push({ label: corr ? 'Correction' + (manFinal.reason ? ' — ' + manFinal.reason : '') : 'Manual Override (current)', v: rv, m: rm, source: corr ? 'correction' : 'manual' });
   };
 
   // "Current ROB" override. When it records which events it already
@@ -10344,12 +10320,7 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
   const manFinal = _mrob[bargeId + '_final'];
   if (manFinal && Array.isArray(manFinal.atIds)) {
     const known = new Set(manFinal.atIds);
-    // A corrected supply made before this figure was measured is already in it.
-    const finT = manFinal.editedAt ? Date.parse(manFinal.editedAt) : NaN;
-    const isKnown = function(ev) {
-      if (ev.kind === 'correction') return isNaN(finT) || ev.t <= finT;
-      return ev.id === undefined || ev.id === null || known.has(ev.id);
-    };
+    const isKnown = function(ev) { return ev.id === undefined || ev.id === null || known.has(ev.id); };
     events.filter(isKnown).forEach(applyEvent);
     applyFinal(manFinal);
     events.filter(function(ev) { return !isKnown(ev); }).forEach(applyEvent);
@@ -10358,8 +10329,8 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
     if (manFinal) applyFinal(manFinal);
   }
 
-  return { v: rv, m: rm, history: history, completedCount: completed.length, took: took, corrected: corrections.length > 0,
-           eventIds: events.filter(function(ev) { return ev.kind !== 'correction'; }).map(function(ev) { return ev.id; }).filter(function(id) { return id !== undefined && id !== null; }) };
+  return { v: rv, m: rm, history: history, completedCount: completed.length, took: took,
+           eventIds: events.map(function(ev) { return ev.id; }).filter(function(id) { return id !== undefined && id !== null; }) };
 }
 
 // Event ids a new "current ROB" override for this barge accounts for.
@@ -10372,95 +10343,118 @@ function _robOverrideAtIds(bargeId) {
 // A saved supply already folded into a barge's opening (_bakedSupplyIds) is
 // skipped by computeLiveROB, so editing its quantity or barge, or deleting it,
 // never moved live ROB (and Delete + re-save deducted the delivery twice).
-// Its ledger entry (_bakedSupplyQty) now records what the record takes off
-// each barge that baked it; computeLiveROB applies the difference to what the
-// bake really took. Call after the change: before = the record as it was,
-// after = as it is now (null = removed, `removed` says how). A record no barge
-// has baked needs nothing: computeLiveROB re-reads it. Archiving or clearing
-// records never calls this — the fuel really was supplied.
+// Now the barge's current ROB becomes live ROB + the difference, as a
+// "current ROB" figure (_manualROB '<id>_final', editedBy 'Supply correction')
+// — absolute, synced like Update ROB (two devices making the same change
+// agree), and folded into the opening by the next bake. The difference is
+// taken from what the record really took off that barge (robTook, stamped by
+// the bake and kept up to date here: a supply larger than what the barge held
+// took only what there was). Fuel given back first goes to later supplies the
+// empty barge could not give in full. A supply baked before the barge's ROB was
+// last measured (_robMeasured, or a manual "current ROB" figure standing now)
+// is already in that figure: nothing moves. Call after the change: before =
+// the record as it was, after = as it is now (null = removed, `removed` says
+// how). Archiving or clearing records never calls this — that fuel was supplied.
 function _correctBakedSupply(before, after, removed) {
   if (!before || before.id === undefined || before.id === null) return;
   const id = String(before.id);
   // Another copy with the same id still stands for this delivery in the opening.
   if (!after && (_savedSupplies || []).some(function(r) { return r && String(r.id) === id; })) return;
   const onlyBarge = _isSingleBargeFleet(), fleet = getBarges();
+  const acts = function(r) { return r ? [parseFloat(r.vlsfoAct) || 0, parseFloat(r.mgoAct) || 0] : [0, 0]; };
   const textOf = function(r) { return String((r && r.barge) || '').trim(); };
-  const bakedOn = function(b) { return ((_bakedSupplyIds && _bakedSupplyIds[b.id]) || []).map(String).indexOf(id) !== -1; };
+  const names = function(r, b) { const rb = textOf(r); return rb === '' ? onlyBarge : rb === b.name; };
+  const bakedOn = function(b, rid) { return ((_bakedSupplyIds && _bakedSupplyIds[b.id]) || []).map(String).indexOf(rid) !== -1; };
   const tOf = function(r) { const t = r && r.supplyDate ? new Date(r.supplyDate).getTime() : NaN; return isNaN(t) ? 0 : t; };
+  const stampOf = function(r, b) { const st = r && r.robTook && r.robTook[b.id]; return Array.isArray(st) ? st : null; };
+  const setStamp = function(r, b, v, m, at, txt) { r.robTook = Object.assign({}, r.robTook || {}); r.robTook[b.id] = [Math.round(v * 1000) / 1000, Math.round(m * 1000) / 1000, at, txt]; };
   const what = !after ? removed : textOf(after) !== textOf(before) ? 'moved to ' + (textOf(after) || 'no barge') : 'edited';
-  // Live ROB as it was before this change: the record put back for a moment.
-  const robBefore = function(b) {
-    const list = _savedSupplies || [], i = after ? list.indexOf(after) : -1;
-    if (i >= 0) list[i] = before; else list.push(before);
-    try { return computeLiveROB(b.id, b.name, b.vrob, b.mrob, null); }
-    finally { if (i >= 0) list[i] = after; else list.splice(list.lastIndexOf(before), 1); }
-  };
   const ts = new Date().toISOString();
   let any = false;
   fleet.forEach(function(b) {
-    if (!bakedOn(b)) return;
-    const L = _bakedSupplyQty[b.id] || {};
-    let e = L[id];
-    if (!e) {
-      // Baked before the ledger existed: its opening holds the record as it
-      // was — when the record named this barge, or no other barge (by name or
-      // by having baked it) could be the one it was taken from.
-      const other = fleet.some(function(o) { return o !== b && (bakedOn(o) || (textOf(before) !== '' && textOf(before) === o.name)); });
-      const named = textOf(before) === '' ? onlyBarge : textOf(before) === b.name;
-      if (!named && other) return;
-      e = { b: textOf(before), at: tOf(before) };
-      const q = _bakedTakeNow(e, before, b.name, onlyBarge);
-      e = { qv: q.cv, qm: q.cm, tv: q.cv, tm: q.cm, cv: q.cv, cm: q.cm, b: e.b, at: e.at };
+    if (!bakedOn(b, id)) return;
+    const st = stampOf(before, b);
+    let was, bakedAt, txt;
+    if (st) { was = [parseFloat(st[0]) || 0, parseFloat(st[1]) || 0]; bakedAt = parseFloat(st[2]) || 0; txt = String(st[3] == null ? textOf(before) : st[3]); }
+    else {
+      // Baked before the bake stamped what it took: its opening holds the
+      // record as it was — when it named this barge, or no other barge (by
+      // name or by having baked it) could be the one it was taken from.
+      const other = fleet.some(function(o) { return o !== b && (bakedOn(o, id) || (textOf(before) !== '' && textOf(before) === o.name)); });
+      if (!names(before, b) && other) return;
+      was = acts(before); bakedAt = 0; txt = textOf(before);
     }
-    const was = _bakedTakeNow(e, before, b.name, onlyBarge), now = after ? _bakedTakeNow(e, after, b.name, onlyBarge) : Object.assign({}, e, { cv: 0, cm: 0 });
-    const at = after ? tOf(after) || e.at : e.at;
-    if (now.cv === was.cv && now.cm === was.cm && (at === e.at || !L[id])) return; // nothing that moves ROB
-    const q = function(g, k) { return g + ' ' + was[k].toLocaleString() + ' → ' + now[k].toLocaleString() + ' MT'; };
-    const note = (before.vessel || 'Vessel') + ' supply ' + what + ': ' + [now.cv !== was.cv ? q('VLSFO', 'cv') : '', now.cm !== was.cm ? q('MGO', 'cm') : ''].filter(Boolean).join(', ');
-    const robWas = robBefore(b);
-    _bakedSupplyQty[b.id] = Object.assign({}, L);
-    _bakedSupplyQty[b.id][id] = Object.assign({}, e, { cv: now.cv, cm: now.cm, at: at, note: note, updatedAt: Date.now() });
-    const robNow = computeLiveROB(b.id, b.name, b.vrob, b.mrob, null);
+    // Still this barge's: it keeps the barge text it was baked with (the barge
+    // may have been renamed since) or now names this barge.
+    const now = after && (textOf(after) === txt || names(after, b)) ? acts(after) : [0, 0];
+    const req = [was[0] - now[0], was[1] - now[1]];
+    if (!req[0] && !req[1]) return;
+    const q = function(g, i) { return g + ' ' + was[i].toLocaleString() + ' → ' + now[i].toLocaleString() + ' MT'; };
+    const note = (before.vessel || 'Vessel') + ' supply ' + what + ': ' + [req[0] ? q('VLSFO', 0) : '', req[1] ? q('MGO', 1) : ''].filter(Boolean).join(', ');
+    const mr = _manualROB || {}, meas = mr[b.id + '_measured'], fin = mr[b.id + '_final'];
+    const measuredAt = meas && meas.at ? parseFloat(meas.at) || 0 : -1;
+    if (bakedAt <= measuredAt || (fin && fin.editedBy !== 'Supply correction')) {
+      // Already in a measured figure: ROB stays; the record now takes `now`.
+      if (after) setStamp(after, b, now[0], now[1], bakedAt, txt);
+      if (!_robAuditLog) _robAuditLog = [];
+      _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'SUPPLY CORRECTION (no ROB change)', oldVal: null, newVal: null, reason: note + ' — already in the ROB measured after it', editedAt: ts, editedBy: 'Supply correction' });
+      any = true;
+      return;
+    }
+    const live = computeLiveROB(b.id, b.name, b.vrob, b.mrob, null);
+    const d = req.slice();
+    // Fuel given back first goes to later supplies that took less than their
+    // quantity (the barge was empty then), oldest first.
+    const owed = (_savedSupplies || []).filter(function(r) {
+      if (!r || r === after || String(r.id) === id || !bakedOn(b, String(r.id))) return false;
+      const s2 = stampOf(r, b);
+      if (!s2 || (parseFloat(s2[2]) || 0) <= measuredAt) return false;
+      const later = (parseFloat(s2[2]) || 0) > bakedAt || ((parseFloat(s2[2]) || 0) === bakedAt && tOf(r) > tOf(before));
+      return later && (textOf(r) === String(s2[3]) || names(r, b));
+    }).sort(function(x, y) { return (parseFloat(stampOf(x, b)[2]) || 0) - (parseFloat(stampOf(y, b)[2]) || 0) || tOf(x) - tOf(y); });
+    [0, 1].forEach(function(g) {
+      owed.forEach(function(r) {
+        if (d[g] <= 0) return;
+        const s2 = stampOf(r, b), short = acts(r)[g] - (parseFloat(s2[g]) || 0);
+        if (short <= 0) return;
+        const pay = Math.min(d[g], short);
+        d[g] -= pay;
+        const nv = s2.slice(); nv[g] = (parseFloat(s2[g]) || 0) + pay;
+        setStamp(r, b, nv[0], nv[1], nv[2], nv[3]);
+      });
+    });
+    const newV = Math.max(0, live.v + d[0]), newM = Math.max(0, live.m + d[1]);
+    // What this record has now taken: `now`, or less when taking more stopped at 0.
+    const took = [was[0] - (req[0] < 0 ? newV - live.v : req[0]), was[1] - (req[1] < 0 ? newM - live.m : req[1])];
+    if (after) setStamp(after, b, took[0], took[1], bakedAt, txt);
+    if (Math.round(newV) === Math.round(live.v) && Math.round(newM) === Math.round(live.m)) return;
+    _manualROB = _manualROB || {};
+    // updatedAt: merged as one value (the newest), never field by field.
+    _manualROB[b.id + '_final'] = { v: newV, m: newM, reason: note, editedAt: ts, editedBy: 'Supply correction', atIds: _robOverrideAtIds(b.id), updatedAt: Date.now() };
     if (!_robAuditLog) _robAuditLog = [];
-    if (Math.round(robWas.v) !== Math.round(robNow.v)) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'VLSFO CORRECTION', oldVal: Math.round(robWas.v), newVal: Math.round(robNow.v), reason: note, editedAt: ts, editedBy: 'Supply correction' });
-    if (Math.round(robWas.m) !== Math.round(robNow.m)) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'MGO CORRECTION', oldVal: Math.round(robWas.m), newVal: Math.round(robNow.m), reason: note, editedAt: ts, editedBy: 'Supply correction' });
+    if (Math.round(newV) !== Math.round(live.v)) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'VLSFO CORRECTION', oldVal: Math.round(live.v), newVal: Math.round(newV), reason: note, editedAt: ts, editedBy: 'Supply correction' });
+    if (Math.round(newM) !== Math.round(live.m)) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'MGO CORRECTION', oldVal: Math.round(live.m), newVal: Math.round(newM), reason: note, editedAt: ts, editedBy: 'Supply correction' });
     any = true;
   });
-  if (any) saveROBAudit();
+  if (any) {
+    try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB || {})); } catch (e) {}
+    saveROBAudit();
+  }
 }
 
-// The bake folds barge b's live ROB — pending corrections included — into its
-// opening. Those corrections are now part of it (their entries start again
-// from what the record takes now); each newly baked record gets an entry with
-// what was really taken off (took, from computeLiveROB). A "current ROB"
-// figure folded in by this bake was measured after the supplies before it:
-// their later corrections no longer move ROB.
-function _bakeSupplyLedger(bid, bargeName, prevIds, newIds, took) {
-  const L = Object.assign({}, _bakedSupplyQty[bid] || {}), now = Date.now(), onlyBarge = _isSingleBargeFleet();
-  const recOf = function(id) { return (_savedSupplies || []).find(function(x) { return x && String(x.id) === id; }); };
-  const fin = _manualROB && _manualROB[bid + '_final'];
-  let finT = -Infinity;
-  if (fin) { finT = fin.editedAt && Array.isArray(fin.atIds) ? Date.parse(fin.editedAt) : Infinity; if (isNaN(finT)) finT = Infinity; }
-  const prev = new Set(prevIds.map(String));
-  Object.keys(L).forEach(function(id) {
-    if (!prev.has(id) || !L[id] || L[id].abs) return;
-    let e = L[id];
-    const cur = _bakedTakeNow(e, recOf(id), bargeName, onlyBarge), d = _bakedCorrection(cur);
-    if (d[0] || d[1]) e = Object.assign({}, cur, { qv: cur.cv, qm: cur.cm, tv: cur.cv, tm: cur.cm, updatedAt: now });
-    if ((parseFloat(e.at) || 0) <= finT) e = Object.assign({}, e, { abs: 1, updatedAt: now });
-    L[id] = e;
-  });
-  newIds.map(String).forEach(function(id) {
+// The bake stamps each record it folds into barge bid's opening with what it
+// really took off (took, from computeLiveROB — less than the quantity when the
+// barge ran empty): rec.robTook[bid] = [vlsfo, mgo, bakedAt, barge text].
+function _stampRobTook(bid, prevIds, newIds, took) {
+  const prev = new Set((prevIds || []).map(String)), now = Date.now();
+  (newIds || []).map(String).forEach(function(id) {
     if (prev.has(id)) return;
-    const r = recOf(id);
+    const r = (_savedSupplies || []).find(function(x) { return x && String(x.id) === id; });
     if (!r) return; // a reload
-    const q = [parseFloat(r.vlsfoAct) || 0, parseFloat(r.mgoAct) || 0], t = (took && took[id]) || q;
-    let at = r.supplyDate ? new Date(r.supplyDate).getTime() : NaN;
-    if (isNaN(at)) at = 0;
-    L[id] = { qv: q[0], qm: q[1], tv: t[0], tm: t[1], cv: q[0], cm: q[1], b: String(r.barge || '').trim(), at: at, updatedAt: now };
-    if (at <= finT) L[id].abs = 1;
+    const t = (took && took[id]) || [parseFloat(r.vlsfoAct) || 0, parseFloat(r.mgoAct) || 0];
+    r.robTook = Object.assign({}, r.robTook || {});
+    r.robTook[bid] = [Math.round(t[0] * 1000) / 1000, Math.round(t[1] * 1000) / 1000, now, String(r.barge || '').trim()];
   });
-  _bakedSupplyQty[bid] = L;
 }
 
 /* ─── Get Live ROB for all barges ─── */
@@ -10495,7 +10489,6 @@ function getAllLiveROBs() {
       totalSuppliedM: directSumM,
       history:        live.history,
       took:           live.took,
-      corrected:      live.corrected,
       completedCount: directCount,
       vcap:           b.vcap,
       mcap:           b.mcap,
@@ -10540,7 +10533,7 @@ function renderLiveROBDashboard() {
     const mPct = rob.mcap > 0 ? Math.min(100, Math.round((rob.liveM / rob.mcap) * 100)) : 0;
     const vCol = vPct < 15 ? 'var(--red)' : vPct < 30 ? 'var(--amber)' : 'var(--fuel-v)';
     const mCol = mPct < 15 ? 'var(--red)' : mPct < 30 ? 'var(--amber)' : 'var(--fuel-m)';
-    const hasManual = Object.keys(_manualROB).some(function(k) { return k.startsWith(b.id + '_'); });
+    const hasManual = _hasManualOverride(b.id);
 
     // Ullage and Refill Time calculations
     const vUllage = Math.max(0, rob.vcap - rob.liveV);
@@ -10735,7 +10728,7 @@ function renderBargeROBSummaryFromLive(liveROBs) {
     const mPct = rob.mcap > 0 ? Math.min(100, Math.round((rob.liveM / rob.mcap) * 100)) : 0;
     const vCol = vPct < 15 ? 'var(--red)' : vPct < 30 ? 'var(--amber)' : 'var(--fuel-v)';
     const mCol = mPct < 15 ? 'var(--red)' : mPct < 30 ? 'var(--amber)' : 'var(--fuel-m)';
-    const hasManual = Object.keys(_manualROB||{}).some(function(k) { return k.startsWith(b.id + '_'); });
+    const hasManual = _hasManualOverride(b.id);
 
     // Exact barge-name match — a substring match counted "Barge 10"'s
     // supplies under "Barge 1" too.
@@ -10948,7 +10941,8 @@ async function saveROBSumEdit(bid) {
   if (!_manualROB) _manualROB = {};
   // atIds: the supplies/reloads this figure already accounts for — later
   // ones keep deducting from it (see computeLiveROB).
-  _manualROB[bid + '_final'] = { v: newV, m: newM, reason: reason, editedAt: ts, editedBy: 'ROB Update', atIds: _robOverrideAtIds(bid) };
+  _manualROB[bid + '_final'] = { v: newV, m: newM, reason: reason, editedAt: ts, editedBy: 'ROB Update', atIds: _robOverrideAtIds(bid), updatedAt: Date.now() };
+  _robMeasured(bid);
 
   // Audit log
   if (!_robAuditLog) _robAuditLog = [];
@@ -11830,7 +11824,8 @@ async function saveROBEdit() {
 
   // Store override — set as the final override so it takes effect immediately
   if (!_manualROB) _manualROB = {};
-  _manualROB[bargeId + '_final'] = { v: newV, m: newM, reason: reason, editedAt: ts, editedBy: user, atIds: _robOverrideAtIds(bargeId) };
+  _manualROB[bargeId + '_final'] = { v: newV, m: newM, reason: reason, editedAt: ts, editedBy: user, atIds: _robOverrideAtIds(bargeId), updatedAt: Date.now() };
+  _robMeasured(bargeId);
 
   await saveROBAudit();
   await saveManualROB();
@@ -23388,7 +23383,7 @@ function saveBargeEdit(id) {
   }
   // …and it already holds the supplies baked so far: correcting one of them
   // later must not move this figure.
-  if (openingChanged) _absorbBakedSupplies(id);
+  if (openingChanged) _robMeasured(id);
   if (_bargeConfig) {
     const bc = _bargeConfig.find(x => x.id == id);
     if (bc) { bc.vrob = newVrob; bc.mrob = newMrob; }
@@ -23470,9 +23465,9 @@ function rmBarge(id) {
   // dropped by captureCurrentState with the barge.) Its baked-supply list
   // stays: such a barge, under the same name, matches the old records, and
   // the list keeps them from being deducted from its new opening again — and
-  // later corrections of those records no longer move anything.
+  // (marked measured now) later corrections of those records move nothing.
   if (_manualROB) Object.keys(_manualROB).forEach(k => { if (k.startsWith(id + '_')) delete _manualROB[k]; });
-  _absorbBakedSupplies(id);
+  _robMeasured(id);
   const gone = new Set(_blocksForBarge(id, name).map(bk => bk.id));
   if (gone.size) _bargeBlocks = _bargeBlocks.filter(bk => !gone.has(bk && bk.id));
   try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB || {})); } catch(e) {}
@@ -23483,9 +23478,9 @@ function rmBarge(id) {
 function confirmRemoveBarge(id) {
   const name = (document.getElementById(`b${id}-name`)?.value || `Barge ${id}`).trim();
   const pinned = Array.from(document.querySelectorAll('[id^="v"][id$="-barge"]')).filter(s => s.value === String(id)).length;
-  const reloads = (_bargeReloads || []).filter(rl => String(rl.bargeId) === String(id)).length;
+  const reloads = (_bargeReloads || []).filter(rl => String(rl.bargeId) === String(id) && rl.kind !== 'correction').length;
   const blocks = _blocksForBarge(id, name).length;
-  const hasFix = !!(_manualROB && Object.keys(_manualROB).some(k => k.startsWith(id + '_')));
+  const hasFix = _hasManualOverride(id);
   const lost = [];
   if (pinned) lost.push(pinned + ' nomination' + (pinned === 1 ? '' : 's') + ' assigned to it go back to Auto');
   if (reloads) lost.push('its ' + reloads + ' recorded reload' + (reloads === 1 ? '' : 's') + ' are deleted');
@@ -24187,7 +24182,6 @@ async function wipeSupabaseWorkspace() {
     _archives = {};
     _manualROB = {};
     _bakedSupplyIds = {};
-    _bakedSupplyQty = {};
     _robAuditLog = [];
     _trashBin = [];
     _checklist = {};
