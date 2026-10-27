@@ -233,8 +233,9 @@ const realErrors = errs => errs.filter(e => !/capacitorExports/.test(e));
     await Promise.all([app3.page.waitForNavigation({ waitUntil: 'load' }), app3.page.evaluate(() => operatorLogout())]);
     await app3.page.waitForTimeout(500);
     r = await app3.page.evaluate(() => Object.keys(localStorage).sort());
-    // abps_agents is the built-in default directory, re-seeded on every load (even at the login gate)
-    r = r.filter(k => k !== 'abps_agents');
+    // abps_agents is the built-in default directory, re-seeded on every load (even at the login gate);
+    // flow_build_fp is the deployed-build fingerprint, written again by every load's update check
+    r = r.filter(k => k !== 'abps_agents' && k !== 'flow_build_fp');
     ok(JSON.stringify(r) === JSON.stringify(['abps_sidebar_collapsed', 'flow-theme', 'unrelated']), 'logout leaves only prefs: ' + JSON.stringify(r));
     await app3.ctx.close();
   }
