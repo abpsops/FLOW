@@ -1,10 +1,9 @@
 /* Editing, moving or deleting a SAVED supply moves the barge ROB, on every device.
    A saved supply is folded ('baked') into the barge's opening ROB, so computeLiveROB
    skips it: an edit / move / delete of it never moved live ROB, and Delete + re-save
-   deducted the delivery twice. Now the barge's current ROB becomes live ROB + the
-   difference — a "current ROB" figure (manualROB '<id>_final', editedBy 'Supply
-   correction') that syncs like Update ROB and is folded in by the next bake — the
-   difference measured against what the bake really took off (record.robTook).
+   deducted the delivery twice. Now the difference rides as a 'correction' event on the
+   barge reload list (synced, merged by id, baked like a reload) — measured against what
+   the bake really took off (record.robTook), one event per record step.
    'fresh device' = what the cloud row gives a device that just loaded it.
    • edit 1000 → 800: +200 here, in the cloud, on a colleague's device after sync and on a fresh one
    • a larger actual takes ROB down (clamped at 0 like a supply)
@@ -20,6 +19,10 @@
    • a renamed barge / an unassigned record tagged with its barge: no correction (S11)
    • a removed barge added back under its name: its old supplies are not deducted again (S12)
    • archiving the month's records moves no ROB (S13)
+   • Save Parameters after a correction keeps it (S14); an Update ROB saved by the previous build
+     keeps the supplies before it out of later corrections (S15); a re-tag to a name no barge has
+     keeps the supply on its barge (S16); two devices correcting different supplies: both count (S17);
+     a tab on the previous build edits first: no double correction (S18, with PREV_APP_DIR)
    node suites/fix2/supplyedit.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]); // r3/util.js's U.open reads APP_DIR
@@ -113,28 +116,31 @@ function rec(o) {
 
     await editRecord(A.page, id, { 'er-vlsfo-act': '800' });
     const r = { rec: await A.page.evaluate(id => _savedSupplies.find(x => x.id === id).vlsfoAct, id), A: await live(A.page), cloud: cloudBarge(db) };
-    check('S1 edit 1000 → 800: ROB +200 on this device (3200); the opening is not re-baked for it (3000)', r.rec === 800 && same(r.A, [3200, 800]) && same(r.cloud, [3000, 800]), r);
+    check('S1 edit 1000 → 800: ROB +200 on this device and in the cloud (3200)', r.rec === 800 && same(r.A, [3200, 800]) && same(r.cloud, [3200, 800]), r);
     await pull(B.page);
     check('S1 …on the colleague\'s device after sync (3200)', same(await live(B.page), [3200, 800]), await live(B.page));
     check('S1 …and on a fresh device (3200)', same(await fresh(openT, db), [3200, 800]));
 
-    const fin = U.row(db).payload.state.manualROB['1_final'], took = (U.row(db).payload.records.find(x => x.id === id).robTook || {})['1'];
-    check('S1 in the cloud: Barge 1\'s current ROB 3200 as a supply correction, the record took 800 now (no reload event)', fin && fin.v === 3200 && fin.m === 800 && fin.editedBy === 'Supply correction' &&
-      Array.isArray(took) && took[0] === 800 && took[1] === 0 && took[3] === 'Barge 1' && !(U.row(db).payload.state.bargeReloads || []).length, { fin, took });
+    const ev = (U.row(db).payload.state.bargeReloads || []).filter(x => x.kind === 'correction'), took = (U.row(db).payload.records.find(x => x.id === id).robTook || {})['1'];
+    check('S1 one correction event rc_1_<record>_1 (+200 VLSFO, Barge 1), baked like a reload; the record took 800 now (step 1)', ev.length === 1 && ev[0].id === 'rc_1_' + id + '_1' && ev[0].v === 200 && ev[0].m === 0 &&
+      String(ev[0].bargeId) === '1' && ev[0].recId === id && U.row(db).payload.state.bakedSupplyIds['1'].includes(ev[0].id) && !U.row(db).payload.state.manualROB['1_final'] &&
+      Array.isArray(took) && took[0] === 800 && took[1] === 0 && took[3] === 'Barge 1' && took[4] === 800 && took[6] === 1, { ev, took });
     const audit = U.row(db).payload.state.robAuditLog.filter(e => /CORRECTION/.test(e.field));
     check('S1 the ROB audit log says correction 3000 → 3200 (not RELOAD)', audit.length === 1 && audit[0].field === 'VLSFO CORRECTION' && audit[0].oldVal === 3000 && audit[0].newVal === 3200 && /ALPHA supply edited/.test(audit[0].reason), audit);
 
     // A correction is labelled as one wherever ROB history is shown, and never counts as a supply or reload.
     const lbl = await A.page.evaluate(id => {
+      const keep = _bakedSupplyIds[1];
+      _bakedSupplyIds[1] = keep.filter(x => !/^rc_/.test(x));   // as on a device that has not baked it yet
       const all = getAllLiveROBs()[1];
       renderLiveROBDashboard();
       const txt = document.getElementById('rob-history-1') ? document.getElementById('rob-history-1').textContent : '';
-      renderLiveROBDashboard();
+      _bakedSupplyIds[1] = keep; renderLiveROBDashboard();
       const h = all.history.filter(x => x.source !== 'opening');
       return { h: h.map(x => [x.label, x.source]), supplied: all.totalSuppliedV, count: all.completedCount, live: Math.round(all.liveV), txt };
     }, id);
-    check('S1 Live ROB history: "Correction — ALPHA supply edited: VLSFO 1,000 → 800 MT", source Correction, not Reload / Supply / Manual',
-      lbl.h.length === 1 && /^Correction — ALPHA supply edited: VLSFO 1,000 → 800 MT$/.test(lbl.h[0][0]) && lbl.h[0][1] === 'correction' &&
+    check('S1 Live ROB history: "Correction (+200 VLSFO / +0 MGO) — ALPHA supply edited …", source Correction, not Reload / Supply',
+      lbl.h.length === 1 && /^Correction \(\+200 VLSFO \/ \+0 MGO\) — ALPHA supply edited: VLSFO 1,000 → 800 MT$/.test(lbl.h[0][0]) && lbl.h[0][1] === 'correction' &&
       lbl.supplied === 0 && lbl.count === 0 && /Correction/.test(lbl.txt) && !/Reload/.test(lbl.txt), lbl);
 
     await editRecord(A.page, id, { 'er-vlsfo-act': '1200' });
@@ -374,6 +380,91 @@ function rec(o) {
     await A.page.evaluate(async () => { archiveMonth(9, 2026); await _waitForSaveIdle(); });
     const r = { n: U.row(db).payload.records.length, A: await live(A.page) };
     check('S13 the month archived (record out of Saved Records): ROB stays 3100 (here and on a fresh device)', r.n === 0 && same(r.A, [3100, 800]) && same(await fresh(openT, db), [3100, 800]), r);
+  });
+
+  /* S14 — Save Parameters after a correction (changing only the other grade) keeps the correction */
+  await scenario('S14 correction, then Save Parameters', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 3000; s.state.barges[0].mrob = 700;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000, m: 100 })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page); // the ROB engine loaded, so the save bakes (writes the opening field)
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '1200' });
+    check('S14 precondition: 1000 → 1200 → 2800 / 700, the opening field shows it', same(await live(A.page), [2800, 700]) && (await A.page.evaluate(() => document.getElementById('b1-vrob').value)) === '2800', [await live(A.page)]);
+    await A.page.evaluate(async () => { toggleBargeEdit(1); document.getElementById('b1-mrob').value = '650'; saveBargeEdit(1); await _waitForSaveIdle(); });
+    check('S14 only MGO changed in Save Parameters: 2800 / 650 (here and on a fresh device)', same(await live(A.page), [2800, 650]) && same(await fresh(openT, db), [2800, 650]), [await live(A.page), cloudBarge(db)]);
+  });
+
+  /* S15 — an Update ROB figure saved by the live build (no '_measured' marker) */
+  await scenario('S15 Update ROB from the live build', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 3000;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000 })];
+    s.state.manualROB = { '1_final': { v: 2900, m: 800, reason: 'Dip', editedAt: new Date().toISOString(), editedBy: 'ROB Update', atIds: [] } };
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '800' });
+    check('S15 r1 1000 → 800 under the measured 2900: stays 2900', same(await live(A.page), [2900, 800]), await live(A.page));
+    await logSupply(A.page, 'n2', 500, 0);
+    check('S15 BRAVO 500 logged (the figure is baked in): 2400', same(await live(A.page), [2400, 800]) && same(cloudBarge(db), [2400, 800]), [await live(A.page), cloudBarge(db)]);
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '700' });
+    check('S15 r1 edited again after that bake: still 2400 (it was in the measured figure)', same(await live(A.page), [2400, 800]) && same(await fresh(openT, db), [2400, 800]), [await live(A.page), cloudBarge(db)]);
+    const id2 = await recId(A.page, 'BRAVO');
+    await editRecord(A.page, id2, { 'er-vlsfo-act': '400' });
+    check('S15 …while BRAVO, logged after the figure, corrects normally: 2500', same(await live(A.page), [2500, 800]) && same(await fresh(openT, db), [2500, 800]), [await live(A.page), cloudBarge(db)]);
+  });
+
+  /* S16 — re-tag a baked supply with a name no barge has yet, then rename the barge to it */
+  await scenario('S16 re-tag, then rename the barge', async (openT) => {
+    const s = seed({ two: true });
+    s.state.barges[0].vrob = 3000;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000 })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    await editRecord(A.page, 'r1', { 'er-barge': 'Sea Star' });
+    check('S16 re-tagged "Sea Star" (no such barge yet): it stays with Barge 1 — 3000', same(await live(A.page, 1), [3000, 800]), await live(A.page, 1));
+    await A.page.evaluate(async () => { toggleBargeEdit(1); document.getElementById('b1-name').value = 'Sea Star'; saveBargeEdit(1); await _waitForSaveIdle(); });
+    check('S16 Barge 1 renamed "Sea Star": still 3000, Barge 2 untouched (here and on a fresh device)', same(await live(A.page, 1), [3000, 800]) && same(await live(A.page, 2), [3000, 500]) && same(await fresh(openT, db, [1, 2]), [[3000, 800], [3000, 500]]), [await live(A.page, 1), await live(A.page, 2)]);
+  });
+
+  /* S17 — two devices correct DIFFERENT supplies of the same barge before they sync */
+  await scenario('S17 two devices, two records', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 2500;
+    s.state.bakedSupplyIds = { 1: ['r1', 'r2'] };
+    s.records = [rec({ id: 'r1', v: 1000 }), rec({ id: 'r2', v: 500, vessel: 'BRAVO' })];
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    const B = await openT(db, 'user-operator2');
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '1200' });
+    await editRecord(B.page, 'r2', { 'er-vlsfo-act': '400' });
+    await pull(A.page); await pull(B.page);
+    const r = { A: await live(A.page), B: await live(B.page), F: await fresh(openT, db) };
+    check('S17 both corrections count: 4000 − 1200 − 400 = 2400 everywhere', same(r.A, [2400, 800]) && same(r.B, [2400, 800]) && same(r.F, [2400, 800]), r);
+  });
+
+  /* S18 — a tab still on the previous build edits a supply, then this build edits it again */
+  const PREV = process.env.PREV_APP_DIR;
+  if (PREV) await scenario('S18 previous build, then this one', async (openT) => {
+    const s = seed();
+    s.state.barges[0].vrob = 3000;
+    s.state.bakedSupplyIds = { 1: ['r1'] };
+    s.records = [rec({ id: 'r1', v: 1000 })];
+    s.records[0].robTook = { 1: [1000, 0, 1, 'Barge 1', 1000, 0, 0] };
+    const db = H.createDb({ workspace: s, realtime: false });
+    const O = await H.openApp(browser, db, { appDir: PREV, uid: 'user-operator2' });
+    await O.page.evaluate(() => { window.confirm = () => true; window.alert = () => {}; });
+    await editRecord(O.page, 'r1', { 'er-vlsfo-act': '800' });
+    const A = await openT(db, 'user-operator');
+    check('S18 the previous build corrected 1000 → 800: 3200 here', same(await live(A.page), [3200, 800]), await live(A.page));
+    await editRecord(A.page, 'r1', { 'er-vlsfo-act': '700' });
+    check('S18 this build then 800 → 700: 3300, not 3500 (here and on a fresh device)', same(await live(A.page), [3300, 800]) && same(await fresh(openT, db), [3300, 800]), [await live(A.page), cloudBarge(db)]);
+    await O.ctx.close();
   });
 
   await browser.close();
