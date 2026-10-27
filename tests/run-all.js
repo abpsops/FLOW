@@ -119,5 +119,12 @@ function runOne([name, file]) {
   lines.push(`${results.length - failed.length}/${results.length} suites passed in ${total.toFixed(1)}s` + (failed.length ? ` — FAILED: ${failed.map(r => r.name).join(', ')} (see .out/<suite>.log)` : ''));
   console.log(lines.join('\n'));
   fs.writeFileSync(path.join(OUT, 'summary.txt'), lines.join('\n') + '\n');
+  // The failing checks themselves, so a CI log shows what broke without the artifact.
+  for (const r of failed) {
+    let txt = '';
+    try { txt = fs.readFileSync(path.join(OUT, r.name + '.log'), 'utf8'); } catch (e) {}
+    const bad = txt.split('\n').filter(l => /\bFAIL\b|\(threw\)|Error:/.test(l)).slice(0, 15);
+    if (bad.length) console.log('\n' + r.name + ':\n  ' + bad.map(l => l.slice(0, 400)).join('\n  '));
+  }
   process.exit(failed.length ? 1 : 0);
 })();

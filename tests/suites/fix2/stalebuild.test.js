@@ -171,7 +171,15 @@ const v = (db, uid) => U.row(db).payload.state.vessels.find(x => x.nomUid === ui
     await trigger(A.page);
     r = await reloaded(A.page, 1500);
     check('A2 a save in flight → still banner only', !r, r);
-    await A.page.evaluate(() => { _saveRunning = null; });
+    await A.page.evaluate(() => { _saveRunning = null; showPage('loading'); document.getElementById('ld-qty').value = '2500'; document.getElementById('ld-surveyor').value = 'SGS'; });
+    await trigger(A.page);
+    r = await reloaded(A.page, 1500);
+    check('A2 the Loading form half filled in (not saved) → still banner only', !r && (await A.page.evaluate(() => document.getElementById('ld-qty').value)) === '2500', r);
+    await A.page.evaluate(() => { document.getElementById('ld-qty').value = ''; document.getElementById('ld-surveyor').value = ''; const up = document.getElementById('btr-upload-btn'); up.disabled = true; });
+    await trigger(A.page);
+    r = await reloaded(A.page, 1500);
+    check('A2 a report upload on its way → still banner only', !r, r);
+    await A.page.evaluate(() => { document.getElementById('btr-upload-btn').disabled = false; showPage('nominations'); });
     await trigger(A.page, 'focus');
     r = await reloaded(A.page);
     const s = await pageState(A.page);
