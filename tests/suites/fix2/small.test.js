@@ -173,7 +173,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       out.newBlocks = _blocksForBarge(id, 'NEW BARGE').length;
       return out;
     }, r.b2);
-    check('S5 removal takes its correction, baked ids, blocks and reloads with it; the pinned nomination goes back to Auto', after.barges === 1 && !after.manual.some(k => k.startsWith(r.b2 + '_')) && !after.baked.includes(String(r.b2)) && after.blocks === 0 && after.reloads === 0 && after.pin === '', after);
+    // Its baked-supply list stays (a barge added back under the same name must not have
+    // those old supplies deducted again — supplyedit S12); corrections of them are absorbed.
+    check('S5 removal takes its correction, blocks and reloads with it, keeps its baked list; the pinned nomination goes back to Auto', after.barges === 1 && !after.manual.some(k => k.startsWith(r.b2 + '_')) && after.baked.includes(String(r.b2)) && after.blocks === 0 && after.reloads === 0 && after.pin === '', after);
     check('S5 a new barge given the same id starts clean (its own opening ROB, no blocks)', after.newLive[0] === 1500 && after.newLive[1] === 200 && after.newBlocks === 0, after);
   });
 

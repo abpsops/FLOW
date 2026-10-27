@@ -7772,6 +7772,8 @@ function _mergeBakes(b, l, r, m, ctx) {
   // its opening. A grade whose merged opening is such a device's gets that copy back and the
   // merged record's taken off instead: ROB = opening − the one record, deducted once.
   const recIn = function(d, id) { return ((d && d.records) || []).find(function(x) { return x && String(x.id) === id; }); };
+  const ledger = _isPlainObj(m.state.bakedSupplyQty) ? m.state.bakedSupplyQty : null;
+  let ledgerOut = null;
   bids.forEach(function(bid) {
     const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid), m0 = bargeOf(m, bid), i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
     if (!bb || !lb || !rb || !m0 || i < 0) return;
@@ -7792,9 +7794,27 @@ function _mergeBakes(b, l, r, m, ctx) {
       mb[g[0]] = Math.max(0, Math.round((parseFloat(mb[g[0]]) || 0) + d));
     });
     if (mb) { barges[i] = mb; changed = true; }
+    // Such a record's ledger entry (_bakedSupplyQty) may be either device's
+    // copy: the opening now holds the merged record, so that is what it took
+    // — or computeLiveROB would correct the difference a second time.
+    const L = ledger && _isPlainObj(ledger[bid]) ? ledger[bid] : null;
+    if (!L) return;
+    list(mB, bid).forEach(function(id) {
+      const e = L[id], merged = recs.find(function(x) { return x && String(x.id) === id; });
+      if (!_isPlainObj(e) || e.abs || inB.has(id) || recIn(b, id) || !recIn(l, id) || !recIn(r, id) || !merged) return;
+      const v = took(merged, 'vlsfoAct', barges[i].name), mm = took(merged, 'mgoAct', barges[i].name);
+      if (e.qv === v && e.tv === v && e.cv === v && e.qm === mm && e.tm === mm && e.cm === mm) return;
+      ledgerOut = ledgerOut || Object.assign({}, ledger);
+      ledgerOut[bid] = Object.assign({}, ledgerOut[bid]);
+      ledgerOut[bid][id] = Object.assign({}, e, { qv: v, tv: v, cv: v, qm: mm, tm: mm, cm: mm, b: String(merged.barge || '').trim() });
+    });
   });
   if (ctx && Array.isArray(ctx.conflicts) && Object.keys(resolved).length) ctx.conflicts = ctx.conflicts.filter(function(p) { return !resolved[p]; });
-  return changed ? Object.assign({}, m, { state: Object.assign({}, m.state, { barges: barges }) }) : m;
+  if (!changed && !ledgerOut) return m;
+  const st = Object.assign({}, m.state);
+  if (changed) st.barges = barges;
+  if (ledgerOut) st.bakedSupplyQty = ledgerOut;
+  return Object.assign({}, m, { state: st });
 }
 
 /* ── Local snapshot persistence ── */
