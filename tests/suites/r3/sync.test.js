@@ -33,8 +33,13 @@ const { check } = U;
 
       // ── 1b. same field on both → local wins + user warned
       console.log('T1b same field edited on both devices');
+      // A true clash needs B to save WITHOUT having pulled A's edit: the mock's
+      // realtime push could land on B first (it did under CPU load), so delivery is
+      // off for this step and B's save has to merge.
+      db.realtime = false;
       await A.page.evaluate(async () => { __setV('n1', 'agent', 'FROM-A'); return saveSharedState(); });
       await B.page.evaluate(async () => { __setV('n1', 'agent', 'FROM-B'); return saveSharedState(); });
+      db.realtime = true;
       const n1b = U.row(db).payload.state.vessels.find(v => v.nomUid === 'n1');
       check(n1b.agent === 'FROM-B', 'later saver (local) wins a true clash');
       const toast = await B.page.evaluate(() => window.__toasts.filter(t => /Merged with changes saved by a colleague/.test(t)).length);
