@@ -19,7 +19,7 @@
    the new build instead of a stale cached copy. LIB_CACHE only needs a bump
    if the caching rules for libraries change (its URLs are versioned). */
 
-const CACHE_VERSION = 'flow-shell-v5';
+const CACHE_VERSION = 'flow-shell-v6';
 const LIB_CACHE = 'flow-libs-v1';
 
 const APP_SHELL = [

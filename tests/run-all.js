@@ -50,6 +50,11 @@ const SUITES = [
   ['nominations-ocr', 'suites/nominations/ocr.test.js', 'screenshot import with real Tesseract.js under the real CSP'],
   ['eta-timeframe', 'suites/nominations/timeframe.test.js', 'ETA / loading time frames (AM, PM…): card, schedule, sync, loading, parser'],
   ['sts-operations', 'suites/nominations/sts.test.js', 'STS tick on a nomination: stored only when ticked, merges between devices and via trader, green fill on card / calendar / voyage / timeline / checklist / saved records, plan unchanged'],
+  ['fix-small', 'suites/fix2/small.test.js', 'audit fixes: import never freezes, Auto stays Auto (no preferred barge), reload saved once, Save Parameters keeps the ROB correction, barge removal asks + cleans up'],
+  ['fix-logout', 'suites/fix2/logout.test.js', 'audit fixes: sync banner never says sign out, Log Out warns before losing unsynced edits, signs out this device only'],
+  ['fix-checklist', 'suites/fix2/checklist.test.js', 'audit fixes: no ghost Pending row for a supplied vessel, one record per delivery across devices (ROB once), completion only via Save'],
+  ['fix-supplyedit', 'suites/fix2/supplyedit.test.js', 'audit fixes: editing / moving / deleting a saved supply corrects barge ROB on every device'],
+  ['fix-stalebuild', 'suites/fix2/stalebuild.test.js', 'audit fixes: new deploy detected (banner / safe auto-reload, no loops), fields from a newer build survive an older open copy'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];
 

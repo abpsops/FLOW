@@ -87,10 +87,14 @@ function _isScheduleItemCompleted(item) {
   for (var i = 0; i < supplies.length; i++) {
     if (supplies[i] && supplies[i].supplied && _recordMatchesScheduleItem(supplies[i], item)) return true;
   }
+  // A checklist row counts only once it is saved (locked / completed). An
+  // unsaved row marked supplied (the old 'Completed' tick, still sent by older
+  // builds) took the vessel out of barge planning and alerts with nothing
+  // logged. (An open row of a delivery that IS saved is caught above.)
   var cl = (typeof _checklistRecords !== 'undefined' && _checklistRecords) || {};
   for (var k in cl) {
     var r = cl[k];
-    if (r && (r.supplied || r.state === 'saved' || r.state === 'completed') && _recordMatchesScheduleItem(r, item)) return true;
+    if (r && (r.lockedAt || r.state === 'completed') && _recordMatchesScheduleItem(r, item)) return true;
   }
   // Archived (month moved to an archive): still supplied — never offered as Pending again.
   if (typeof _liveArchiveEntries === 'function') {
@@ -4059,7 +4063,7 @@ function flowWelcomeGo(pageId) {
   <div class="page-header-row">
     <div>
       <div class="page-title">Supply Operations Checklist</div>
-      <div class="page-subtitle">Mark each vessel as supplied, enter actuals and save the record</div>
+      <div class="page-subtitle">Enter the actuals and press Save — saving logs the supply and completes the row</div>
     </div>
     <div class="page-actions">
       <!-- Clear Checklist moved to the sidebar Data Management (typed confirmation) -->
@@ -4856,7 +4860,7 @@ const PAGE_META = {
   agents:       { title: 'Agent Directory',             sub: 'Fujairah shipping agents — company names & email contacts',                section: 'planning' },
   reports:      { title: 'Reports & Analytics',         sub: 'Supply performance, fuel volumes, barge utilisation',                      section: 'reports' },
   commandcenter:{ title: 'Command Center',              sub: 'Live wallboard — barge ROB, vessel schedule, active alerts',                section: 'system' },
-  checklist:    { title: 'Supply Operations Checklist', sub: 'Mark vessels supplied, enter actuals, save records',                        section: 'reports' },
+  checklist:    { title: 'Supply Operations Checklist', sub: 'Enter actuals and save each supply',                                         section: 'reports' },
   records:      { title: 'Saved Supply Records',        sub: 'All completed supply operations — historical log',                          section: 'reports' },
   bargetracking:{ title: 'Barge Tracking Reports',      sub: 'Barge tracking report uploads — view and download',                        section: 'reports' },
   deliverylog:  { title: 'Delivery Log',                sub: 'Timely / Delayed deliveries and dispute log — by month',                    section: 'system' },
@@ -6399,9 +6403,32 @@ function _unlockOperatorGate() {
 }
 
 async function operatorLogout() {
-  if (!confirm('Log out of the shared FLOW workspace on this device?\n\nYou will need the operator email and password to sign back in.')) return;
+  // Changes that haven't reached the cloud (a failed or offline save, one
+  // still running/queued, or an edit whose debounced save hasn't fired yet)
+  // live only in the localStorage the logout below wipes. Try to save them
+  // first; if they still aren't in the cloud, say plainly that they will be
+  // lost, and only wipe if the user agrees.
+  let unsynced = false;
+  try {
+    if (_isMarkedUnsynced() || _saveRunning || _saveQueued || _countLocalChanges()) {
+      // Capped, so a stalled connection can't leave Log Out doing nothing.
+      await Promise.race([saveSharedState(), new Promise(function(r) { setTimeout(r, 15000); })]);
+      unsynced = _isMarkedUnsynced() || !!_saveRunning || !!_saveQueued;
+    }
+  } catch(e) { unsynced = _isMarkedUnsynced(); }
+  if (unsynced) {
+    let n = 0;
+    try { n = _countLocalChanges(); } catch(e) {}
+    const what = n === 1 ? '1 unsynced change' : n > 1 ? n + ' unsynced changes' : 'Unsynced changes', them = n === 1 ? 'it' : 'them';
+    if (!confirm('⚠ ' + what + ' on this device never reached the shared workspace. Logging out deletes this device\'s copy and loses ' + them + ' for good.\n\n' +
+      'To keep ' + them + ', press Cancel, then click Retry on the sync banner or reload the page — unsynced changes stay on this device and sync once the cloud accepts them.\n\n' +
+      'Log out anyway and lose ' + them + '?')) return;
+  } else if (!confirm('Log out of the shared FLOW workspace on this device?\n\nYou will need the operator email and password to sign back in.')) return;
   try { _rtStop(); } catch(e) {} // unsubscribe from Realtime before the session goes
-  try { await supabaseClient.auth.signOut(); } catch(e) {}
+  // 'local': end THIS device's session only. The default ('global') revokes
+  // every session of the account, and the team shares one login — it would
+  // sign out every other operator's device and the wallboard too.
+  try { await supabaseClient.auth.signOut({ scope: 'local' }); } catch(e) {}
   _clearLocalWorkspaceData();
   location.reload();
 }
@@ -6431,8 +6458,11 @@ async function _startAppAfterLogin() {
   if (_abpsAppStarted) return;
   _abpsAppStarted = true;
   await _fetchAndApplyUserRole();
-  if (typeof init === 'function') init();
-  if (typeof showFlowWelcomeRadar === 'function') showFlowWelcomeRadar();
+  const started = typeof init === 'function' ? init() : null;
+  // After an update reload: back on the page that was on screen once the workspace is in, no welcome screen.
+  const back = typeof _buildReloadPage === 'function' ? _buildReloadPage() : null;
+  if (back) Promise.resolve(started).finally(function() { if (_currentPage === 'dashboard') showPage(back); });
+  else if (typeof showFlowWelcomeRadar === 'function') showFlowWelcomeRadar();
   if (_flowOfflineLaunch) {
     showToast('Offline — read-only until reconnected. Showing the copy last saved on this device; nothing will sync to the shared workspace.', 'warning', 0);
     window.addEventListener('online', function() {
@@ -7702,14 +7732,15 @@ function _mergeBakes(b, l, r, m, ctx) {
   // name (blank = the only barge), with an actual; a reload by bargeId. An id it will not
   // count here (e.g. a record since moved to another barge) gets nothing back.
   const onlyBarge = m.state.barges.length === 1;
+  const took = function(rec, actKey, bargeName) {
+    const aV = parseFloat(rec.vlsfoAct) || 0, aM = parseFloat(rec.mgoAct) || 0, rb = String(rec.barge || '').trim();
+    if ((aV === 0 && aM === 0) || !(rb === '' ? onlyBarge : rb === bargeName)) return 0;
+    return parseFloat(rec[actKey]) || 0;
+  };
   const effect = function(idList, actKey, rlKey, bid, bargeName) {
     return idList.reduce(function(t, id) {
       const rec = recs.find(function(x) { return x && String(x.id) === id; });
-      if (rec) {
-        const aV = parseFloat(rec.vlsfoAct) || 0, aM = parseFloat(rec.mgoAct) || 0, rb = String(rec.barge || '').trim();
-        if ((aV === 0 && aM === 0) || !(rb === '' ? onlyBarge : rb === bargeName)) return t;
-        return t - (parseFloat(rec[actKey]) || 0);
-      }
+      if (rec) return t - took(rec, actKey, bargeName);
       const rl = reloads.find(function(x) { return x && String(x.id) === id; });
       return rl && String(rl.bargeId) === String(bid) ? t + (parseFloat(rl[rlKey]) || 0) : t;
     }, 0);
@@ -7731,6 +7762,32 @@ function _mergeBakes(b, l, r, m, ctx) {
       if (vr === vb || vl !== vb) return; // only a grade the colleague alone changed has their baked opening
       mb = mb || Object.assign({}, barges[i]);
       mb[g[0]] = Math.max(0, Math.round(vr - effect(unbaked, g[1], g[2], bid, barges[i].name)));
+    });
+    if (mb) { barges[i] = mb; changed = true; }
+  });
+  // The same supply saved on both devices before they synced has ONE id (_clSupplyRecordId),
+  // so the merge keeps one record — but a device that baked it took ITS copy's quantity off
+  // its opening. A grade whose merged opening is such a device's gets that copy back and the
+  // merged record's taken off instead: ROB = opening − the one record, deducted once.
+  const recIn = function(d, id) { return ((d && d.records) || []).find(function(x) { return x && String(x.id) === id; }); };
+  bids.forEach(function(bid) {
+    const bb = bargeOf(b, bid), lb = bargeOf(l, bid), rb = bargeOf(r, bid), m0 = bargeOf(m, bid), i = barges.findIndex(function(x) { return x && String(x.id) === String(bid); });
+    if (!bb || !lb || !rb || !m0 || i < 0) return;
+    const inB = new Set(list(bB, bid)), inM = new Set(list(mB, bid));
+    let mb = null;
+    [['vrob', 'vlsfoAct'], ['mrob', 'mgoAct']].forEach(function(g) {
+      const vb = parseFloat(bb[g[0]]) || 0, vl = parseFloat(lb[g[0]]) || 0, vr = parseFloat(rb[g[0]]) || 0, vm = parseFloat(m0[g[0]]) || 0;
+      const side = vl !== vb && vm === vl ? l : vr !== vb && vm === vr ? r : null; // whose opening the merge kept
+      if (!side) return;
+      const other = side === l ? r : l;
+      const d = list(bakedOf(side), bid).reduce(function(t, id) {
+        if (inB.has(id) || !inM.has(id) || recIn(b, id) || !recIn(other, id)) return t; // only a record both devices created since the last sync
+        const own = recIn(side, id), merged = recs.find(function(x) { return x && String(x.id) === id; });
+        return own && merged ? t + took(own, g[1], barges[i].name) - took(merged, g[1], barges[i].name) : t;
+      }, 0);
+      if (!d) return;
+      mb = mb || Object.assign({}, barges[i]);
+      mb[g[0]] = Math.max(0, Math.round((parseFloat(mb[g[0]]) || 0) + d));
     });
     if (mb) { barges[i] = mb; changed = true; }
   });
@@ -7767,6 +7824,31 @@ function _isMarkedUnsynced() {
 }
 function _markUnsynced(on) {
   try { if (on) localStorage.setItem(LS_UNSYNCED_KEY, '1'); else localStorage.removeItem(LS_UNSYNCED_KEY); } catch(e) {}
+}
+// How many things (nominations, records, barges, settings…) differ on this
+// device from the copy it last synced — what a logout would throw away.
+// Data derived from those edits (schedule, bake bookkeeping, ROB audit log)
+// isn't counted again; a trader only ever writes nominations. 0 = no base
+// to compare against (or nothing changed).
+const _CHANGE_COUNT_SKIP = { lastSched: 1, lastSchedMeta: 1, bakedSupplyIds: 1, robAuditLog: 1, checklistRecords: 1 };
+function _countLocalChanges() {
+  if (!_lastSyncedPayload) return 0;
+  const b = _mergeDoc(_lastSyncedPayload), l = _mergeDoc(_buildLocalPayload());
+  let n = 0;
+  const count = function(bv, lv, key) {
+    if (_sameJSON(bv, lv)) return;
+    if (bv == null && Array.isArray(lv)) bv = []; // a list the synced copy didn't have yet
+    const f = Array.isArray(bv) && Array.isArray(lv) ? _pickIdField(key, [bv, lv]) : null;
+    if (!f) { n++; return; }
+    const index = function(arr) { const m = {}; arr.forEach(function(it) { m[_mergeItemKey(it, f)] = it; }); return m; };
+    const bm = index(bv), lm = index(lv);
+    Object.keys(Object.assign({}, bm, lm)).forEach(function(k) { if (!_sameJSON(bm[k], lm[k])) n++; });
+  };
+  if (isTrader()) { count(b.state.vessels || [], l.state.vessels || [], 'vessels'); return n; }
+  Object.keys(Object.assign({}, b.state, l.state)).forEach(function(k) { if (!_CHANGE_COUNT_SKIP[k]) count(b.state[k], l.state[k], k); });
+  count(b.records, l.records, 'records');
+  Object.keys(Object.assign({}, b.checklistRecords, l.checklistRecords)).forEach(function(k) { if (!_sameJSON(b.checklistRecords[k], l.checklistRecords[k])) n++; });
+  return n;
 }
 // Adopt a cloud row as the new merge base. When this device has no pending
 // edits, vessels/barges are taken from what the UI actually rebuilt (inputs
@@ -8173,10 +8255,13 @@ function _showSyncWarningBanner(errMsg) {
   // Show the real reason inline instead of only in a hover tooltip, and
   // phrase the common cases in plain language so this is self-diagnosable
   // without having to go dig through code every time it happens.
+  // Never advise signing out here: Log Out wipes this device's copy, which
+  // is the only one holding these changes. A reload keeps them and merges
+  // them in once a pull succeeds (after signing in again if it has to).
   const m = (errMsg || '').toLowerCase();
   let friendly = errMsg ? `(${errMsg})` : '';
   if (m.includes('jwt') || m.includes('session') || m.includes('expired') || m.includes('401') || m.includes('row-level security') || m.includes('row level security')) {
-    friendly = "(Your sign-in session isn't valid right now — click Retry, or sign out and back in if that doesn't clear it.)";
+    friendly = "(Your sign-in session isn't valid right now — click Retry. If that doesn't clear it, reload the page: your changes stay on this device. If it keeps happening, contact your operations lead.)";
   } else if (m.includes('failed to fetch') || m.includes('networkerror') || m.includes('network')) {
     friendly = '(Could not reach the server — check your internet connection.)';
   }
@@ -9455,6 +9540,134 @@ document.addEventListener('visibilitychange', function() {
   }
 });
 
+/* ── NEW VERSION CHECK ─────────────────────────────────────────────
+   Every deploy is live at once (several a day), but a tab, the wallboard or
+   the Android app (it loads the live site) opened before it keeps running the
+   OLD code against the newer shared data until it is reloaded — and its saves
+   can undo what the new code wrote. So at load we note a fingerprint of the
+   deployed index.html, and look again when the app comes back into view or
+   gets focus, and every 5 minutes while it is on screen — never offline. The
+   fingerprint is the file's ETag / Last-Modified from a HEAD request (the
+   service worker only handles GETs, so it can't answer from its cache); a
+   host that sends neither gets a hash of the file itself, at most hourly.
+   A different fingerprint = a new build: a banner offers Reload, and the page
+   reloads by itself only when nothing can be lost (_buildReloadSafe), then
+   comes back on the same page without the welcome screen. Never in a loop: at
+   most one automatic reload per new build and per 30 minutes, and none for
+   the rest of the session once a reload didn't land on the build it was for
+   (a host whose fingerprint keeps changing). */
+const BUILD_CHECK_MS     = 5 * 60000;
+const BUILD_HASH_MS      = 60 * 60000; // whole-file hash (no ETag / Last-Modified) at most this often
+const BUILD_AUTO_GAP_MS  = 30 * 60000; // at most one automatic reload per this long
+const LS_BUILD_FP_KEY     = 'flow_build_fp';     // fingerprint at the last load that could check — an offline launch runs that build from the service worker's cache
+const SS_BUILD_RELOAD_KEY = 'flow_build_reload'; // {fp, at, pending, off} of this tab's last automatic reload
+const SS_BUILD_PAGE_KEY   = 'flow_build_page';   // page to show again after an update reload
+let _buildFp = null, _buildNewFp = null, _buildChecking = false, _buildLastCheck = 0, _buildLastHash = 0, _buildBannerHidden = false;
+
+async function _buildFetchFp() {
+  const res = await fetch('./index.html', { method: 'HEAD', cache: 'no-store' });
+  if (!res.ok) return null;
+  const tag = (res.headers.get('etag') || '').replace(/^W\//, '') || res.headers.get('last-modified');
+  if (tag) return tag;
+  if (_buildFp && Date.now() - _buildLastHash < BUILD_HASH_MS) return null;
+  _buildLastHash = Date.now();
+  const full = await fetch('./index.html', { cache: 'no-store' });
+  if (!full.ok) return null;
+  const text = await full.text();
+  return '#' + _fwHash(text) + '.' + text.length;
+}
+async function _buildCheck(force) {
+  if (_buildChecking || navigator.onLine === false) return;
+  if (_buildNewFp) { _buildOffer(); return; } // found already: only try the reload again
+  if (!force && (document.visibilityState !== 'visible' || Date.now() - _buildLastCheck < 60000)) return;
+  _buildChecking = true;
+  _buildLastCheck = Date.now();
+  try {
+    const fp = await _buildFetchFp();
+    if (!fp) return;
+    if (!_buildFp) _buildFp = fp;
+    else if (fp !== _buildFp) { _buildNewFp = fp; _buildOffer(); }
+  } catch (e) { /* unreachable — try again next time */ }
+  finally { _buildChecking = false; }
+}
+function _buildReloadRecord() {
+  try { return JSON.parse(sessionStorage.getItem(SS_BUILD_RELOAD_KEY) || 'null'); } catch (e) { return { off: true }; }
+}
+// Nothing on this device a reload would lose, and nobody in the middle of something.
+function _buildReloadSafe() {
+  if (_saveRunning || _saveQueued || _pullRunning || _isSyncing) return false;
+  if (_cloudBaseUnknown || _isMarkedUnsynced()) return false; // changes the cloud hasn't got
+  if (_lastSyncedPayload && !_samePayload(_buildLocalPayload(), _lastSyncedPayload)) return false; // an edit not saved yet
+  const el = document.activeElement;
+  if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return false;
+  if (document.fullscreenElement || document.webkitFullscreenElement) return false; // wallboard screen mode — a reload would end it
+  if (_currentPage === 'simulator' || _niDrafts.length || _niImage || ((document.getElementById('nimp-text') || {}).value || '').trim()) return false; // a what-if or an import, never saved
+  if (document.querySelector('.flatpickr-calendar.open')) return false;
+  // A dialog: anything fixed that covers the window (the welcome screen aside).
+  return !Array.prototype.some.call(document.querySelectorAll('body [style*="position:fixed"], body [style*="position: fixed"]'), function(o) {
+    if (o.id === 'flow-welcome-overlay') return false;
+    const r = o.getBoundingClientRect();
+    return r.width >= window.innerWidth * 0.9 && r.height >= window.innerHeight * 0.9;
+  });
+}
+function _buildOffer() {
+  if (!_buildBannerHidden) _showBuildBanner();
+  let safe = false;
+  try { safe = _buildReloadSafe(); } catch (e) {}
+  if (!safe) return; // the banner stays; tried again at the next check
+  const last = _buildReloadRecord();
+  if (last && (last.off || last.fp === _buildNewFp || Date.now() - (last.at || 0) < BUILD_AUTO_GAP_MS)) return;
+  try { sessionStorage.setItem(SS_BUILD_RELOAD_KEY, JSON.stringify({ fp: _buildNewFp, at: Date.now(), pending: true })); } catch (e) { return; } // can't remember it → no automatic reload
+  _buildReload();
+}
+function _buildReload() {
+  try { sessionStorage.setItem(SS_BUILD_PAGE_KEY, _currentPage || 'dashboard'); } catch (e) {}
+  location.reload();
+}
+// The banner's Reload: save what's pending first (kept on this device even when
+// the cloud can't be reached, and merged after the reload).
+async function _buildReloadNow() {
+  if (_lastSyncedPayload || _cloudBaseUnknown) { try { await saveSharedState(); } catch (e) {} }
+  _buildReload();
+}
+// After an update reload (once): the page that was on screen, or null.
+function _buildReloadPage() {
+  let p = null;
+  try { p = sessionStorage.getItem(SS_BUILD_PAGE_KEY); sessionStorage.removeItem(SS_BUILD_PAGE_KEY); } catch (e) {}
+  return p && PAGE_META[p] ? p : null;
+}
+function _showBuildBanner() {
+  let banner = document.getElementById('build-update-banner');
+  if (!banner) {
+    banner = document.createElement('div');
+    banner.id = 'build-update-banner';
+    banner.setAttribute('role', 'status');
+    banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999996;background:var(--azure-lt);border-bottom:1px solid var(--azure-bd);color:var(--azure-dk);font-size:12px;font-weight:600;padding:8px 16px;text-align:center;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap';
+    banner.innerHTML = '<span>A new version of FLOW is available —</span>' +
+      '<button onclick="_buildReloadNow()" style="background:var(--azure);color:#fff;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Reload</button>' +
+      '<button onclick="_buildBannerHidden=true;document.getElementById(\'build-update-banner\').style.display=\'none\'" style="background:transparent;color:var(--azure-dk);border:1px solid var(--azure-bd);border-radius:5px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">Later</button>';
+    document.body.appendChild(banner);
+  }
+  banner.style.display = 'flex';
+}
+window.addEventListener('load', function() {
+  _buildCheck(true).then(function() {
+    const checked = !!_buildFp;
+    if (checked) { try { localStorage.setItem(LS_BUILD_FP_KEY, _buildFp); } catch (e) {} }
+    else { try { _buildFp = localStorage.getItem(LS_BUILD_FP_KEY); } catch (e) {} }
+    // First load after an automatic reload: it must be on the build it was for.
+    const last = _buildReloadRecord();
+    if (last && last.pending) {
+      last.pending = false;
+      if (checked && last.fp !== _buildFp) last.off = true;
+      try { sessionStorage.setItem(SS_BUILD_RELOAD_KEY, JSON.stringify(last)); } catch (e) {}
+    }
+  });
+  setInterval(_buildCheck, BUILD_CHECK_MS);
+});
+document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'visible') _buildCheck(); });
+window.addEventListener('focus', function() { _buildCheck(); });
+
 /* ══════════════════════════════════════════════════════
    SYNC SETUP — no longer needed. Supabase is pre-configured
    in code and authentication happens through the Operator
@@ -9467,11 +9680,34 @@ function openSyncSetup() {
 function closeSyncSetup() {}
 function disconnectSync() {}
 
+/* ── Fields saved by a NEWER build ─────────────────────────────────
+   captureCurrentState() rebuilds every vessel and barge from its card, so a
+   key this build doesn't know (one a later release adds, already in use by a
+   colleague while this copy is still open) would be left out of this copy's
+   next save, and the three-way merge reads a missing key as a deletion.
+   addVessel / addBarge keep such keys from the copy the card was built from
+   (the cloud row, a merge, the local cache, the trash) on the card, and the
+   capture writes them back unchanged (a field read from the card always wins).
+   Only keys outside these lists are kept, so a field this build writes, or
+   leaves out on purpose when it is cleared (qtyMin…, etaWin, sts, mmsi), saves
+   exactly as the card says. A new field goes into its list in the build that
+   starts writing it. */
+const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts'];
+// buf: legacy single buffer (read as vbuf/mbuf); _robBakedAt, receivedV/M: retired; _robGuardApplied: applyState's marker.
+const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
+function _newerBuildFields(def, known) {
+  const out = {};
+  if (_isPlainObj(def)) Object.keys(def).forEach(function(k) {
+    if (known.indexOf(k) === -1 && def[k] !== undefined) out[k] = _deepClone(def[k]);
+  });
+  return out;
+}
+
 function captureCurrentState() {
   const barges = [];
   _barges.forEach(b => {
     const id = b.id;
-    barges.push({
+    barges.push(Object.assign(_deepClone(document.getElementById(`barge-${id}`)?._newerFields) || {}, {
       id, name: document.getElementById(`b${id}-name`)?.value||`Barge ${id}`,
       vcap: parseFloat(document.getElementById(`b${id}-vcap`)?.value)||5000,
       mcap: parseFloat(document.getElementById(`b${id}-mcap`)?.value)||1000,
@@ -9485,7 +9721,7 @@ function captureCurrentState() {
       vrfr: parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,
       mrfr: parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,
       color: (document.getElementById(`b${id}-color`)?.value)||'',
-    });
+    }));
   });
   // Reload events only for barges that still exist — a removed barge's
   // reloads must not attach to a new barge that later reuses its id.
@@ -9496,7 +9732,7 @@ function captureCurrentState() {
   const vessels = [];
   document.querySelectorAll('.vcard[id^="vessel-"]').forEach(c => {
     const id = c.id.replace('vessel-','');
-    vessels.push(Object.assign({
+    vessels.push(Object.assign(_deepClone(c._newerFields) || {}, {
       nomUid:   c.dataset.nomUid || '',
       name:     document.getElementById(`v${id}-name`)?.value||'',
       imo:      document.getElementById(`v${id}-imo`)?.value||'',
@@ -9517,7 +9753,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))); // qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -9951,10 +10187,14 @@ function computeLiveROB(bargeId, bargeName, openingV, openingM, upToDate) {
   const applyEvent = function(ev) {
     if (ev.kind === 'reload') {
       const addV = parseFloat(ev.rl.v) || 0, addM = parseFloat(ev.rl.m) || 0;
-      rv = rv + addV; rm = rm + addM;
+      // A correction to a baked supply (_correctBakedSupply) can also take fuel
+      // off — like a supply, that stops at 0. It is not a reload.
+      const corr = ev.rl.kind === 'correction';
+      rv = corr ? Math.max(0, rv + addV) : rv + addV; rm = corr ? Math.max(0, rm + addM) : rm + addM;
       const rd = ev.rl.at ? new Date(ev.rl.at) : null;
-      history.push({ label: 'Reload (+' + addV.toLocaleString() + ' VLSFO / +' + addM.toLocaleString() + ' MGO)' + (ev.rl.note ? ' — ' + ev.rl.note : ''),
-        dateStr: rd && !isNaN(rd) ? fmt24(rd) : '', v: rv, m: rm, source: 'reload', reloadId: ev.rl.id });
+      const sgn = function(x) { return (x < 0 ? '−' : '+') + Math.abs(x).toLocaleString(); };
+      history.push({ label: (corr ? 'Correction (' : 'Reload (') + sgn(addV) + ' VLSFO / ' + sgn(addM) + ' MGO)' + (ev.rl.note ? ' — ' + ev.rl.note : ''),
+        dateStr: rd && !isNaN(rd) ? fmt24(rd) : '', v: rv, m: rm, source: corr ? 'correction' : 'reload', reloadId: ev.rl.id });
       return;
     }
     const r = ev.r;
@@ -10012,6 +10252,50 @@ function _robOverrideAtIds(bargeId) {
   const b = (_bargeConfig || []).find(function(x) { return x.id == bargeId; });
   if (!b) return [];
   return computeLiveROB(b.id, b.name, b.vrob, b.mrob, null).eventIds;
+}
+
+// A saved supply already folded into a barge's opening (_bakedSupplyIds) is
+// skipped by computeLiveROB, so editing its quantity or barge, or deleting it,
+// never moved live ROB (and Delete + re-save deducted the delivery twice).
+// The difference is recorded as a 'correction' event in _bargeReloads rather
+// than by rewriting the opening: synced and merged by id like a reload,
+// applied by computeLiveROB at the supply's own time and baked like a reload.
+// One event per barge whose opening holds this record. before = the record as
+// it was, after = as it is now (null = removed, `removed` says how). A record
+// no barge has baked needs nothing: computeLiveROB re-reads it.
+function _correctBakedSupply(before, after, removed) {
+  if (!before || before.id === undefined || before.id === null) return;
+  // Another copy with the same id still stands for this delivery in the opening.
+  if (!after && (_savedSupplies || []).some(function(r) { return r && r.id === before.id; })) return;
+  const onlyBarge = _isSingleBargeFleet();
+  // What computeLiveROB (and the bake) takes off barge b for record r — same matching.
+  const qty = function(r, b, k) {
+    if (!r) return 0;
+    const aV = parseFloat(r.vlsfoAct) || 0, aM = parseFloat(r.mgoAct) || 0, rb = (r.barge || '').trim();
+    if ((aV === 0 && aM === 0) || !(rb === '' ? onlyBarge : rb === b.name)) return 0;
+    return parseFloat(r[k]) || 0;
+  };
+  const what = !after ? removed : (after.barge || '').trim() !== (before.barge || '').trim() ? 'moved to ' + ((after.barge || '').trim() || 'no barge') : 'edited';
+  const sd = (after || before).supplyDate, t = sd ? new Date(sd).getTime() : NaN, ts = new Date().toISOString();
+  let any = false;
+  getBarges().forEach(function(b) {
+    if (((_bakedSupplyIds && _bakedSupplyIds[b.id]) || []).indexOf(before.id) === -1) return;
+    const was = [qty(before, b, 'vlsfoAct'), qty(before, b, 'mgoAct')], now = [qty(after, b, 'vlsfoAct'), qty(after, b, 'mgoAct')];
+    const dV = was[0] - now[0], dM = was[1] - now[1];
+    if (!dV && !dM) return;
+    const q = function(g, i) { return g + ' ' + was[i].toLocaleString() + ' → ' + now[i].toLocaleString() + ' MT'; };
+    const note = (before.vessel || 'Vessel') + ' supply ' + what + ': ' + [dV ? q('VLSFO', 0) : '', dM ? q('MGO', 1) : ''].filter(Boolean).join(', ');
+    const robWas = computeLiveROB(b.id, b.name, b.vrob, b.mrob, null);
+    if (!Array.isArray(_bargeReloads)) _bargeReloads = [];
+    _bargeReloads.push({ id: 'rc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), bargeId: b.id, v: dV, m: dM,
+      at: isNaN(t) ? Date.now() : t, by: ABPS_UID || '', note: note, kind: 'correction' });
+    const robNow = computeLiveROB(b.id, b.name, b.vrob, b.mrob, null);
+    if (!_robAuditLog) _robAuditLog = [];
+    if (dV) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'VLSFO CORRECTION', oldVal: Math.round(robWas.v), newVal: Math.round(robNow.v), reason: note, editedAt: ts, editedBy: 'Supply correction' });
+    if (dM) _robAuditLog.push({ bargeId: b.id, bargeName: b.name, field: 'MGO CORRECTION', oldVal: Math.round(robWas.m), newVal: Math.round(robNow.m), reason: note, editedAt: ts, editedBy: 'Supply correction' });
+    any = true;
+  });
+  if (any) saveROBAudit();
 }
 
 /* ─── Get Live ROB for all barges ─── */
@@ -10233,9 +10517,9 @@ function renderLiveROBDashboard() {
         '<th style="color:#fff;padding:7px 10px;text-align:center;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">Source</th>' +
       '</tr></thead><tbody>' +
       rob.history.map(function(h, idx) {
-        const srcBg = h.source === 'manual' ? 'var(--purple-lt)' : (h.source === 'opening' || h.source === 'reload') ? 'var(--azure-lt)' : 'var(--green-lt)';
-        const srcColor = h.source === 'manual' ? 'var(--purple)' : (h.source === 'opening' || h.source === 'reload') ? 'var(--azure)' : 'var(--green)';
-        const srcLabel = h.source === 'manual' ? 'Manual' : h.source === 'opening' ? 'Opening' : h.source === 'reload' ? 'Reload' : 'Supply';
+        const srcBg = h.source === 'manual' ? 'var(--purple-lt)' : (h.source === 'opening' || h.source === 'reload') ? 'var(--azure-lt)' : h.source === 'correction' ? 'var(--amber-lt)' : 'var(--green-lt)';
+        const srcColor = h.source === 'manual' ? 'var(--purple)' : (h.source === 'opening' || h.source === 'reload') ? 'var(--azure)' : h.source === 'correction' ? 'var(--amber)' : 'var(--green)';
+        const srcLabel = h.source === 'manual' ? 'Manual' : h.source === 'opening' ? 'Opening' : h.source === 'reload' ? 'Reload' : h.source === 'correction' ? 'Correction' : 'Supply';
         return '<tr style="border-bottom:1px solid var(--border2);background:' + (idx % 2 === 0 ? 'var(--surface)' : 'var(--surface2)') + '">' +
           '<td style="padding:7px 10px;font-weight:600;color:var(--ink)">' + esc(h.label) + '</td>' +
           '<td style="padding:7px 10px;font-family:DM Mono,monospace;font-size:11px;color:var(--sub)">' + esc(h.dateStr || '—') + '</td>' +
@@ -12338,8 +12622,8 @@ function rmV(id) {
     id: id,
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
-    // (email log, checklist link) and its details.
-    def: Object.assign({nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))
+    // (email log, checklist link) and its details — and a newer build's fields.
+    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -12353,7 +12637,7 @@ function rmV(id) {
     const item = { name: name, nomUid: nomUidForCancel || null, eta: parseDT(eta) };
     Object.keys(_checklistRecords).forEach(function(uid) {
       const rec = _checklistRecords[uid];
-      if (!rec || rec.lockedAt || rec.supplied || rec.state === 'saved' || rec.state === 'completed') return;
+      if (!rec || rec.lockedAt || rec.state === 'saved' || rec.state === 'completed') return;
       const matches = (rec.nomUid && item.nomUid) ? rec.nomUid === item.nomUid : _recordMatchesScheduleItem(rec, item);
       if (matches) delete _checklistRecords[uid];
     });
@@ -13245,6 +13529,9 @@ function _niParseBlock(text, opts, ctx) {
       const re = new RegExp('(?:^|[\\s(,])(?=\\d{1,2}(?:st|nd|rd|th)?[\\s\\-./]*' + _NI_MON + '|\\d{1,2}[\\/.]\\d{1,2}(?:[\\/.]\\d{2,4})?(?![\\d\\/.])|' + _NI_MON + '\\.?\\s*\\d{1,2}\\b|\\d{4}-\\d{2}-\\d{2})', 'gi');
       let m;
       while ((m = re.exec(l)) && !d.eta) {
+        // A match at the start of the line is zero-width: step past it, or a
+        // rejected token there ("0.5% VLSFO…", "31/02") is matched forever.
+        if (!m[0]) re.lastIndex++;
         const pos = m.index + m[0].length, rest = l.slice(pos);
         const pre = l.slice(0, pos);
         if (/\d\s*$/.test(pre) || /(?:vlsfo|lsmgo|mgo|qty)\s*[:\-]?\s*$/i.test(pre)) continue;
@@ -13863,6 +14150,7 @@ function addVessel(def = {}) {
   const c = document.createElement('div');
   c.className = 'vcard'; c.id = `vessel-${id}`;
   c.dataset.nomUid = nomUid;
+  c._newerFields = _newerBuildFields(def, _VESSEL_KEYS); // saved back unchanged (see _newerBuildFields)
   if (sts) c.setAttribute('data-sts', '1');
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
@@ -14013,8 +14301,8 @@ function addVessel(def = {}) {
   if (typeof _refreshSendEmailButtonState === 'function') _refreshSendEmailButtonState(id);
   if (typeof _refreshCancelEmailButtonState === 'function') _refreshCancelEmailButtonState(id);
   // FT84 FIX (Issue 4): Restore per-vessel manual barge assignment from saved state.
-  // populateBargeDropdowns() applies a global preferred-barge fallback which overwrites
-  // individual assignments. We must apply def.bargeId AFTER the dropdown is populated.
+  // The card's select has no options until populateBargeDropdowns() has run, so
+  // def.bargeId is applied AFTER the dropdown is populated.
   if (def.bargeId) {
     const bargeSel = document.getElementById(`v${id}-barge`);
     if (bargeSel && Array.from(bargeSel.options).some(o => String(o.value) === String(def.bargeId))) {
@@ -19525,13 +19813,18 @@ function injectChecklistFromSchedule(sched) {
   });
 
   dedupedSched.forEach(item => {
+    // Already supplied (a saved record, a saved row, an archived month) —
+    // never offer it as Pending again. Completed rows aren't synced or kept
+    // across a reload, and the saved schedule still lists the vessel until
+    // the next Generate, so the row used to come back and could be saved twice.
+    if (_isScheduleItemCompleted(item)) return;
     // Find the record that already belongs to THIS nomination, if any.
     const existing = _clFindRecordForItem(item);
     let uid;
     if (existing) {
       uid = existing.uid;
-      // Already supplied/locked — this nomination is done; never touch it.
-      if (existing.supplied || existing.lockedAt) return;
+      // Already saved/locked — this nomination is done; never touch it.
+      if (existing.lockedAt) return;
     } else if (item.nomUid) {
       uid = 'n_' + String(item.nomUid).replace(/[^A-Za-z0-9_-]/g, '_');
     } else {
@@ -19573,7 +19866,7 @@ function injectChecklistFromSchedule(sched) {
         lockedAt:   null
       };
       _clStampRange(_checklistRecords[uid], item);
-    } else if (!_checklistRecords[uid].supplied) {
+    } else if (!_checklistRecords[uid].lockedAt) {
       // Existing unlocked record: update display sno and nomination ref only, never actuals
       _checklistRecords[uid].sno        = item.sno;          // keep display order current
       if (item.nomUid) _checklistRecords[uid].nomUid = item.nomUid; // stamp/refresh nomination identity
@@ -19624,7 +19917,7 @@ function _clDevBadge(act, nom, rng) {
 }
 // The checklist record that belongs to this schedule item's nomination:
 // matched by nomUid; otherwise a legacy record (saved before nomUid was
-// stamped) of the same vessel — a supplied/locked legacy record only when
+// stamped) of the same vessel — a saved (locked) legacy record only when
 // _recordMatchesScheduleItem says it's the same supply (date within 3d),
 // an open draft by name (the old name-keyed scheme only ever had one).
 function _clFindRecordForItem(item) {
@@ -19635,9 +19928,9 @@ function _clFindRecordForItem(item) {
   }
   const nm = (item.name || '').trim().toLowerCase();
   const legacy = recs.filter(r => r && !r.nomUid && (r.vessel || '').trim().toLowerCase() === nm);
-  const done = legacy.find(r => (r.supplied || r.lockedAt) && _recordMatchesScheduleItem(r, item));
+  const done = legacy.find(r => r.lockedAt && _recordMatchesScheduleItem(r, item));
   if (done) return done;
-  return legacy.find(r => !r.supplied && !r.lockedAt) || null;
+  return legacy.find(r => !r.lockedAt) || null;
 }
 
 // (declared at top level)
@@ -19663,8 +19956,13 @@ function _clDateSort(a, b) {
 // records only the most advanced one is kept; and an open legacy record is
 // dropped as a duplicate of a completed one only when it's the same supply
 // (date within 3 days) — a later re-nomination of the vessel is kept.
+// An open record of a delivery that is already saved (_isScheduleItemCompleted:
+// Saved Records or an archived month) is dropped too — a colleague's unsaved
+// edit to the row brings it back through the merge, and older builds created
+// them from a stale schedule. Done = saved (locked): an unsaved row marked
+// supplied is still open.
 function _clDedupeRecords() {
-  const isDone = r => !!(r.lockedAt || r.state === 'completed' || r.supplied);
+  const isDone = r => !!(r.lockedAt || r.state === 'completed');
   const rank = r => (r.lockedAt ? 4 : 0) + (r.state === 'completed' ? 2 : r.state === 'saved' ? 1 : 0) + (r.supplied ? 1 : 0);
   const keyOf = r => r.nomUid ? 'n:' + r.nomUid : 'v:' + (r.vessel || '').trim().toLowerCase();
   const groups = new Map();
@@ -19687,7 +19985,8 @@ function _clDedupeRecords() {
     const kept = done.slice();
     open.forEach(r => {
       const dup = kept.some(d => k.charAt(0) === 'n' ||
-        _recordMatchesScheduleItem(d, { name: r.vessel, bargeStart: r.supplyDate }));
+        _recordMatchesScheduleItem(d, { name: r.vessel, bargeStart: r.supplyDate })) ||
+        _isScheduleItemCompleted({ nomUid: r.nomUid || null, name: r.vessel, bargeStart: r.supplyDate });
       if (dup) delete _checklistRecords[r.uid];
       else { kept.push(r); keep.push(r); }
     });
@@ -19816,11 +20115,10 @@ function renderChecklist(sched) {
         <td style="padding:9px 12px">
           ${isLocked
             ? `<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:700;color:var(--green)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>Completed</span>`
-            : `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-            <input type="checkbox" ${rec.supplied?'checked':''} onchange="clToggleSupplied('${uJ}',this.checked)"
-              style="width:15px;height:15px;cursor:pointer;accent-color:var(--azure)">
-            <span style="font-size:11px;font-weight:700;color:${rec.supplied?'var(--green)':'var(--muted)'}">${rec.supplied?'Completed':'Pending'}</span>
-          </label>`}
+            : /* Pending until Save — Save is the one step that completes a supply. The old
+                 'Completed' tick marked the row supplied without saving it, which took the
+                 vessel out of barge planning on every device with nothing logged. */
+              `<span style="font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap">Pending</span>`}
         </td>
 
         <td style="padding:9px 12px">
@@ -19854,31 +20152,13 @@ function renderChecklist(sched) {
 // Update actual quantity in record (no re-render, just update state + badge)
 function clUpdateActual(uid, field, val) {
   const rec = _checklistRecords[uid];
-  if (!rec || rec.supplied) return;
+  if (!rec || rec.lockedAt) return;
   if (field === 'v') { rec.actV = val; }
   if (field === 'm') { rec.actM = val; }
   // Update deviation badge in place
   const nom = field === 'v' ? rec.nomV : rec.nomM;
   const badgeEl = document.getElementById(`cl-d${field}-${uid}`);
   if (badgeEl) badgeEl.innerHTML = _clDevBadge(val, nom, _nomRange(rec, field === 'v' ? 'V' : 'M'));
-}
-
-function clToggleSupplied(uid, checked) {
-  const rec = _checklistRecords[uid];
-  if (!rec || rec.lockedAt) return;
-  rec.supplied = checked;
-  // Re-render status cell only
-  const row = document.getElementById(`cl-row-${uid}`);
-  if (row) {
-    const statusCell = row.querySelector('td:nth-child(10)');
-    if (statusCell) {
-      statusCell.innerHTML = `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
-        <input type="checkbox" ${checked?'checked':''} onchange="clToggleSupplied('${escJs(uid)}',this.checked)"
-          style="width:15px;height:15px;cursor:pointer;accent-color:var(--azure)">
-        <span style="font-size:11px;font-weight:700;color:${checked?'var(--green)':'var(--muted)'}">${checked?'Completed':'Pending'}</span>
-      </label>`;
-    }
-  }
 }
 
 function clUpdateNotes(uid, val) {
@@ -19970,10 +20250,45 @@ function clUpdateBdn(uid, field, val) {
   if (field === 'm') { rec.bdnM = val; }
 }
 
+// Id of the supply record a checklist row saves. A nomination's supply gets
+// the same id on every device, so the same row saved on two devices before
+// they sync makes ONE record (the merge matches records — and Delivery Log
+// entries — by id), and both devices bake that one id into the barge's
+// opening ROB: it is deducted once. Rows without a nomination id (old
+// 'v_<vessel>' rows, shared by different calls of one ship) keep a
+// timestamped id, and so does a re-save once that id is taken — e.g. its
+// earlier record was deleted after being folded into the opening ROB
+// (_bakedSupplyIds), where the new record would never be deducted.
+function _clSupplyRecordId(rec) {
+  const stamped = rec.uid + '_' + Date.now();
+  if (!rec.nomUid) return stamped;
+  const id = 'sup_' + String(rec.nomUid).replace(/[^A-Za-z0-9_-]/g, '_');
+  const taken = (_savedSupplies || []).some(r => r && r.id === id && r.checklistUid !== rec.uid) ||
+    Object.keys(_bakedSupplyIds || {}).some(b => (_bakedSupplyIds[b] || []).indexOf(id) !== -1);
+  return taken ? stamped : id;
+}
+
 async function saveChecklistRecord(uid) {
   const rec = _checklistRecords[uid];
-  if (!rec) return;
-  if (rec.lockedAt) { alert('This record is locked.'); return; }
+  if (!rec) {
+    // The row on screen is out of date: it was saved (or removed) on another
+    // device and this one has synced since. Say so and show the current list.
+    alert('This checklist row is no longer open — it was saved or removed on another device.\n\nThe checklist has been refreshed. Check Saved Records before entering this supply again.');
+    renderChecklist(_lastSched);
+    return;
+  }
+  // Already saved — e.g. the second click of a double-click, while the first
+  // one is still saving (the row only loses its Save button after that).
+  if (rec.lockedAt) return;
+  // This delivery is already logged (Saved Records, or an archived month) —
+  // a stale row brought back by a reload, a colleague's sync or an old
+  // schedule. Saving it again would record the supply twice and deduct it
+  // from the barge's ROB twice.
+  if (_isScheduleItemCompleted({ nomUid: rec.nomUid || null, name: rec.vessel, bargeStart: rec.supplyDate })) {
+    alert((rec.vessel || 'This vessel') + ' — this supply has already been saved (see Saved Records). It was not saved again: that would count the delivery twice and deduct it from the barge ROB twice.\n\nTo correct the quantities or BDN No., edit the saved record in Saved Records.');
+    renderChecklist(_lastSched); // drops the stale row (_clDedupeRecords)
+    return;
+  }
 
   // Read from DOM first, fallback to rec state
   const inpV = document.getElementById('cl-av-' + uid);
@@ -20040,7 +20355,7 @@ async function saveChecklistRecord(uid) {
   const _sDate = rec.supplyDate ? new Date(rec.supplyDate) : null;
   const _sDateOk = !!(_sDate && !isNaN(_sDate.getTime()));
   const supplyRec = {
-    id: uid + '_' + Date.now(),
+    id: _clSupplyRecordId(rec),  // one id per nomination's supply — see _clSupplyRecordId
     checklistUid: uid,         // FT84 FIX (Issue 3): enables delete by ChecklistID only
     nomUid: rec.nomUid || null, // the nomination supplied — completion is tracked per nomination
     savedAt: new Date().toISOString(),
@@ -20066,6 +20381,7 @@ async function saveChecklistRecord(uid) {
   // previously caused duplicate Saved Supply rows for the same checklist record.
   const _replaced = _savedSupplies.filter(r => r.checklistUid === uid);
   _savedSupplies = _savedSupplies.filter(r => r.checklistUid !== uid);
+  _replaced.forEach(r => _correctBakedSupply(r, null, 'replaced by a new save')); // the new record is deducted instead
   _savedSupplies.push(supplyRec);
   // …and so does an archived copy of the same checklist row (it would come back in
   // the reports as a second delivery as soon as one of the two copies is edited).
@@ -20113,7 +20429,10 @@ function deleteChecklistRecord(uid) {
   if (rec.state==='completed'&&rec.lockedAt){
     if(!confirm('Completed record for ' + rec.vessel + '. Delete anyway?'))return;
     // Remove the single matching saved supply for this uid (not all records for this vessel)
-    _savedSupplies=_savedSupplies.filter(function(r){return r.id!==uid&&!(r.vessel===rec.vessel&&r.checklistUid===uid);});
+    const keep=function(r){return r.id!==uid&&!(r.vessel===rec.vessel&&r.checklistUid===uid);};
+    const gone=_savedSupplies.filter(function(r){return !keep(r);});
+    _savedSupplies=_savedSupplies.filter(keep);
+    gone.forEach(function(r){_correctBakedSupply(r,null,'deleted');}); // its quantity goes back on the barge's ROB
     // …and its Delivery Log entries (timely/delayed/disputes), which would
     // otherwise keep counting a deleted supply in the Delivery Log and the
     // vessel's Track Record.
@@ -21332,6 +21651,7 @@ async function removeDuplicateSavedRecords() {
   const more = removedList.length > 8 ? `\n…and ${removedList.length - 8} more` : '';
   if (!confirm(`Found ${removedList.length} duplicate record(s) — saved twice from the same checklist row (the latest copy is kept), or the same vessel, day, quantities and barge (the earliest copy is kept). These will be removed:\n\n${preview}${more}\n\nThis updates the shared workspace for everyone. Continue?`)) return;
   _savedSupplies = deduped;
+  removedList.forEach(r => _correctBakedSupply(r, null, 'removed as a duplicate'));
   await saveSharedRecords();
   renderSavedRecords();
   renderLiveROBDashboard();
@@ -21463,6 +21783,8 @@ async function _saveEditRecord(s) {
   if (clash.length && !confirm('Someone else changed ' + clash.join(', ') + ' of this record while you were editing (now: ' +
       clash.map(function(k) { return k + ' = ' + _erRecVal(cur, k); }).join(', ') + ').\n\nSave your values anyway?')) return;
   const saved = _savedSupplies[idx] = Object.assign({}, cur, upd, { savedAt: new Date().toISOString() });
+  // Already baked into a barge's opening ROB: live ROB follows the new quantity / barge.
+  _correctBakedSupply(cur, saved);
   // A new date or vessel name can stop an archived copy of this delivery matching it
   // (_sameDelivery), and the reports would count that copy again: drop such copies now.
   const gone = (upd.supplyDate || upd.vessel) ? _dropArchivedCopies(cur) : [];
@@ -21513,6 +21835,7 @@ async function deleteRecord(id) {
   const name = rec ? rec.vessel : 'this record';
   if (!confirm(`Delete supply record for ${name}?\n\nThis removes it from Saved Records, Monthly Report, and Analytics.`)) return;
   _savedSupplies = _savedSupplies.filter(r => r.id !== id);
+  _correctBakedSupply(rec, null, 'deleted'); // its quantity goes back on the barge's ROB
   // Re-open ONLY the checklist row this record came from (checklistUid, or
   // the nomination's nomUid). Matching on vessel name reset every row of a
   // vessel with repeat calls. Legacy records with neither link fall back to
@@ -21747,7 +22070,7 @@ function downloadChecklist() {
       [i+1, rec.vessel, rec.supplyDate ? fmt24(rec.supplyDate) : '—', rec.bargeLabel||'',
        (rec.nomV===null||rec.nomV===undefined)?'':(_nomRange(rec,'V')?_nomQtyTxt(rec,'V',rec.nomV):rec.nomV), actV, rec.bdnV||'',
        (rec.nomM===null||rec.nomM===undefined)?'':(_nomRange(rec,'M')?_nomQtyTxt(rec,'M',rec.nomM):rec.nomM), actM, rec.bdnM||'',
-       rec.supplied?'YES':'PENDING', rec.lockedAt?'LOCKED':'', rec.notes||'']
+       rec.lockedAt?'YES':'PENDING', rec.lockedAt?'LOCKED':'', rec.notes||'']
         .forEach((v,c) => ws[XLSX.utils.encode_cell({r:i+1,c})] = {v,t:typeof v==='number'?'n':'s'});
     });
     ws['!ref'] = XLSX.utils.encode_range({s:{r:0,c:0},e:{r:records.length,c:12}});
@@ -22619,8 +22942,15 @@ async function saveReloadQty() {
 
   const addV = parseFloat(document.getElementById('reload-vlsfo').value) || 0;
   const addM = parseFloat(document.getElementById('reload-mgo').value) || 0;
+  if (addV < 0 || addM < 0) { alert('Reloaded quantities cannot be negative.'); return; }
   if (addV <= 0 && addM <= 0) { alert('Enter at least one reloaded quantity greater than zero.'); return; }
 
+  // From here on this reload is being recorded: a second click on Save
+  // (double-click, slow connection) must find nothing left to record.
+  _reloadBargeId = null;
+  const saveBtn = document.querySelector('#reload-modal button[onclick="saveReloadQty()"]');
+  if (saveBtn) saveBtn.disabled = true;
+  try {
   const liveROBs = getAllLiveROBs();
   const rob = liveROBs[bargeId];
   const curV = rob ? rob.liveV : 0;
@@ -22659,6 +22989,9 @@ async function saveReloadQty() {
 
   // Confirmation
   showToast('Reload saved — ' + b.name + ': VLSFO ' + Math.round(newV).toLocaleString() + ' MT | MGO ' + Math.round(newM).toLocaleString() + ' MT', 'success');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+  }
 }
 function openCalcParamsEdit() {
   document.getElementById('calc-hose-input').value   = _calcParams.hoseHrs;
@@ -22718,6 +23051,7 @@ function addBarge(def = {}) {
   const colorKey = _bargeKeyOk(def.color) ? def.color : _bargeDefaultKey();
   const c=document.createElement('div');
   c.className='vcard barge-card';c.id=`barge-${id}`;c.style.marginTop='10px';
+  c._newerFields = _newerBuildFields(def, _BARGE_KEYS); // saved back unchanged (see _newerBuildFields)
   c.innerHTML=`
   <div class="vcard-hdr">
     <span class="vnum barge-tag"> ${esc(name)}</span>
@@ -22733,7 +23067,7 @@ function addBarge(def = {}) {
         <svg id="b${id}-hide-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
         <span id="b${id}-hide-label">Hide</span>
       </button>
-      <button class="rm-btn" onclick="rmBarge(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
+      <button class="rm-btn" onclick="confirmRemoveBarge(${id})"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Remove</button>
     </div>
   </div>
 
@@ -22790,6 +23124,7 @@ function addBarge(def = {}) {
 
 /* ── Barge card state helpers ── */
 const _bargeEditMode = {}; // {id: bool}
+const _bargeEditOpening = {}; // {id: {v, m}} — Opening ROB fields when Edit was opened
 const _bargeHidden   = {}; // {id: bool}
 
 function _chip(label, val, color) {
@@ -22842,6 +23177,7 @@ function toggleBargeEdit(id) {
     cancelBargeEdit(id); return;
   }
   _bargeEditMode[id] = true;
+  _bargeEditOpening[id] = { v: parseFloat(document.getElementById(`b${id}-vrob`)?.value) || 0, m: parseFloat(document.getElementById(`b${id}-mrob`)?.value) || 0 };
   if (paramsEl) paramsEl.style.display = '';
   if (viewEl)   viewEl.style.display   = 'none';
   if (editBtn)  editBtn.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg> Cancel`;
@@ -22870,10 +23206,16 @@ function saveBargeEdit(id) {
   // Two-way ROB sync: editing the Opening ROB here is a fresh declaration of
   // truth for this barge, so clear any older manual override from the Live
   // Barge ROB Summary panel — otherwise that panel would keep showing its
-  // own stale override instead of the value just entered here.
+  // own stale override instead of the value just entered here. Only when the
+  // Opening ROB was actually changed: saving a buffer, rate or capacity must
+  // not throw away a dip correction made with "Update ROB".
   const newVrob = parseFloat(document.getElementById(`b${id}-vrob`)?.value) || 0;
   const newMrob = parseFloat(document.getElementById(`b${id}-mrob`)?.value) || 0;
-  if (_manualROB) {
+  const cfgNow = (_bargeConfig || []).find(x => x.id == id);
+  const wasOpening = _bargeEditOpening[id] || (cfgNow ? { v: cfgNow.vrob, m: cfgNow.mrob } : null);
+  delete _bargeEditOpening[id];
+  const openingChanged = !wasOpening || newVrob !== wasOpening.v || newMrob !== wasOpening.m;
+  if (_manualROB && openingChanged) {
     delete _manualROB[id + '_final'];
     delete _manualROB[id + '_pre'];
   }
@@ -22949,7 +23291,36 @@ function updateRefillPreview(id) {
   grid.innerHTML=cell('VLSFO ROB',vrob.toLocaleString()+' MT',`Cap: ${vcap.toLocaleString()} MT`)+cell('VLSFO Ullage',vUllage.toLocaleString()+' MT','to fill')+cell('VLSFO Refill',vUllage>0?durStr(vRefillHrs):'—',`@ ${vrfr} MT/hr`)+cell('MGO Ullage',mUllage.toLocaleString()+' MT','to fill')+cell('MGO Refill',mUllage>0?durStr(mRefillHrs):'—',`@ ${mrfr} MT/hr`);
 }
 
-function rmBarge(id) { document.getElementById(`barge-${id}`)?.remove(); _barges=_barges.filter(b=>b.id!==id); populateBargeDropdowns(); saveSharedState(); }
+function rmBarge(id) {
+  const name = (document.getElementById(`b${id}-name`)?.value || '').trim();
+  document.getElementById(`barge-${id}`)?.remove(); _barges=_barges.filter(b=>b.id!==id);
+  // What hangs off this barge's id goes with it: after a reload a barge added
+  // later can be given the same id, and would otherwise inherit the removed
+  // barge's ROB correction, baked supplies and Unavailable blocks. (Its reload
+  // events are dropped by captureCurrentState with the barge.)
+  if (_manualROB) Object.keys(_manualROB).forEach(k => { if (k.startsWith(id + '_')) delete _manualROB[k]; });
+  if (_bakedSupplyIds) delete _bakedSupplyIds[id];
+  const gone = new Set(_blocksForBarge(id, name).map(bk => bk.id));
+  if (gone.size) _bargeBlocks = _bargeBlocks.filter(bk => !gone.has(bk && bk.id));
+  try { localStorage.setItem('abps_manual_rob_v1', JSON.stringify(_manualROB || {})); } catch(e) {}
+  populateBargeDropdowns(); saveSharedState();
+}
+// The card's Remove button: removing a barge is synced to every device and
+// cannot be undone, so say what goes with it first.
+function confirmRemoveBarge(id) {
+  const name = (document.getElementById(`b${id}-name`)?.value || `Barge ${id}`).trim();
+  const pinned = Array.from(document.querySelectorAll('[id^="v"][id$="-barge"]')).filter(s => s.value === String(id)).length;
+  const reloads = (_bargeReloads || []).filter(rl => String(rl.bargeId) === String(id)).length;
+  const blocks = _blocksForBarge(id, name).length;
+  const hasFix = !!(_manualROB && Object.keys(_manualROB).some(k => k.startsWith(id + '_')));
+  const lost = [];
+  if (pinned) lost.push(pinned + ' nomination' + (pinned === 1 ? '' : 's') + ' assigned to it go back to Auto');
+  if (reloads) lost.push('its ' + reloads + ' recorded reload' + (reloads === 1 ? '' : 's') + ' are deleted');
+  if (hasFix) lost.push('its manual ROB correction is deleted');
+  if (blocks) lost.push('its ' + blocks + ' Unavailable block' + (blocks === 1 ? '' : 's') + ' are deleted');
+  if (!confirm('Remove barge "' + name + '" for everyone?\n\n' + (lost.length ? '• ' + lost.join('\n• ') + '\n\n' : '') + 'Saved supply records are kept. This cannot be undone.')) return;
+  rmBarge(id);
+}
 function renameBargeDropdowns() { populateBargeDropdowns(); clearTimeout(upd._t); upd._t=setTimeout(saveSharedState,1500); }
 /* ── Barge colours ──────────────────────────────────────────────────────
    Each barge has one identity colour (a palette KEY, saved with the barge and synced).
@@ -23036,8 +23407,6 @@ function getBarges() {
   • 4 < gap < 24   → "After [Prev Vessel Name]" with timed window
   First vessel in sequence always = "On Arrival"
 */
-const PREF_BARGE_KEY = 'abps_preferred_barge';
-
 function classifySeq(item, idx, items) {
   if (idx === 0) return { label: 'On Arrival', type: 'arrival', prevName: null };
   const prev  = items[idx - 1];
@@ -23050,31 +23419,18 @@ function classifySeq(item, idx, items) {
   return { label: 'After ' + prev.name, type: 'after', prevName: prev.name, gapHrs: gapHrs };
 }
 
-/* ─── BARGE SELECTION PERSISTENCE ─── */
-function savePreferredBarge(bargeId) {
-  try { localStorage.setItem(PREF_BARGE_KEY, String(bargeId)); } catch(e) {}
-}
-function loadPreferredBarge() {
-  try { return localStorage.getItem(PREF_BARGE_KEY) || ''; } catch(e) { return ''; }
-}
-
+/* ─── BARGE DROPDOWNS on the nomination cards ─── */
 function populateBargeDropdowns() {
   const barges = getBarges();
-  const preferred = loadPreferredBarge();
   document.querySelectorAll('[id^="v"][id$="-barge"]').forEach(sel => {
-    // Determine value to select: explicit current value > preferred > empty (auto)
+    // Keep each card's own choice; '' (Auto) stays Auto. (A remembered
+    // "preferred barge" used to fill every Auto card here, silently pinning
+    // the whole register to one barge on the next save.)
     const cur = sel.value || '';
-    // Find a valid match
-    const selectVal = cur && barges.find(b => String(b.id) === cur) ? cur
-                    : preferred && barges.find(b => String(b.id) === preferred) ? preferred
-                    : '';
+    const selectVal = cur && barges.find(b => String(b.id) === cur) ? cur : '';
     sel.innerHTML = '<option value="">Auto (any barge)</option>' +
       barges.map(b => '<option value="' + esc(b.id) + '"' + (String(b.id) === selectVal ? ' selected' : '') + '>' + esc(b.name) + '</option>').join('');
-    // Save preference whenever user changes selection
-    sel.onchange = function() {
-      saveSharedState();
-      if (this.value) savePreferredBarge(this.value);
-    };
+    sel.onchange = function() { saveSharedState(); };
   });
 }
 
@@ -23371,7 +23727,7 @@ async function clearChecklistRecords() {
   // schedule are rebuilt fresh (deduplicated) by renderChecklist below.
   Object.keys(_checklistRecords || {}).forEach(function(uid) {
     const r = _checklistRecords[uid];
-    if (!r || !(r.supplied || r.state === 'completed' || r.lockedAt)) delete _checklistRecords[uid];
+    if (!r || !(r.state === 'completed' || r.lockedAt)) delete _checklistRecords[uid];
   });
 
   renderChecklist(_lastSched || []);
