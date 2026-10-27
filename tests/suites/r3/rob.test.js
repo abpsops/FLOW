@@ -40,7 +40,8 @@ const live = (app, id) => app.page.evaluate((id) => { _bargeConfig = getBarges()
     await A.page.evaluate(() => saveSharedRecords());
     const ui = await A.page.evaluate(() => ({ vrob: document.getElementById('b1-vrob').value, cfg: _bargeConfig.find(b => b.id == 1).vrob, man: Object.keys(_manualROB) }));
     check(ui.vrob === '2800' && ui.cfg === 2800, 'baked opening written back to input + _bargeConfig (' + JSON.stringify(ui) + ')');
-    check(ui.man.length === 0, 'override keys stripped only because this barge was baked');
+    // '<id>_measured' (when the ROB was last measured) is not an override: it stays.
+    check(ui.man.filter(k => !/_measured$/.test(k)).length === 0 && ui.man.includes('1_measured'), 'override keys stripped only because this barge was baked (' + JSON.stringify(ui.man) + ')');
     r = await live(A, 1);
     check(r.v === 2800 && r.m === 650, 'live unchanged by bake (' + JSON.stringify(r) + ')');
     const cloudB = U.row(db).payload.state.barges[0];
