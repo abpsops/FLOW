@@ -11762,6 +11762,7 @@ function _voyEmailEta(item) {
   if (!d || isNaN(d)) return '—';
   const day = _ordDay(d.getDate()).toUpperCase() + ' ' + _MON_UP[d.getMonth()];
   if (item.etaWin) return String(item.etaWin).toUpperCase() + '/' + day;
+  if (item.noFirmETA) return 'TBA/' + day; // 00:00 with no frame = no firm ETA (as the schedule row says)
   return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '/' + day;
 }
 function _voyEmailQty(item, g) {
@@ -11804,15 +11805,26 @@ function _voyEmailTableText(rows) {
   const line = cells => cells.join('\t');
   return [line(_VOY_EMAIL_COLS)].concat(rows.map((r, i) => { const it = r.item; return line([i + 1, String(it.name || '').toUpperCase(), areaShort(it.area), _voyEmailQty(it, 'V'), _voyEmailQty(it, 'M'), String(it.spec || '').replace(/^ISO\s*/i, ''), _voyEmailLc(it.lc), _voyEmailEta(it), String(r.plan || '').toUpperCase(), String(it.agent || '').toUpperCase(), String(it.mani || '').toUpperCase()]); })).join('\n');
 }
-let _emailRawHtml = null; // a formatted body set directly (not built from the plain text)
+// A formatted body with a fixed block (the voyage table): {tableHtml, tableText}.
+// The plain-text box stays editable — the HTML is rebuilt from it with the table
+// kept where its rows stand in the text (text before/after it becomes paragraphs).
+let _emailRawHtml = null;
+function _emailRebuildFormatted() {
+  const t = document.getElementById('em-output-text').value, f = _emailRawHtml;
+  if (!f) return _emailBodyToHtml(t);
+  const i = t.indexOf(f.tableText);
+  if (i < 0) return _emailBodyToHtml(t); // the table rows themselves were edited: the text as typed, nothing dropped
+  const before = t.slice(0, i).replace(/\s+$/, ''), after = t.slice(i + f.tableText.length).replace(/^\s+/, '');
+  return (before ? _emailBodyToHtml(before) : '') + f.tableHtml + (after ? '<p style="margin:14px 0 0 0">&nbsp;</p>' + _emailBodyToHtml(after) : '');
+}
 function emailVoyageToBarge() {
   if (!_lastSched || !_lastSched.length) { alert('Nothing to send yet — generate the schedule first.'); return; }
   const sel = _voyEmailSelection();
   if (!sel) { alert('No barge tab is open in the Voyage Schedule.'); return; }
   if (!sel.rows.length) { alert(sel.total ? 'No vessels selected.\nTick the rows of ' + sel.barge.name + '\'s tab to include them in the e-mail.' : 'No pending supplies on ' + sel.barge.name + '.'); return; }
   const greeting = 'Good day Captain,\n\nKindly find the below delivery scheduled for your good barge.';
-  const html = '<p style="margin:0 0 14px 0">Good day Captain,</p><p style="margin:0 0 14px 0">Kindly find the below delivery scheduled for your good barge.</p>' + _voyEmailTableHtml(sel.rows) + '<p style="margin:14px 0 0 0">&nbsp;</p>';
-  const text = greeting + '\n\n' + _voyEmailTableText(sel.rows) + '\n';
+  const tableText = _voyEmailTableText(sel.rows);
+  const text = greeting + '\n\n' + tableText + '\n';
   // Subject dated by the first vessel's ETA day: "VOYAGE SCHEDULE AS OF 30TH OCT - FNSA 10"
   const first = sel.rows[0].item, fd = first.eta ? (first.eta instanceof Date ? first.eta : new Date(first.eta)) : null;
   const asOf = fd && !isNaN(fd) ? _ordDay(fd.getDate()).toUpperCase() + ' ' + _MON_UP[fd.getMonth()] : _ordDay(new Date().getDate()).toUpperCase() + ' ' + _MON_UP[new Date().getMonth()];
@@ -11821,8 +11833,8 @@ function emailVoyageToBarge() {
   document.getElementById('em-to-note').textContent = sel.barge.email ? 'From the Captain e-mail on the barge card.' : 'No Captain e-mail on the barge card yet — type the address, or add it on the Barge Fleet card to have it filled in next time.';
   document.getElementById('em-subject').value = 'VOYAGE SCHEDULE AS OF ' + asOf + ' - ' + String(sel.barge.name || '').toUpperCase();
   document.getElementById('em-output-text').value = text;
-  _emailRawHtml = html;
-  document.getElementById('em-output-html').innerHTML = html;
+  _emailRawHtml = { tableHtml: _voyEmailTableHtml(sel.rows), tableText: tableText };
+  document.getElementById('em-output-html').innerHTML = _emailRebuildFormatted();
   document.getElementById('em-modal-error').style.display = 'none';
   document.getElementById('em-modal').style.display = 'flex';
 }
@@ -26226,9 +26238,7 @@ function emailOpenForVessel(vid) {
 }
 
 function _emailSyncPreview() {
-  if (_emailRawHtml) return; // a formatted body (e.g. the voyage table) — the text box is its plain-text alternative
-  var body = document.getElementById('em-output-text').value;
-  document.getElementById('em-output-html').innerHTML = _emailBodyToHtml(body);
+  document.getElementById('em-output-html').innerHTML = _emailRebuildFormatted();
 }
 
 function emailCloseModal() {

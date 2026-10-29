@@ -1,7 +1,8 @@
 /* "Email to Barge": the ticked rows of the barge tab on screen as the delivery-schedule e-mail.
    • one table in the operators' layout (S. NO. … SAMPLING MANIFOLD), 2 of 3 rows ticked → 2 rows,
      renumbered; FO/MGO, SPEC without "ISO ", laycan "29th-31st OCT", ETA "0600/30TH OCT",
-     SUPPLY PLAN ON ARRIVAL / AFTER <vessel> as in the table, manifold cell yellow
+     SUPPLY PLAN ON ARRIVAL / AFTER <vessel> as in the table, manifold cell yellow; a no-firm ETA as TBA/<day>
+   • text typed before/after the table in the plain-text box reaches the formatted body (file + copy)
    • subject "VOYAGE SCHEDULE AS OF <first ticked vessel's ETA day> - <BARGE>"
    • To line from the barge card's Captain e-mail (saved, synced, survives a reload)
    • the mail file opens as an unsent message (X-Unsent) with the HTML table; Copy puts the same HTML
@@ -37,6 +38,7 @@ function seed() {
     Object.assign({}, VBASE, { nomUid: 'n2', name: 'Sakuragawa', type: 'VLSFO', qty: 3800, mgo: 0, eta: fmtDT(E2), lc: LC, bargeId: '1', agent: 'VIKING', spec: 'ISO 8217:2017' }),
     Object.assign({}, VBASE, { nomUid: 'n3', name: 'Lila Confidence', type: 'VLSFO', qty: 800, mgo: 0, eta: fmtDT(E3), lc: LC, bargeId: '1', agent: 'SHARAF', spec: 'ISO 8217:2017' }),
     Object.assign({}, VBASE, { nomUid: 'n4', name: 'Desh Ujaala', type: 'VLSFO', qty: 2600, mgo: 0, eta: fmtDT(E4), lc: LC, bargeId: '2', agent: 'SHARAF', manifold: 'VESSEL MANIFOLD' }),
+    Object.assign({}, VBASE, { nomUid: 'n5', name: 'No Firm', type: 'VLSFO', qty: 700, mgo: 0, eta: fmtDT(dayAt(3, 0)), lc: LC, bargeId: '2', agent: 'GAC' }),
   ] });
   s.state.barges = [Object.assign({ id: 1, name: 'FNSA 10', vrob: 9000, mrob: 800, vcap: 10000, email: 'captain.fnsa10@example.com' }, BARGE, { vcap: 10000 }),
                     Object.assign({ id: 2, name: 'FNSA 11', vrob: 4000, mrob: 800 }, BARGE)];
@@ -87,10 +89,11 @@ const composer = p => p.evaluate(() => {
       c.body[2][1] === 'LILA CONFIDENCE' && c.body[2][7] === etaTxt(E3) && /^(ON ARRIVAL|AFTER SAKURAGAWA)$/.test(c.body[2][8]), c.body);
     check('V1 the SAMPLING MANIFOLD cells are yellow', c.yellow.every(Boolean), c.yellow);
     check('V1 the plain-text alternative carries the same rows', /S\. NO\.\tVESSEL/.test(c.text) && /1\tETAGAS\tFUJ A\t550\t0\t8217:2010/.test(c.text) && /3\tLILA CONFIDENCE/.test(c.text), c.text);
-    // Editing the plain text leaves the table preview alone.
-    await A.page.evaluate(() => { const t = document.getElementById('em-output-text'); t.value += '\nAdded line'; _emailSyncPreview(); });
+    // Text typed around the table reaches the formatted body; the table stays.
+    await A.page.evaluate(() => { const t = document.getElementById('em-output-text'); t.value = t.value.replace('Kindly find', 'Please call the agent 2 hrs before arrival.\n\nKindly find') + '\nSpeedy turnaround please.'; t.dispatchEvent(new Event('input', { bubbles: true })); });
     c = await composer(A.page);
-    check('V1 typing in the plain-text box does not replace the table preview', c.body.length === 3 && c.head.length === 11, c.head);
+    const pv = await A.page.evaluate(() => document.getElementById('em-output-html').textContent);
+    check('V1 typing before and after the table: both lines in the formatted preview, the table kept (3 rows)', c.body.length === 3 && c.head.length === 11 && /Please call the agent 2 hrs before arrival\./.test(pv) && /Speedy turnaround please\./.test(pv) && pv.indexOf('Please call') < pv.indexOf('ETAGAS') && pv.indexOf('ETAGAS') < pv.indexOf('Speedy'), [c.body.length, pv.slice(0, 200)]);
     // The mail file: an unsent message with the HTML table.
     const eml = await A.page.evaluate(async () => {
       const cap = {}; const oc = URL.createObjectURL; URL.createObjectURL = b => { cap.blob = b; return 'blob:x'; };
@@ -102,12 +105,12 @@ const composer = p => p.evaluate(() => {
       const part = raw.split(/--GPSBUNKERS_[^\r\n]+/).find(x => /text\/html/.test(x)) || '';
       const b64 = part.replace(/[\s\S]*?\r\n\r\n/, '').replace(/\s+/g, '');
       let html = ''; try { html = decodeURIComponent(escape(atob(b64))); } catch (e) { html = '(decode failed)'; }
-      return { unsent: /^X-Unsent: 1\r?$/m.test(raw), to: /^To: .*captain\.fnsa10@example\.com/m.test(raw), subject: /^Subject: VOYAGE SCHEDULE AS OF \d+(ST|ND|RD|TH) [A-Z]{3} - FNSA 10/m.test(raw), table: /<table[\s\S]*SAMPLING MANIFOLD[\s\S]*ETAGAS[\s\S]*LILA CONFIDENCE/.test(html), type: cap.blob.type };
+      return { unsent: /^X-Unsent: 1\r?$/m.test(raw), to: /^To: .*captain\.fnsa10@example\.com/m.test(raw), subject: /^Subject: VOYAGE SCHEDULE AS OF \d+(ST|ND|RD|TH) [A-Z]{3} - FNSA 10/m.test(raw), table: /<table[\s\S]*SAMPLING MANIFOLD[\s\S]*ETAGAS[\s\S]*LILA CONFIDENCE/.test(html), added: /Speedy turnaround please\./.test(html) && /Please call the agent/.test(html), type: cap.blob.type };
     });
-    check('V1 "Download Formatted Email": an unsent message (X-Unsent: 1) to the captain, with the HTML table', eml.unsent && eml.to && eml.subject && eml.table && eml.type === 'message/rfc822', eml);
+    check('V1 "Download Formatted Email": an unsent message (X-Unsent: 1) to the captain, with the HTML table and the typed lines', eml.unsent && eml.to && eml.subject && eml.table && eml.added && eml.type === 'message/rfc822', eml);
     // Copy (formatted): the HTML table goes to the clipboard.
-    const cp = await A.page.evaluate(async () => { let got = null; const o = _emailWriteRichClipboard; _emailWriteRichClipboard = (t, h) => { got = { t, h }; return Promise.resolve(); }; document.querySelector('#em-modal [onclick="emailCopyBody()"]').click(); await new Promise(r => setTimeout(r, 50)); _emailWriteRichClipboard = o; return got ? { table: /<table/.test(got.h) && /SAKURAGAWA/.test(got.h), text: /SAKURAGAWA/.test(got.t) } : null; });
-    check('V1 "Copy Message (formatted)": the table as HTML (and the plain rows) on the clipboard', cp && cp.table && cp.text, cp);
+    const cp = await A.page.evaluate(async () => { let got = null; const o = _emailWriteRichClipboard; _emailWriteRichClipboard = (t, h) => { got = { t, h }; return Promise.resolve(); }; document.querySelector('#em-modal [onclick="emailCopyBody()"]').click(); await new Promise(r => setTimeout(r, 50)); _emailWriteRichClipboard = o; return got ? { table: /<table/.test(got.h) && /SAKURAGAWA/.test(got.h), added: /Speedy turnaround/.test(got.h), text: /SAKURAGAWA/.test(got.t) } : null; });
+    check('V1 "Copy Message (formatted)": the table as HTML with the typed lines (and the plain rows) on the clipboard', cp && cp.table && cp.added && cp.text, cp);
     await A.page.evaluate(() => emailCloseModal());
     // Two of three ticked → two rows, renumbered, the plan as in the table.
     await A.page.evaluate(() => { document.querySelector('#voy-tab-1 .voy-print-chk[data-sno="1"]').checked = false; emailVoyageToBarge(); });
@@ -127,7 +130,9 @@ const composer = p => p.evaluate(() => {
     await generate(A.page);
     await A.page.evaluate(() => { switchBargeTbl('2'); emailVoyageToBarge(); });
     const c = await composer(A.page);
-    check('V2 FNSA 11: its own single row (Desh Ujaala, VESSEL MANIFOLD), To empty with a note to add the Captain e-mail', c.open && c.title === 'Voyage Schedule — FNSA 11' && c.to === '' && c.body.length === 1 && c.body[0][1] === 'DESH UJAALA' && c.body[0][10] === 'VESSEL MANIFOLD' && c.body[0][3] === '2,600' && /No Captain e-mail/.test(await A.page.evaluate(() => document.getElementById('em-to-note').textContent)), c);
+    check('V2 FNSA 11: its own rows (Desh Ujaala first, VESSEL MANIFOLD), To empty with a note to add the Captain e-mail', c.open && c.title === 'Voyage Schedule — FNSA 11' && c.to === '' && c.body.length === 2 && c.body[0][1] === 'DESH UJAALA' && c.body[0][10] === 'VESSEL MANIFOLD' && c.body[0][3] === '2,600' && /No Captain e-mail/.test(await A.page.evaluate(() => document.getElementById('em-to-note').textContent)), c);
+    const nf = dayAt(3, 0);
+    check('V2 a vessel with no firm ETA (00:00, no frame) is sent as "TBA/<day>", not a midnight arrival', c.body[1][1] === 'NO FIRM' && c.body[1][7] === `TBA/${ord(nf.getDate()).toUpperCase()} ${MU[nf.getMonth()]}` && new RegExp('NO FIRM\\t.*\\tTBA/').test(c.text), [c.body[1], c.text.split('\n').pop()]);
   });
 
   /* V3 — the Captain e-mail on the barge card: saved, synced, kept through a reload */
