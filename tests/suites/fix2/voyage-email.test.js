@@ -2,6 +2,7 @@
    • one table in the operators' layout (S. NO. … SAMPLING MANIFOLD), 2 of 3 rows ticked → 2 rows,
      renumbered; FO/MGO, SPEC without "ISO ", laycan "29th-31st OCT", ETA "0600/30TH OCT",
      SUPPLY PLAN ON ARRIVAL / AFTER <vessel> as in the table, manifold cell yellow
+   • subject "VOYAGE SCHEDULE AS OF <first ticked vessel's ETA day> - <BARGE>"
    • To line from the barge card's Captain e-mail (saved, synced, survives a reload)
    • the mail file opens as an unsent message (X-Unsent) with the HTML table; Copy puts the same HTML
      on the clipboard; editing the plain text does not wipe the table preview
@@ -76,7 +77,7 @@ const composer = p => p.evaluate(() => {
     await generate(A.page);
     const all = await A.page.evaluate(() => { emailVoyageToBarge(); return 1; });
     let c = await composer(A.page);
-    check('V1 button: the composer opens for FNSA 10, To = the Captain e-mail, subject with the barge name, the greeting as written', c.open && c.title === 'Voyage Schedule — FNSA 10' && c.to === 'captain.fnsa10@example.com' && /^Voyage Schedule — FNSA 10 — \d\d [A-Z][a-z]{2} \d{4}$/.test(c.subject) && c.greeting, c);
+    check('V1 button: the composer opens for FNSA 10, To = the Captain e-mail, subject with the barge name, the greeting as written', c.open && c.title === 'Voyage Schedule — FNSA 10' && c.to === 'captain.fnsa10@example.com' && c.subject === `VOYAGE SCHEDULE AS OF ${ord(E1.getDate()).toUpperCase()} ${MU[E1.getMonth()]} - FNSA 10` && c.greeting, c);
     check('V1 the 11 columns in order', JSON.stringify(c.head) === JSON.stringify(['S. NO.', 'VESSEL', 'ANCHORAGE AREA', 'FO (MT)', 'MGO (MT)', 'SPEC', 'NOMINATED ETA', 'ETA', 'SUPPLY PLAN', 'AGENT', 'SAMPLING MANIFOLD']), c.head);
     const lcTxt = LF.getMonth() === LT.getMonth() ? `${ord(LF.getDate())}-${ord(LT.getDate())} ${MU[LF.getMonth()]}` : `${ord(LF.getDate())} ${MU[LF.getMonth()]}-${ord(LT.getDate())} ${MU[LT.getMonth()]}`;
     const etaTxt = d => `${p2(d.getHours())}${p2(d.getMinutes())}/${ord(d.getDate()).toUpperCase()} ${MU[d.getMonth()]}`;
@@ -101,7 +102,7 @@ const composer = p => p.evaluate(() => {
       const part = raw.split(/--GPSBUNKERS_[^\r\n]+/).find(x => /text\/html/.test(x)) || '';
       const b64 = part.replace(/[\s\S]*?\r\n\r\n/, '').replace(/\s+/g, '');
       let html = ''; try { html = decodeURIComponent(escape(atob(b64))); } catch (e) { html = '(decode failed)'; }
-      return { unsent: /^X-Unsent: 1\r?$/m.test(raw), to: /^To: .*captain\.fnsa10@example\.com/m.test(raw), subject: /^Subject: Voyage Schedule — FNSA 10/m.test(raw), table: /<table[\s\S]*SAMPLING MANIFOLD[\s\S]*ETAGAS[\s\S]*LILA CONFIDENCE/.test(html), type: cap.blob.type };
+      return { unsent: /^X-Unsent: 1\r?$/m.test(raw), to: /^To: .*captain\.fnsa10@example\.com/m.test(raw), subject: /^Subject: VOYAGE SCHEDULE AS OF \d+(ST|ND|RD|TH) [A-Z]{3} - FNSA 10/m.test(raw), table: /<table[\s\S]*SAMPLING MANIFOLD[\s\S]*ETAGAS[\s\S]*LILA CONFIDENCE/.test(html), type: cap.blob.type };
     });
     check('V1 "Download Formatted Email": an unsent message (X-Unsent: 1) to the captain, with the HTML table', eml.unsent && eml.to && eml.subject && eml.table && eml.type === 'message/rfc822', eml);
     // Copy (formatted): the HTML table goes to the clipboard.
@@ -111,7 +112,7 @@ const composer = p => p.evaluate(() => {
     // Two of three ticked → two rows, renumbered, the plan as in the table.
     await A.page.evaluate(() => { document.querySelector('#voy-tab-1 .voy-print-chk[data-sno="1"]').checked = false; emailVoyageToBarge(); });
     c = await composer(A.page);
-    check('V1 Etagas unticked: 2 rows, renumbered 1–2, Sakuragawa then Lila Confidence', c.body.length === 2 && c.body[0][0] === '1' && c.body[0][1] === 'SAKURAGAWA' && c.body[1][0] === '2' && c.body[1][1] === 'LILA CONFIDENCE', c.body);
+    check('V1 Etagas unticked: 2 rows, renumbered 1–2, Sakuragawa then Lila Confidence; the subject dated by Sakuragawa\'s ETA', c.body.length === 2 && c.body[0][0] === '1' && c.body[0][1] === 'SAKURAGAWA' && c.body[1][0] === '2' && c.body[1][1] === 'LILA CONFIDENCE' && c.subject === `VOYAGE SCHEDULE AS OF ${ord(E2.getDate()).toUpperCase()} ${MU[E2.getMonth()]} - FNSA 10`, [c.body, c.subject]);
     await A.page.evaluate(() => emailCloseModal());
     // Nothing ticked → message only.
     await A.page.evaluate(() => { document.querySelectorAll('#voy-tab-1 .voy-print-chk').forEach(c => { c.checked = false; }); window.__alerts = []; emailVoyageToBarge(); });
