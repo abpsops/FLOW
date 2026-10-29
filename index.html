@@ -1374,6 +1374,9 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
 .st-dl{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
 .st-early{background:var(--azure-lt);color:var(--azure);border-color:var(--azure-bd)}
 .lc-rng{font-size:10.5px;font-weight:600;font-family:'DM Mono',monospace}
+.lc-hold-btn{margin-left:5px;font:inherit;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--azure);background:var(--azure-lt);color:var(--azure);cursor:pointer;vertical-align:middle;white-space:nowrap}
+.lc-hold-btn:hover{background:var(--azure);color:#fff}
+@media print{.lc-hold-btn{display:none}}
 .lc-rng.in{color:var(--green)}.lc-rng.out{color:var(--amber)}
 
 /* ════════════════════════════════════════
@@ -6960,6 +6963,7 @@ function _buildNominationEmail(v) {
   if (v.manifold)  lines.push('MANIFOLD: ' + v.manifold);
   if (v.spec)      lines.push('ISO Spec: ' + v.spec);
   if (v.lc)        lines.push('Nominated Laycan: ' + v.lc);
+  if (v.lcOnly)    lines.push('Supply within laycan only');
   if (v.remarks)   lines.push('Remarks: ' + v.remarks);
 
   return { subject: subject, body: lines.join('\n') };
@@ -7102,7 +7106,7 @@ async function sendNominationEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
   } finally {
     // _lockSendEmailButton reflects whatever sendNominationEmailIfNeeded
     // actually recorded in _nomEmailLog — if the send failed, the log was
@@ -7217,6 +7221,7 @@ function _buildNominationCancelledEmail(v) {
   if (v.manifold)  lines.push('MANIFOLD: ' + v.manifold);
   if (v.spec)      lines.push('ISO Spec: ' + v.spec);
   if (v.lc)        lines.push('Nominated Laycan: ' + v.lc);
+  if (v.lcOnly)    lines.push('Supply within laycan only');
   if (v.remarks)   lines.push('Remarks: ' + v.remarks);
 
   return { subject: subject, body: lines.join('\n') };
@@ -7318,7 +7323,7 @@ async function sendNominationCancelledEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
   } finally {
     const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
     if (sent) {
@@ -9784,7 +9789,7 @@ function disconnectSync() {}
    leaves out on purpose when it is cleared (qtyMin…, etaWin, sts, mmsi), saves
    exactly as the card says. A new field goes into its list in the build that
    starts writing it. */
-const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts'];
+const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly'];
 // buf: legacy single buffer (read as vbuf/mbuf); _robBakedAt, receivedV/M: retired; _robGuardApplied: applyState's marker.
 const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
 function _newerBuildFields(def, known) {
@@ -9845,7 +9850,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -12242,6 +12247,30 @@ function _cardEtaWinFields(id) { const w = _cardEtaWin(id); return w ? { etaWin:
 // STS (ship-to-ship) supply: stored on the nomination only when ticked, like etaWin.
 function _cardSts(id) { const el = document.getElementById('v' + id + '-sts'); return !!(el && el.checked); }
 function _cardStsFields(id) { return _cardSts(id) ? { sts: true } : {}; }
+// "Laycan only" (supply once the laycan opens): stored as lcOnly: true only when ticked.
+function _cardLcOnly(id) { const el = document.getElementById('v' + id + '-lconly'); return !!(el && el.checked); }
+function _cardLcOnlyFields(id) { return _cardLcOnly(id) ? { lcOnly: true } : {}; }
+function toggleLcOnly(id) { saveSharedState(); }
+// Shown next to "Before Laycan" for a nomination that still has a card (operators).
+function _holdBtn(item) {
+  if (!item || !item.nomUid || (typeof isTrader === 'function' && isTrader()) || item.lcOnly) return '';
+  return '<button type="button" class="lc-hold-btn" onclick="holdToLaycan(' + JSON.stringify(String(item.nomUid)).replace(/"/g, '&quot;') + ')" title="Supply this vessel only once its laycan opens, and plan again">Supply in laycan</button>';
+}
+// The "Supply in laycan" button on a schedule row planned before its laycan:
+// ticks Laycan only on that nomination's card and plans again.
+function holdToLaycan(nomUid) {
+  const card = Array.from(document.querySelectorAll('.vcard[id^="vessel-"]')).find(c => c.dataset.nomUid === nomUid);
+  if (!card) { showToast('That nomination has no card any more — plan again first.', 'warning'); return; }
+  const id = card.id.replace('vessel-', ''), box = document.getElementById('v' + id + '-lconly');
+  if (!box) return;
+  box.checked = true;
+  toggleLcOnly(id); // saved like a tick on the card, whatever the plan below does
+  const name = ((document.getElementById('v' + id + '-name') || {}).value || 'Vessel').trim();
+  const before = _lastSched;
+  calculate();
+  if (_lastSched !== before) showToast(name + ' is now supplied within its laycan only — schedule planned again.', 'success');
+  else showToast('Laycan only is ticked and saved for ' + name + ' — the schedule could not be planned again (see the message); Generate once the cards are complete.', 'warning', 7000);
+}
 // The tick on a nomination card: the NOMINATION is the one source of truth. Nothing
 // planned is edited (the schedule and checklist records are derived data that merge
 // as a whole between devices — touching them from a tick would clash with a colleague's
@@ -12845,7 +12874,7 @@ function rmV(id) {
       sendNominationCancelledEmailIfNeeded(Object.assign({
         nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
         agent, manifold, spec, lc, eta, remarks
-      }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+      }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
     }
   }
 
@@ -12855,7 +12884,7 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details — and a newer build's fields.
-    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardIdFields(id))
+    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))
   };
   _trashBin.push(trashEntry);
   _saveTrashBin();
@@ -14377,6 +14406,7 @@ function addVessel(def = {}) {
   const etaWin = _etaFrame(def.etaWin) ? _etaFrame(def.etaWin).code : '';
   const refuelChk = def.refuelChk || false;
   const sts = !!def.sts;
+  const lcOnly = !!def.lcOnly;
   const rfv = def.rfv || 0, rfm = def.rfm || 0, rfvr = def.rfvr || 750, rfmr = def.rfmr || 275;
 
   const c = document.createElement('div');
@@ -14387,7 +14417,7 @@ function addVessel(def = {}) {
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
   <div class="vcard-hdr">
-    <div class="vhdr-l"><span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span><span class="vid-badge" id="v${id}-idbadge"></span><label class="sts-chk" title="Tick if this nomination is a ship-to-ship (STS) supply"><input type="checkbox" id="v${id}-sts" ${sts ? 'checked' : ''} onchange="toggleSts(${id})" aria-label="STS operation">STS</label></div>
+    <div class="vhdr-l"><span class="vnum">VESSEL ${String(id).padStart(2,'0')}</span><span class="vid-badge" id="v${id}-idbadge"></span><label class="sts-chk" title="Tick if this nomination is a ship-to-ship (STS) supply"><input type="checkbox" id="v${id}-sts" ${sts ? 'checked' : ''} onchange="toggleSts(${id})" aria-label="STS operation">STS</label><label class="sts-chk" title="Tick to supply this vessel only once its laycan opens — an early arrival waits for the laycan"><input type="checkbox" id="v${id}-lconly" ${lcOnly ? 'checked' : ''} onchange="toggleLcOnly(${id})" aria-label="Supply within laycan only">Laycan only</label></div>
     <div style="display:flex;gap:6px;align-items:center">
       <button class="send-email-btn" id="v${id}-send-email-btn" onclick="sendNominationEmailForCard(${id})">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4 20-7z"/></svg>
@@ -14562,17 +14592,20 @@ function addVessel(def = {}) {
    is late / early against the laycan, and whether it counts as "no firm ETA".
    One place, shared by the nomination cards (getVessels) and the what-if
    sandbox when it moves an ETA, so they can never disagree. */
-function _planVesselTimes(eta, winHrs, lc, hasFrame) {
-  const effectiveETA = eta || (lc ? new Date((lc.from.getTime()+lc.to.getTime())/2) : null);
+function _planVesselTimes(eta, winHrs, lc, hasFrame, lcOnly) {
+  // "Laycan only": a vessel due before its laycan opens is supplied once it
+  // does — planned as ready at the laycan start (its time frame is over by then).
+  const held = !!(lcOnly && lc && lc.from && eta && addHrs(eta, winHrs || 0) < lc.from);
+  const effectiveETA = held ? new Date(lc.from.getTime()) : eta || (lc ? new Date((lc.from.getTime()+lc.to.getTime())/2) : null);
   const isDelayed = !!(lc && eta && eta > lc.to);
   // Mirrors isDelayed, just the opposite side of the laycan window —
   // arriving BEFORE it opens instead of after it closes. A time frame is
   // early only when even its END is before the laycan opens.
-  const isEarly = !!(lc && eta && addHrs(eta, winHrs) < lc.from);
+  const isEarly = !held && !!(lc && eta && addHrs(eta, winHrs) < lc.from);
   // ETA at exactly 00:00 = no firm ETA — scheduled last, after all firm-ETA vessels.
   // Not for a time frame: EAM starts at 00:00 but is a real arrival window.
   const noFirmETA = !!(eta && !hasFrame && eta.getHours() === 0 && eta.getMinutes() === 0);
-  return { effectiveETA, isDelayed, isEarly, noFirmETA };
+  return { effectiveETA, isDelayed, isEarly, noFirmETA, held };
 }
 
 /* quiet: report an unreadable card by throwing (message in the Error) instead
@@ -14610,7 +14643,8 @@ function getVessels(quiet) {
     const fail = msg => { if (quiet) throw new Error(msg); alert(msg); throw new Error(); };
     if (etR && !eta) fail(`"${name}": cannot read Actual ETA "${etR}". Use the calendar picker.`);
     if (!eta && !lc) fail(`"${name}": please enter at least an Actual ETA or Nominated Laycan.`);
-    const { effectiveETA, isDelayed, isEarly, noFirmETA } = _planVesselTimes(eta, winHrs, lc, !!etaWin);
+    const lcOnly = _cardLcOnly(id);
+    const { effectiveETA, isDelayed, isEarly, noFirmETA, held } = _planVesselTimes(eta, winHrs, lc, !!etaWin, lcOnly);
     const paq     = document.getElementById(`v${id}-paq`)?.value    || 'no';
     const bargeId = document.getElementById(`v${id}-barge`)?.value  || '';
     const nomUid  = c.dataset.nomUid || '';
@@ -14618,7 +14652,7 @@ function getVessels(quiet) {
     const mmsi    = (document.getElementById(`v${id}-mmsi`)?.value   || '').trim();
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
     const sts     = _cardSts(id);
-    out.push({id, name, sts, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId,
+    out.push({id, name, sts, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId, lcOnly, held,
               refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, mmsi, remarks, etaWin, winHrs,
               vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
@@ -14659,7 +14693,9 @@ function _schedStartOutsideBlocks(barge, start, vq, mq, winEnd, P) {
    hose-up + pumping (calcETC). A time-frame ETA can arrive as late as the
    frame END, so the barge stays committed until max(start, frame end) +
    the same supply time (worst case). */
-function _vesselFrameEnd(v) { return (v && v.winHrs && v.effectiveETA) ? addHrs(v.effectiveETA, v.winHrs) : null; }
+// A held vessel (Laycan only, due before the laycan) is ready at the laycan
+// opening: its arrival frame is over by then, so there is no frame end to wait for.
+function _vesselFrameEnd(v) { return (v && v.winHrs && v.effectiveETA && !v.held) ? addHrs(v.effectiveETA, v.winHrs) : null; }
 function _vesselJobETC(start, v, vtph, mtph, P) {
   const we = _vesselFrameEnd(v);
   return calcETC(we && we > start ? we : start, v.vq, v.mq, vtph, mtph, P.hoseHrs);
@@ -14809,7 +14845,7 @@ function planSchedule(inp) {
     // Time-frame ETA rides along on the item (only when set): eta = frame start.
     if (v.sts) rangeF.sts = true;          // ship-to-ship supply — rides along for display only
     if (v.etaWin) { rangeF.etaWin = v.etaWin; rangeF.supplyHrs = P.hoseHrs + Math.max(v.vq / (barge.vtph || 300), v.mq / (barge.mtph || 100)); }
-    sched.push(Object.assign({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot}, rangeF));
+    sched.push(Object.assign({sno:i+1, nomUid:v.nomUid||null, name:v.name, area:v.area, spec:v.spec, agent:v.agent, mani:v.mani, lc:v.lc, eta:v.eta||v.effectiveETA, bargeStart, etc, bargeLabel:barge.name, vQ:Math.round(sv), mQ:Math.round(sm), nomVQ:Math.round(v.vq||0), nomMQ:Math.round(v.mq||0), robVA:Math.round(rva), robMA:Math.round(rma), isPartial:sv<v.vq||sm<v.mq, isDelayed:v.isDelayed, isEarly:v.isEarly, noFirmETA:v.noFirmETA, waitedForBarge, totalHrs:(etc-bargeStart)/3600000, vLow, mLow, paq:v.paq, VCAP, MCAP, refuelSlot}, rangeF, v.held ? { held: true, lcOnly: true } : v.lcOnly ? { lcOnly: true } : {}));
     bs.rv=rva; bs.rm=rma;
     totV+=sv; totM+=sm;
   }
@@ -14981,8 +15017,8 @@ function _simApplyVessel(v, e) {
   let winHrs = v.winHrs, etaWin = v.etaWin;
   if (e.etaExact instanceof Date) { winHrs = 0; etaWin = ''; }       // an exact time replaces a time frame
   if (e.shiftHrs) eta = addHrs(eta, e.shiftHrs);                     // a frame moves as a whole
-  const T = _planVesselTimes(eta, winHrs, v.lc, !!etaWin);
-  return _simQtyPin(Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA }), v, e);
+  const T = _planVesselTimes(eta, winHrs, v.lc, !!etaWin, v.lcOnly);
+  return _simQtyPin(Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA, held: T.held }), v, e);
 }
 // The planner's inputs for the snapshot as edited — pure.
 function _simInputs(snap, ed) {
@@ -15675,7 +15711,7 @@ function buildVoyRows(items) {
     const displayNo = idx + 1; // Re-number from 1 after filtering
     const st = (item.noFirmETA
       ? '<span class="stag" style="background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple-bd)">No Firm ETA</span>'
-      : item.isDelayed?'<span class="stag st-dl">Delayed</span>':item.isEarly?'<span class="stag st-early">Before Laycan</span>':'<span class="stag st-ok">On Laycan</span>') + completedBadge;
+      : item.isDelayed?'<span class="stag st-dl">Delayed</span>':item.isEarly?'<span class="stag st-early">Before Laycan</span>' + _holdBtn(item):item.held?'<span class="stag st-ok" title="Laycan only: the vessel arrives early and is supplied once the laycan opens">On Laycan · held</span>':'<span class="stag st-ok">On Laycan</span>') + completedBadge;
     const seqStyle = seq.type === 'arrival'
       ? 'background:var(--green-lt);color:var(--green);border:1px solid var(--green-bd)'
       : 'background:var(--azure-lt);color:var(--azure);border:1px solid var(--azure-bd)';
@@ -15772,7 +15808,7 @@ function buildTL(items, containerId, loadingsForBarge) {
     const supB= item.isPartial?`<span class="tb tb-pt">Part Supply</span>`:`<span class="tb tb-ok">Full Supply</span>`;
     const dlB = item.noFirmETA
       ? `<span class="tb" style="background:var(--purple-lt);color:var(--purple);border:1px solid var(--purple-bd)">No Firm ETA</span>`
-      : item.isDelayed?`<span class="tb tb-dl">Delayed</span>`:item.isEarly?`<span class="tb tb-early">Before Laycan</span>`:`<span class="tb tb-on">On Laycan</span>`;
+      : item.isDelayed?`<span class="tb tb-dl">Delayed</span>`:item.isEarly?`<span class="tb tb-early">Before Laycan</span>` + _holdBtn(item):item.held?`<span class="tb tb-on" title="Laycan only: supplied once the laycan opens">On Laycan · held</span>`:`<span class="tb tb-on">On Laycan</span>`;
     const vB  = item.vLow?`<span class="tb tb-wv">VLSFO Alert</span>`:'';
     const mB  = item.mLow?`<span class="tb tb-wm">MGO Alert</span>`:'';
     const paqB= item.paq==='yes'?`<span class="tb tb-ok">PAQ ✓</span>`:`<span class="tb tb-dl">PAQ Pending</span>`;
@@ -17189,7 +17225,7 @@ function _fwInputSignature() {
   var v = {};
   (st.vessels || []).forEach(function(x, i) {
     if (!String(x.name || '').trim()) return; // a blank card isn't a nomination yet
-    v[x.nomUid || ('#' + i)] = _fwHash(_stableStr([x.name, x.type, x.qty, x.mgo, x.eta, x.lc, x.bargeId, x.refuelChk, x.rfv, x.rfm, x.rfvr, x.rfmr].concat(x.etaWin ? [x.etaWin] : [])));
+    v[x.nomUid || ('#' + i)] = _fwHash(_stableStr([x.name, x.type, x.qty, x.mgo, x.eta, x.lc, x.bargeId, x.refuelChk, x.rfv, x.rfm, x.rfvr, x.rfmr, !!x.lcOnly].concat(x.etaWin ? [x.etaWin] : [])));
   });
   // Barge ROB is left out on purpose: it moves with every saved supply and
   // Free Windows reads live ROB anyway.
@@ -22887,6 +22923,7 @@ function renderWeekCalendar(offsetDays) {
       const fb    = { name, vQ:v, mQ:m, _etaDate:new Date(d), bargeLabel:'', area:'' };
       const fbWin = _cardEtaWin(cid); if (fbWin) fb.etaWin = fbWin;
       if (_cardSts(cid)) fb.sts = true;
+      if (_cardLcOnly(cid)) fb.lcOnly = true;
       if (v && vP.min != null) { fb.nomVMin = vP.min; fb.nomVMax = vP.max; }
       if (m && mP.min != null) { fb.nomMMin = mP.min; fb.nomMMax = mP.max; }
       if ((v||m) && d) fallbackItems.push(fb);
