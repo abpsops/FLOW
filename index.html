@@ -7106,7 +7106,7 @@ async function sendNominationEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
   } finally {
     // _lockSendEmailButton reflects whatever sendNominationEmailIfNeeded
     // actually recorded in _nomEmailLog — if the send failed, the log was
@@ -7323,7 +7323,7 @@ async function sendNominationCancelledEmailForCard(id) {
       lc:       document.getElementById(`v${id}-lc`)?.value || '',
       eta:      document.getElementById(`v${id}-eta`)?.value || '',
       remarks:  document.getElementById(`v${id}-remarks`)?.value || ''
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
   } finally {
     const sent = _nomCancelEmailLog[card.dataset.nomUid] && _nomCancelEmailLog[card.dataset.nomUid].emailSent;
     if (sent) {
@@ -12264,9 +12264,12 @@ function holdToLaycan(nomUid) {
   const id = card.id.replace('vessel-', ''), box = document.getElementById('v' + id + '-lconly');
   if (!box) return;
   box.checked = true;
-  const name = (document.getElementById('v' + id + '-name') || {}).value || 'Vessel';
+  toggleLcOnly(id); // saved like a tick on the card, whatever the plan below does
+  const name = ((document.getElementById('v' + id + '-name') || {}).value || 'Vessel').trim();
+  const before = _lastSched;
   calculate();
-  showToast(name.trim() + ' is now supplied within its laycan only — schedule planned again.', 'success');
+  if (_lastSched !== before) showToast(name + ' is now supplied within its laycan only — schedule planned again.', 'success');
+  else showToast('Laycan only is ticked and saved for ' + name + ' — the schedule could not be planned again (see the message); Generate once the cards are complete.', 'warning', 7000);
 }
 // The tick on a nomination card: the NOMINATION is the one source of truth. Nothing
 // planned is edited (the schedule and checklist records are derived data that merge
@@ -12871,7 +12874,7 @@ function rmV(id) {
       sendNominationCancelledEmailIfNeeded(Object.assign({
         nomUid: nomUidForCancel, name, imo, area, type, qty, mgo,
         agent, manifold, spec, lc, eta, remarks
-      }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardIdFields(id)));
+      }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
     }
   }
 
@@ -14650,7 +14653,7 @@ function getVessels(quiet) {
     const remarks = document.getElementById(`v${id}-remarks`)?.value || '';
     const sts     = _cardSts(id);
     out.push({id, name, sts, lc, eta, effectiveETA, vq, mq, type, spec, agent, mani, area, isDelayed, isEarly, noFirmETA, paq, bargeId, lcOnly, held,
-              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, mmsi, remarks, etaWin, winHrs: held ? 0 : winHrs,
+              refuel: refuelChk && (rfv>0||rfm>0), rfv, rfm, rfvr, rfmr, nomUid, imo, mmsi, remarks, etaWin, winHrs,
               vqMin: vqP && vqP.min != null ? vqP.min : null, mqMin: mqP && mqP.min != null ? mqP.min : null});
   });
   return out;
@@ -14690,7 +14693,9 @@ function _schedStartOutsideBlocks(barge, start, vq, mq, winEnd, P) {
    hose-up + pumping (calcETC). A time-frame ETA can arrive as late as the
    frame END, so the barge stays committed until max(start, frame end) +
    the same supply time (worst case). */
-function _vesselFrameEnd(v) { return (v && v.winHrs && v.effectiveETA) ? addHrs(v.effectiveETA, v.winHrs) : null; }
+// A held vessel (Laycan only, due before the laycan) is ready at the laycan
+// opening: its arrival frame is over by then, so there is no frame end to wait for.
+function _vesselFrameEnd(v) { return (v && v.winHrs && v.effectiveETA && !v.held) ? addHrs(v.effectiveETA, v.winHrs) : null; }
 function _vesselJobETC(start, v, vtph, mtph, P) {
   const we = _vesselFrameEnd(v);
   return calcETC(we && we > start ? we : start, v.vq, v.mq, vtph, mtph, P.hoseHrs);
@@ -15013,7 +15018,7 @@ function _simApplyVessel(v, e) {
   if (e.etaExact instanceof Date) { winHrs = 0; etaWin = ''; }       // an exact time replaces a time frame
   if (e.shiftHrs) eta = addHrs(eta, e.shiftHrs);                     // a frame moves as a whole
   const T = _planVesselTimes(eta, winHrs, v.lc, !!etaWin, v.lcOnly);
-  return _simQtyPin(Object.assign({}, v, { eta, winHrs: T.held ? 0 : winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA, held: T.held }), v, e);
+  return _simQtyPin(Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA, held: T.held }), v, e);
 }
 // The planner's inputs for the snapshot as edited — pure.
 function _simInputs(snap, ed) {
