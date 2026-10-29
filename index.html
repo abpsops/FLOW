@@ -3478,6 +3478,10 @@ function flowWelcomeGo(pageId) {
       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
       Download as Image
     </button>
+    <button onclick="emailVoyageToBarge()" id="voy-email-btn" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px" title="The ticked rows of this barge's tab as the delivery schedule e-mail to its captain">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Email to Barge
+    </button>
   </div>
   <div id="voy-barge-tabs-card">
     <div id="voy-barge-tabs"></div>
@@ -9791,7 +9795,7 @@ function disconnectSync() {}
    starts writing it. */
 const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly'];
 // buf: legacy single buffer (read as vbuf/mbuf); _robBakedAt, receivedV/M: retired; _robGuardApplied: applyState's marker.
-const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
+const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'email', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
 function _newerBuildFields(def, known) {
   const out = {};
   if (_isPlainObj(def)) Object.keys(def).forEach(function(k) {
@@ -9818,6 +9822,7 @@ function captureCurrentState() {
       vrfr: parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,
       mrfr: parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,
       color: (document.getElementById(`b${id}-color`)?.value)||'',
+      email: (document.getElementById(`b${id}-email`)?.value||'').trim(),  // the captain's e-mail (Email to Barge)
     }));
   });
   // Reload events only for barges that still exist — a removed barge's
@@ -11731,6 +11736,93 @@ async function downloadRemainingSupplyTrackerPDF() {
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = origLabel; }
   }
+}
+
+/* ─── "Email to Barge": the ticked rows of the barge tab on screen as the
+   delivery-schedule e-mail to the barge's captain, in the operators' usual
+   layout (one table: S. NO. … SAMPLING MANIFOLD). Opens the e-mail composer
+   with the table as the formatted body: "Download Formatted Email" opens it
+   in Outlook as an unsent message with the table in place; "Copy Message
+   (formatted)" pastes the same into any new message. (A mail link can only
+   carry plain text, so "Open in Mail App" sends the plain-text version.) */
+const _VOY_EMAIL_COLS = ['S. NO.', 'VESSEL', 'ANCHORAGE AREA', 'FO (MT)', 'MGO (MT)', 'SPEC', 'NOMINATED ETA', 'ETA', 'SUPPLY PLAN', 'AGENT', 'SAMPLING MANIFOLD'];
+const _MON_UP = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+function _ordDay(n) { n = Number(n); const s = (n % 100 >= 11 && n % 100 <= 13) ? 'th' : ['th', 'st', 'nd', 'rd'][Math.min(n % 10, 4)] || 'th'; return n + s; }
+// "29th-31st OCT" (same month) / "30th OCT-2nd NOV"
+function _voyEmailLc(lc) {
+  if (!lc || !lc.from || !lc.to) return '—';
+  const f = lc.from instanceof Date ? lc.from : new Date(lc.from), t = lc.to instanceof Date ? lc.to : new Date(lc.to);
+  if (isNaN(f) || isNaN(t)) return '—';
+  if (f.getMonth() === t.getMonth() && f.getFullYear() === t.getFullYear()) return _ordDay(f.getDate()) + '-' + _ordDay(t.getDate()) + ' ' + _MON_UP[f.getMonth()];
+  return _ordDay(f.getDate()) + ' ' + _MON_UP[f.getMonth()] + '-' + _ordDay(t.getDate()) + ' ' + _MON_UP[t.getMonth()];
+}
+// "0600/30TH OCT"; a time-frame ETA keeps its frame text ("AM/30TH OCT")
+function _voyEmailEta(item) {
+  const d = item && item.eta ? (item.eta instanceof Date ? item.eta : new Date(item.eta)) : null;
+  if (!d || isNaN(d)) return '—';
+  const day = _ordDay(d.getDate()).toUpperCase() + ' ' + _MON_UP[d.getMonth()];
+  if (item.etaWin) return String(item.etaWin).toUpperCase() + '/' + day;
+  return String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '/' + day;
+}
+function _voyEmailQty(item, g) {
+  const nom = g === 'V' ? (item.nomVQ != null ? item.nomVQ : item.vQ) : (item.nomMQ != null ? item.nomMQ : item.mQ);
+  const n = Math.round(parseFloat(nom) || 0);
+  return n > 0 ? _nomQtyTxt(item, g, n).replace(/\s*MT$/i, '') : '0';
+}
+// The barge tab on screen: its id, name and e-mail, and its ticked rows in table order.
+function _voyEmailSelection() {
+  // Several barges: one voy-tab-<id> per barge (the visible one is on screen).
+  // One barge: the table sits in the container itself.
+  const tabs = Array.from(document.querySelectorAll('[id^="voy-tab-"]'));
+  const tab = tabs.length ? tabs.find(el => el.style.display !== 'none') : document.getElementById('voy-barge-tabs');
+  if (!tab) return null;
+  const fleet = getBarges() || [];
+  const barge = tabs.length ? fleet.find(b => String(b.id) === String(tab.id.replace('voy-tab-', ''))) : (fleet.length === 1 ? fleet[0] : fleet.find(b => (_lastSched || []).some(it => it && it.bargeLabel === b.name)));
+  if (!barge) return null;
+  const bid = barge.id;
+  const ticked = new Set(Array.from(tab.querySelectorAll('.voy-print-chk:checked')).map(c => c.getAttribute('data-sno')));
+  const all = (_lastSched || []).filter(it => it && it.bargeLabel === barge.name && !_isScheduleItemCompleted(it));
+  const rows = all.map((it, idx) => ({ item: it, plan: classifySeq(it, idx, all).label })).filter(r => ticked.has(String(r.item.sno)));
+  return { bid, barge, rows, total: all.length };
+}
+function _voyEmailTableHtml(rows) {
+  const th = 'border:1px solid #000;padding:3px 10px;text-align:center;color:#1E7B34;font-weight:700;font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap';
+  const td = 'border:1px solid #000;padding:3px 10px;text-align:center;color:#1F4E9C;font-family:Calibri,Arial,sans-serif;font-size:11pt;white-space:nowrap';
+  const head = '<tr>' + _VOY_EMAIL_COLS.map(c => '<th style="' + th + '">' + esc(c) + '</th>').join('') + '</tr>';
+  const body = rows.map((r, i) => {
+    const it = r.item, cells = [
+      [String(i + 1), 'color:#000'], [String(it.name || '').toUpperCase(), ''], [areaShort(it.area), ''],
+      [_voyEmailQty(it, 'V'), ''], [_voyEmailQty(it, 'M'), ''], [String(it.spec || '').replace(/^ISO\s*/i, ''), ''],
+      [_voyEmailLc(it.lc), ''], [_voyEmailEta(it), ''], [String(r.plan || '').toUpperCase(), ''], [String(it.agent || '').toUpperCase(), ''],
+      [String(it.mani || '').toUpperCase(), 'background:#FFFF00;color:#000;font-weight:700']
+    ];
+    return '<tr>' + cells.map(c => '<td style="' + td + (c[1] ? ';' + c[1] : '') + '">' + esc(c[0]) + '</td>').join('') + '</tr>';
+  }).join('');
+  return '<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:1px solid #000;font-family:Calibri,Arial,sans-serif;font-size:11pt">' + head + body + '</table>';
+}
+function _voyEmailTableText(rows) {
+  const line = cells => cells.join('\t');
+  return [line(_VOY_EMAIL_COLS)].concat(rows.map((r, i) => { const it = r.item; return line([i + 1, String(it.name || '').toUpperCase(), areaShort(it.area), _voyEmailQty(it, 'V'), _voyEmailQty(it, 'M'), String(it.spec || '').replace(/^ISO\s*/i, ''), _voyEmailLc(it.lc), _voyEmailEta(it), String(r.plan || '').toUpperCase(), String(it.agent || '').toUpperCase(), String(it.mani || '').toUpperCase()]); })).join('\n');
+}
+let _emailRawHtml = null; // a formatted body set directly (not built from the plain text)
+function emailVoyageToBarge() {
+  if (!_lastSched || !_lastSched.length) { alert('Nothing to send yet — generate the schedule first.'); return; }
+  const sel = _voyEmailSelection();
+  if (!sel) { alert('No barge tab is open in the Voyage Schedule.'); return; }
+  if (!sel.rows.length) { alert(sel.total ? 'No vessels selected.\nTick the rows of ' + sel.barge.name + '\'s tab to include them in the e-mail.' : 'No pending supplies on ' + sel.barge.name + '.'); return; }
+  const greeting = 'Good day Captain,\n\nKindly find the below delivery scheduled for your good barge.';
+  const html = '<p style="margin:0 0 14px 0">Good day Captain,</p><p style="margin:0 0 14px 0">Kindly find the below delivery scheduled for your good barge.</p>' + _voyEmailTableHtml(sel.rows) + '<p style="margin:14px 0 0 0">&nbsp;</p>';
+  const text = greeting + '\n\n' + _voyEmailTableText(sel.rows) + '\n';
+  const d = new Date();
+  document.getElementById('em-modal-title').textContent = 'Voyage Schedule — ' + sel.barge.name;
+  document.getElementById('em-to').value = sel.barge.email || '';
+  document.getElementById('em-to-note').textContent = sel.barge.email ? 'From the Captain e-mail on the barge card.' : 'No Captain e-mail on the barge card yet — type the address, or add it on the Barge Fleet card to have it filled in next time.';
+  document.getElementById('em-subject').value = 'Voyage Schedule — ' + sel.barge.name + ' — ' + String(d.getDate()).padStart(2, '0') + ' ' + MO[d.getMonth()] + ' ' + d.getFullYear();
+  document.getElementById('em-output-text').value = text;
+  _emailRawHtml = html;
+  document.getElementById('em-output-html').innerHTML = html;
+  document.getElementById('em-modal-error').style.display = 'none';
+  document.getElementById('em-modal').style.display = 'flex';
 }
 
 /* ─── Download Voyage Schedule table as PNG image (same pattern as the
@@ -23315,6 +23407,7 @@ function addBarge(def = {}) {
   bc = Math.max(bc, id);
   const name = def.name||`Barge ${id}`;
   const vcap=def.vcap??5000,mcap=def.mcap??1000,vrob=def.vrob??4500,mrob=def.mrob??900;
+  const email=String(def.email||'').trim(); // the barge's (captain's) e-mail — pre-fills "Email to Barge"
   const vbuf=def.vbuf??500,mbuf=def.mbuf??150,vtph=def.vtph??300,mtph=def.mtph??100;
   const vrfr=def.vrfr??750,mrfr=def.mrfr??275;
   const colorKey = _bargeKeyOk(def.color) ? def.color : _bargeDefaultKey();
@@ -23328,6 +23421,7 @@ function addBarge(def = {}) {
       <input type="hidden" id="b${id}-color" value="${colorKey}">
       <span class="bg-sw-row" role="group" aria-label="Barge colour">${_BARGE_PALETTE.map(function(k, i) { return `<button type="button" class="bg-sw${k === colorKey ? ' on' : ''}" data-k="${k}" style="--bc:var(--barge-${i + 1})" title="${_BARGE_PALETTE_LABEL[k]}" aria-label="Barge colour ${_BARGE_PALETTE_LABEL[k]}" onclick="setBargeColor(${id},'${k}')"></button>`; }).join('')}</span>
       <input type="text" id="b${id}-name" value="${esc(name)}" style="font-size:12px;padding:5px 9px;border:none;box-shadow:var(--sh-in-xs);border-radius:6px;width:130px;font-family:DM Sans,sans-serif" oninput="renameBargeDropdowns()">
+      <input type="email" id="b${id}-email" value="${esc(email)}" placeholder="Captain e-mail" title="The barge's e-mail address — fills the To line of Email to Barge" style="font-size:12px;padding:5px 9px;border:none;box-shadow:var(--sh-in-xs);border-radius:6px;width:170px;font-family:DM Sans,sans-serif" onchange="saveSharedState()">
       <button class="btn btn-secondary btn-sm" id="b${id}-edit-btn" onclick="toggleBargeEdit(${id})" style="gap:5px">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         Edit
@@ -23671,7 +23765,7 @@ function _refreshBargeColours() { _repaintBargeColours(); }
 function getBarges() {
   return _barges.map(b=>{
     const id=b.id;
-    return{id,name:(document.getElementById(`b${id}-name`)?.value||`Barge ${id}`).trim(),vcap:parseFloat(document.getElementById(`b${id}-vcap`)?.value)||5000,mcap:parseFloat(document.getElementById(`b${id}-mcap`)?.value)||1000,vrob:parseFloat(document.getElementById(`b${id}-vrob`)?.value)||0,mrob:parseFloat(document.getElementById(`b${id}-mrob`)?.value)||0,vbuf:parseFloat(document.getElementById(`b${id}-vbuf`)?.value)||500,mbuf:parseFloat(document.getElementById(`b${id}-mbuf`)?.value)||150,vtph:parseFloat(document.getElementById(`b${id}-vtph`)?.value)||300,mtph:parseFloat(document.getElementById(`b${id}-mtph`)?.value)||100,vrfr:parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,mrfr:parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,color:(document.getElementById(`b${id}-color`)?.value)||''};
+    return{id,name:(document.getElementById(`b${id}-name`)?.value||`Barge ${id}`).trim(),vcap:parseFloat(document.getElementById(`b${id}-vcap`)?.value)||5000,mcap:parseFloat(document.getElementById(`b${id}-mcap`)?.value)||1000,vrob:parseFloat(document.getElementById(`b${id}-vrob`)?.value)||0,mrob:parseFloat(document.getElementById(`b${id}-mrob`)?.value)||0,vbuf:parseFloat(document.getElementById(`b${id}-vbuf`)?.value)||500,mbuf:parseFloat(document.getElementById(`b${id}-mbuf`)?.value)||150,vtph:parseFloat(document.getElementById(`b${id}-vtph`)?.value)||300,mtph:parseFloat(document.getElementById(`b${id}-mtph`)?.value)||100,vrfr:parseFloat(document.getElementById(`b${id}-vrfr`)?.value)||750,mrfr:parseFloat(document.getElementById(`b${id}-mrfr`)?.value)||275,color:(document.getElementById(`b${id}-color`)?.value)||'',email:(document.getElementById(`b${id}-email`)?.value||'').trim()};
   });
 }
 /* ─── SUPPLY SEQUENCE CLASSIFIER ─── */
@@ -25842,7 +25936,7 @@ async function ciDownloadPDF() {
       </div>
       <!-- Formatted preview — matches original mail styling (bold/underline/links) -->
       <div style="font-size:10px;font-weight:700;color:var(--sub);letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px">Formatted Preview</div>
-      <div id="em-output-html" style="width:100%;min-height:180px;max-height:340px;overflow-y:auto;font-family:Calibri,'DM Sans',sans-serif;font-size:13px;line-height:1.65;padding:16px 18px;border:none;box-shadow:var(--sh-sm);border-radius:10px;color:#000;background:#fff;margin-bottom:14px"></div>
+      <div id="em-output-html" style="width:100%;min-height:180px;max-height:340px;overflow:auto;font-family:Calibri,'DM Sans',sans-serif;font-size:13px;line-height:1.65;padding:16px 18px;border:none;box-shadow:var(--sh-sm);border-radius:10px;color:#000;background:#fff;margin-bottom:14px"></div>
 
       <!-- Editable body -->
       <div style="font-size:10px;font-weight:700;color:var(--sub);letter-spacing:.07em;text-transform:uppercase;margin-bottom:5px">Email Body — Plain Text (Editable)</div>
@@ -26123,17 +26217,20 @@ function emailOpenForVessel(vid) {
   document.getElementById('em-to-note').textContent = toNote;
   document.getElementById('em-subject').value = subject;
   document.getElementById('em-output-text').value = body;
+  _emailRawHtml = null;
   document.getElementById('em-output-html').innerHTML = _emailBodyToHtml(body);
   document.getElementById('em-modal-error').style.display = 'none';
   document.getElementById('em-modal').style.display = 'flex';
 }
 
 function _emailSyncPreview() {
+  if (_emailRawHtml) return; // a formatted body (e.g. the voyage table) — the text box is its plain-text alternative
   var body = document.getElementById('em-output-text').value;
   document.getElementById('em-output-html').innerHTML = _emailBodyToHtml(body);
 }
 
 function emailCloseModal() {
+  _emailRawHtml = null;
   document.getElementById('em-modal').style.display = 'none';
   _emailVesselCtx = null;
 }
@@ -26219,6 +26316,7 @@ function emailDownloadEML() {
   var eml =
     (toHeader ? 'To: ' + toHeader + '\r\n' : '') +
     'Subject: ' + subject.replace(/[\r\n]+/g,' ') + '\r\n' +
+    'X-Unsent: 1\r\n' + // Outlook opens the file as a new, editable message instead of a received one
     'MIME-Version: 1.0\r\n' +
     'Content-Type: multipart/alternative; boundary="' + boundary + '"\r\n' +
     '\r\n' +

@@ -56,6 +56,7 @@ const SUITES = [
   ['fix-supplyedit', 'suites/fix2/supplyedit.test.js', 'audit fixes: editing / moving / deleting a saved supply corrects barge ROB on every device'],
   ['fix-stalebuild', 'suites/fix2/stalebuild.test.js', 'audit fixes: new deploy detected (banner / safe auto-reload, no loops), fields from a newer build survive an older open copy'],
   ['fix-laycan-only', 'suites/fix2/laycan-only.test.js', 'Laycan only: an early arrival held to its laycan — button on the schedule row, card tick, synced, what-if parity, trader sees no button'],
+  ['fix-voyage-email', 'suites/fix2/voyage-email.test.js', 'Email to Barge: the ticked rows of the barge tab as the delivery-schedule e-mail (table layout, Captain e-mail To line, unsent mail file, formatted copy)'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];
 
