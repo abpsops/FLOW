@@ -239,6 +239,150 @@ const dealView = (p, id) => p.evaluate((id) => {
     check('D6 the What-if Planner is gone (no nav item, page, code or page meta); Loading Deals sits in the Reports section', !g.nav && !g.page && g.fn === 'undefined' && !g.meta && !/What-if/.test(g.navText) && g.navDeals && g.dealsSection === 'reports' && g.reloadSafe, g);
   });
 
+  /* D7 — review findings: the form's pick, editing, update merges, dangling deals */
+  await scenario('D7 form pick and editing', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const dV = await addDeal(A.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    const dM = await addDeal(A.page, { supplier: 'ADNOC', terminal: 'VOPAK TERMINAL', grade: 'LSMGO', qty: 2000 });
+    // (1) "Plan this loading" from the forecast while the form held the other grade
+    const mgo = await addLoading(A.page, { grade: 'LSMGO', terminal: 'VOPAK TERMINAL', qty: 300 });
+    const plan = await A.page.evaluate(async () => {
+      calculate(); await _waitForSaveIdle();
+      const fc = _bargeStockForecast(2, 7 * 24, {}); const rec = fc.recs.find(r => r.grade === 'VLSFO');
+      if (!rec) return { noRec: true, recs: fc.recs };
+      rlPlanLoading('2', rec.key, 7 * 24);
+      const sel = document.getElementById('ld-deal');
+      return { grade: document.getElementById('ld-grade').value, deal: sel.value, opts: Array.from(sel.options).map(o => o.textContent) };
+    });
+    check('D7 "Plan this loading" (VLSFO) after an LSMGO loading: the Deal select is refreshed to the VLSFO deal', !plan.noRec && plan.grade === 'VLSFO' && plan.deal === dV && plan.opts.some(o => /VITOL/.test(o)) && !plan.opts.some(o => /ADNOC/.test(o)), plan);
+    await A.page.evaluate(() => cancelLoadingEdit());
+    // (2) a stale pick of another grade is never saved
+    const stale = await A.page.evaluate(async (dM) => {
+      showPage('loading'); document.getElementById('ld-grade').value = 'LSMGO'; _ldRefreshDealSelect(); document.getElementById('ld-deal').value = dM; document.getElementById('ld-deal').dataset.manual = '1';
+      document.getElementById('ld-grade').value = 'VLSFO'; // changed without the change event (as a script or a prefill might)
+      document.getElementById('ld-terminal').value = 'VOPAK TERMINAL'; document.getElementById('ld-qty').value = '1000'; document.getElementById('ld-start-date').value = _localDateInputStr(new Date(Date.now() + 86400000));
+      submitLoadingForm(); await _waitForSaveIdle(); const r = _loadingRecords[_loadingRecords.length - 1]; return { grade: r.grade, dealId: r.dealId || null };
+    }, dM);
+    check('D7 a dealId of another grade left in the select is dropped on save', stale.grade === 'VLSFO' && stale.dealId === null, stale);
+    // (3) auto-link prefers a deal with room for the whole loading
+    const dOld = await A.page.evaluate(async () => { _loadingDeals.push({ id: 'deal_old', supplier: 'OLDCO', terminal: 'FOT', grade: 'VLSFO', qty: 5000, date: '2026-08-01', ref: '', notes: '', status: 'open', createdAt: 1, updatedAt: Date.now() }); _loadingRecords.push({ id: 'ld_old', qty: 4900, barge: 'FNSA 10', grade: 'VLSFO', terminal: 'FOT', startAt: new Date(Date.now() - 100 * 3600000).toISOString(), endAt: new Date(Date.now() - 90 * 3600000).toISOString(), completed: true, completedAt: Date.now(), blQty: 4900, dealId: 'deal_old', updatedAt: Date.now() }); await saveLoadingRecords(); return _dealStats(_loadingDeals.find(d => d.id === 'deal_old')).available; });
+    check('D7 seed: the old FOT deal has 100 MT free', dOld === 100, dOld);
+    const big = await addLoading(A.page, { terminal: 'FOT', qty: 4500, dayOffset: 2 });
+    check('D7 auto-link skips the terminal-matching deal with only 100 MT free for the 40,000 MT deal that fits the 4,500 MT loading', big.rec.dealId === dV, big);
+    const small = await addLoading(A.page, { terminal: 'FOT', qty: 80, dayOffset: 4 });
+    check('D7 …but an 80 MT loading at FOT takes the FOT deal with 100 MT free', small.rec.dealId === 'deal_old', small);
+    // (4) editing a loading whose deal is closed keeps the link (the closed deal is offered)
+    await A.page.evaluate(async (dV) => { showPage('deals'); dealClose(dV); await _waitForSaveIdle(); }, dV);
+    const ed = await A.page.evaluate(async (id) => {
+      showPage('loading'); editLoadingRecord(id);
+      const sel = document.getElementById('ld-deal'); const opts = Array.from(sel.options).map(o => o.textContent);
+      document.getElementById('ld-surveyor').value = 'SGS'; submitLoadingForm(); await _waitForSaveIdle();
+      const r = _loadingRecords.find(x => x.id === id); return { selVal: sel.value, opts, dealId: r.dealId || null, surveyor: r.surveyor };
+    }, big.rec.id);
+    check('D7 editing a loading of a CLOSED deal: the deal is offered as "closed deal", the link survives the Update', ed.opts.some(o => /VITOL.*closed deal/.test(o)) && ed.dealId === dV && ed.surveyor === 'SGS', ed);
+    await A.page.evaluate(async (dV) => { showPage('deals'); dealReopen(dV); await _waitForSaveIdle(); }, dV);
+    // (5) Update keeps Completed + BL set on another device meanwhile
+    const B = await openT(db, 'user-operator2');
+    await B.page.evaluate(() => _pollOnce(true));
+    const upd = await A.page.evaluate((id) => { showPage('loading'); editLoadingRecord(id); document.getElementById('ld-notes').value = 'edited on A'; return _loadingEditingId === id; }, big.rec.id);
+    await B.page.evaluate(async (id) => { completeLoadingPrompt(id); document.getElementById('bl-qty').value = '4400'; blConfirm(); await _waitForSaveIdle(); }, big.rec.id);
+    const after = await A.page.evaluate(async (id) => { await _pollOnce(true); submitLoadingForm(); await _waitForSaveIdle(); const r = _loadingRecords.find(x => x.id === id); return { completed: r.completed, bl: r.blQty, notes: r.notes, dealId: r.dealId || null }; }, big.rec.id);
+    const cl = U.row(db).payload.state.loadingRecords.find(r => r.id === big.rec.id);
+    check('D7 an Update after a pull keeps the completion + BL 4,400 entered on another device (and the deal link)', upd && after.completed === true && after.bl === 4400 && after.notes === 'edited on A' && after.dealId === dV && cl.completed === true && cl.blQty === 4400, { after, cl: cl && [cl.completed, cl.blQty] });
+    // (6) a deal removed elsewhere while this device still points a loading at it: shown as removed, offered for re-linking
+    await B.page.evaluate(async (dV) => { await _pollOnce(true); dealDelete(dV); await _waitForSaveIdle(); }, dV);
+    const dang = await A.page.evaluate(async (dV) => {
+      _loadingRecords.push({ id: 'ld_dang', qty: 500, barge: 'FNSA 11', grade: 'VLSFO', terminal: 'VOPAK TERMINAL', startAt: new Date(Date.now() + 10 * 3600000).toISOString(), endAt: new Date(Date.now() + 20 * 3600000).toISOString(), dealId: dV, updatedAt: Date.now() + 5 });
+      await saveLoadingRecords(); await _pollOnce(true); showPage('loading');
+      const list = document.getElementById('loading-list').textContent.replace(/\s+/g, ' ');
+      const d2 = _loadingDeals.push({ id: 'deal_new', supplier: 'NEWCO', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 10000, date: '2026-10-30', ref: '', notes: '', status: 'open', createdAt: Date.now(), updatedAt: Date.now() });
+      showPage('deals');
+      const sel = document.querySelector('.deal-card[data-deal-id="deal_new"] .deal-foot select');
+      return { removedShown: /removed — link it again/.test(list), offered: !!sel && Array.from(sel.options).some(o => o.value === 'ld_dang'), dealGone: !_dealById(dV) };
+    }, dV).catch(e => ({ threw: String(e) }));
+    check('D7 a loading pointing at a removed deal shows "removed" and can be linked to another deal', dang.removedShown && dang.offered && dang.dealGone, dang);
+  });
+
+  /* D8 — merge per key, Clear All Data, Wipe Cloud, edit toast */
+  await scenario('D8 merge, clear, wipe', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const B = await openT(db, 'user-operator2');
+    const dV = await addDeal(A.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000, ref: 'CTR-1' });
+    const l = await addLoading(A.page, { terminal: 'VOPAK TERMINAL', qty: 4500 });
+    await B.page.evaluate(() => _pollOnce(true));
+    // A closes the deal and completes the loading; B (stale) edits the ref and the loading's notes
+    await A.page.evaluate(async (dV, id) => { showPage('deals'); dealClose(dV); await _waitForSaveIdle(); completeLoadingPrompt(id); document.getElementById('bl-qty').value = '4400'; blConfirm(); await _waitForSaveIdle(); }, dV, l.rec.id).catch(() => {});
+    await A.page.evaluate(async ({ dV, id }) => { showPage('deals'); dealClose(dV); await _waitForSaveIdle(); if (!_loadingRecords.find(r => r.id === id).completed) { completeLoadingPrompt(id); document.getElementById('bl-qty').value = '4400'; blConfirm(); await _waitForSaveIdle(); } }, { dV, id: l.rec.id });
+    await B.page.evaluate(async ({ dV, id }) => { await new Promise(r => setTimeout(r, 10)); showPage('deals'); dealEdit(dV); document.getElementById('dl-ref').value = 'CTR-77'; dealSubmit(); await _waitForSaveIdle(); showPage('loading'); editLoadingRecord(id); document.getElementById('ld-notes').value = 'B note'; submitLoadingForm(); await _waitForSaveIdle(); }, { dV, id: l.rec.id });
+    const cloud = U.row(db).payload.state; const cd = cloud.loadingDeals.find(d => d.id === dV), cr = cloud.loadingRecords.find(r => r.id === l.rec.id);
+    check('D8 merge per key: B\'s ref edit lands without reopening the deal A closed; B\'s note lands without undoing A\'s completion + BL', cd.status === 'closed' && !!cd.closedAt && cd.ref === 'CTR-77' && cr.completed === true && cr.blQty === 4400 && cr.notes === 'B note', { cd: [cd.status, cd.ref], cr: [cr.completed, cr.blQty, cr.notes] });
+    const toast = await A.page.evaluate(async (dV) => { showPage('deals'); window.__toasts = []; dealReopen(dV); await _waitForSaveIdle(); dealEdit(dV); document.getElementById('dl-qty').value = '41000'; dealSubmit(); await _waitForSaveIdle(); return window.__toasts; }, dV);
+    check('D8 editing a deal toasts "Deal updated."', toast.some(t => /Deal updated\./.test(t)) && !toast.some(t => /Deal added/.test(t)), toast);
+    // Clear All Data tombstones loadings + deals; B cannot union them back
+    const cleared = await A.page.evaluate(async () => { await nuclearClear(); await _waitForSaveIdle(); return { deals: _loadingDeals.filter(d => !d.deletedAt).length, recs: _loadingRecords.filter(r => !r.deletedAt).length, cards: document.querySelectorAll('.deal-card').length }; });
+    await B.page.evaluate(async () => { await _pollOnce(true); _loadingDeals.push({ id: 'deal_b', supplier: 'BCO', terminal: '', grade: 'LSMGO', qty: 100, date: '', ref: '', notes: '', status: 'open', createdAt: Date.now(), updatedAt: Date.now() }); await saveLoadingDeals(); });
+    const st2 = U.row(db).payload.state;
+    check('D8 Clear All Data: no live deal or loading in memory, on the page, or in the cloud after another device\'s save', cleared.deals === 0 && cleared.recs === 0 && cleared.cards === 0 && !(st2.loadingDeals || []).some(d => d.id === dV && !d.deletedAt) && !(st2.loadingRecords || []).some(r => r.id === l.rec.id && !r.deletedAt) && (st2.loadingDeals || []).some(d => d.id === 'deal_b'), { cleared, deals: (st2.loadingDeals || []).map(d => [d.id, !!d.deletedAt]) });
+  });
+  await scenario('D8b wipe cloud', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const B = await openT(db, 'user-operator2');
+    await addDeal(B.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    await addLoading(B.page, { terminal: 'VOPAK TERMINAL', qty: 4500 });
+    await B.page.evaluate(() => { if (_syncInterval) { clearInterval(_syncInterval); _syncInterval = null; } }); // B goes quiet (closed laptop)
+    const W = await openT(db, 'user-operator');
+    await W.page.evaluate(async () => { window.confirm = () => true; await wipeSupabaseWorkspace().catch(() => {}); });
+    await sleep(300);
+    check('D8b the cloud row is gone after Wipe Cloud', !U.row(db), U.row(db) && Object.keys(U.row(db)));
+    const A = await openT(db, 'user-operator');
+    await A.page.evaluate(async () => { addBarge({ name: 'FNSA 12' }); await saveSharedState(); await _waitForSaveIdle(); });
+    // B reopens later: its local store still holds the deal + loading — they must not come back
+    await B.page.reload({ waitUntil: 'load' }); await sleep(2500); await U.helpers(B);
+    const b = await B.page.evaluate(async () => { await _waitForSaveIdle(); showPage('loading'); await saveLoadingRecords(); await _waitForSaveIdle(); return { deals: _loadingDeals.filter(d => !d.deletedAt).length, recs: _loadingRecords.filter(r => !r.deletedAt).length }; });
+    const st = U.row(db) && U.row(db).payload.state;
+    check('D8b a device reopened after the wipe does not resurrect its local deals / loadings into the new cloud row', b.deals === 0 && b.recs === 0 && st && !(st.loadingDeals || []).length && !(st.loadingRecords || []).length, { b, st: st && { d: (st.loadingDeals || []).length, r: (st.loadingRecords || []).length } });
+  });
+
+  /* D9 — phone width, reload guard, modal keys */
+  await scenario('D9 phone, reload guard, keys', async (openT) => {
+    const deal = { id: 'deal_seed', supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000, date: '2026-10-01', ref: '', notes: '', status: 'open', createdAt: Date.now(), updatedAt: Date.now() };
+    const mk = (id, s, e, extra) => Object.assign({ id, qty: 4500, barge: 'FNSA 11', grade: 'VLSFO', terminal: 'VOPAK TERMINAL', startAt: hrs(s).toISOString(), endAt: hrs(e).toISOString(), updatedAt: Date.now(), dealId: 'deal_seed' }, extra || {});
+    const db = H.createDb({ workspace: seed({ deals: [deal], loadings: [mk('l1', -50, -40, { completed: true, completedAt: Date.now(), blQty: 4312 }), mk('l2', 10, 20), mk('l3', 40, 50)] }), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await A.page.setViewportSize({ width: 390, height: 844 });
+    const ph = await A.page.evaluate(() => {
+      document.querySelectorAll('#flow-welcome-overlay').forEach(e => e.remove()); showPage('deals');
+      const card = document.querySelector('.deal-card'); const wrap = card.querySelector('.deal-tbl-wrap'); const btn = card.querySelector('.rl-done-btn, .deal-act .btn');
+      const main = document.querySelector('.main') || document.body;
+      dealToggleForm(true);
+      const w = id => Math.round(document.getElementById(id).getBoundingClientRect().width);
+      return { cardW: Math.round(card.getBoundingClientRect().width), wrapScroll: wrap.scrollWidth > wrap.clientWidth, wrapW: Math.round(wrap.getBoundingClientRect().width), pageScroll: main.scrollWidth, btnX: btn ? Math.round(btn.getBoundingClientRect().left) : null, supplier: w('dl-supplier'), qty: w('dl-qty'), cols: getComputedStyle(document.querySelector('.dl-g4')).gridTemplateColumns.split(' ').length };
+    });
+    check('D9 at 390px the liftings table pans inside the card (no page overflow) and the deal form stacks to one column', ph.wrapScroll && ph.wrapW <= ph.cardW && ph.pageScroll <= 390 && ph.cols === 1 && ph.supplier > 250 && ph.qty > 250, ph);
+    await A.page.setViewportSize({ width: 1400, height: 900 });
+    const rs = await A.page.evaluate(async () => {
+      dealCancelEdit(); showPage('deals'); calculate(); await saveSharedState(); await _waitForSaveIdle(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); const base = _buildReloadSafe();
+      dealToggleForm(true); document.getElementById('dl-supplier').value = 'typing…'; const typing = _buildReloadSafe();
+      document.getElementById('dl-supplier').value = ''; dealEdit('deal_seed'); const editing = _buildReloadSafe(); dealCancelEdit();
+      completeLoadingPrompt('l2'); const modal = _buildReloadSafe(); closeBlModal(); if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+      const el = document.activeElement;
+      const why = { saveRunning: !!_saveRunning, queued: !!_saveQueued, pull: !!_pullRunning, syncing: _isSyncing, cbu: _cloudBaseUnknown, unsynced: _isMarkedUnsynced(), same: _lastSyncedPayload ? _samePayload(_buildLocalPayload(), _lastSyncedPayload) : 'nobase', active: el && el.tagName + '#' + el.id, ldEd: _loadingEditingId, dlEd: _dealEditingId, bl: !!_blModal, fields: ['ld-terminal','ld-qty','ld-surveyor','ld-notes','dl-supplier','dl-terminal','dl-qty','dl-ref','dl-notes'].map(id => (document.getElementById(id)||{}).value), fixed: Array.from(document.querySelectorAll('body [style*="position:fixed"], body [style*="position: fixed"]')).filter(o => { const r = o.getBoundingClientRect(); return o.id !== 'flow-welcome-overlay' && r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9; }).map(o => o.id || o.className) };
+      return { base, typing, editing, modal, after: _buildReloadSafe(), why };
+    });
+    check('D9 the automatic new-build reload waits while a deal is being typed / edited or the BL prompt is open', rs.base === true && rs.typing === false && rs.editing === false && rs.modal === false && rs.after === true, rs);
+    await A.page.evaluate(() => { showPage('loading'); });
+    await A.page.click('#loading-list .btn-primary'); // Done on the first scheduled loading
+    await sleep(150);
+    const k1 = await A.page.evaluate(() => ({ open: document.getElementById('bl-modal').style.display === 'flex', focus: document.activeElement && document.activeElement.id }));
+    await A.page.keyboard.press('Tab'); await A.page.keyboard.press('Tab'); await A.page.keyboard.press('Tab'); await A.page.keyboard.press('Tab');
+    const k2 = await A.page.evaluate(() => ({ inside: !!document.activeElement.closest('#bl-modal'), id: document.activeElement.id || document.activeElement.textContent.trim() }));
+    await A.page.keyboard.press('Escape');
+    const k3 = await A.page.evaluate(() => ({ open: document.getElementById('bl-modal').style.display === 'flex', completed: !!_loadingRecords.find(r => r.id === 'l2').completed, focusBack: document.activeElement && document.activeElement.closest('#loading-list') !== null }));
+    check('D9 BL prompt: focus starts in the quantity box, Tab stays inside the dialog, Escape closes without completing and returns focus to the list', k1.open && k1.focus === 'bl-qty' && k2.inside && !k3.open && !k3.completed && k3.focusBack, { k1, k2, k3 });
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

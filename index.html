@@ -674,7 +674,13 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .deal-bar .committed{background:repeating-linear-gradient(45deg,var(--amber),var(--amber) 4px,var(--amber-lt) 4px,var(--amber-lt) 8px)}
 .deal-warn{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);border:1px solid var(--amber-bd);border-left:3px solid var(--amber);border-radius:6px;padding:6px 10px;margin-bottom:8px}
 .deal-warn.bad{color:var(--red);background:var(--red-lt);border-color:var(--red-bd);border-left-color:var(--red)}
+.deal-tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px;padding:0 4px}
 .deal-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.deal-tbl td.deal-act{white-space:nowrap}
+.dl-g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px}
+.dl-g3{display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:14px}
+@media(max-width:700px){.dl-g4,.dl-g3{grid-template-columns:1fr 1fr}}
+@media(max-width:430px){.dl-g4,.dl-g3{grid-template-columns:1fr}}
 .deal-tbl th{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)}
 .deal-tbl td{padding:5px 6px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
 .deal-tbl th.n,.deal-tbl td.n{text-align:right;font-family:'DM Mono',monospace}
@@ -3539,7 +3545,7 @@ function flowWelcomeGo(pageId) {
           <option value="LSMGO">LSMGO</option>
         </select>
       </div>
-      <div class="field"><label for="ld-qty">Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field"><label for="ld-qty">Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate();_ldRefreshDealSelect()"></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
@@ -3892,7 +3898,7 @@ function flowWelcomeGo(pageId) {
   <div class="card" id="deal-form-card" style="display:none;border-top:2px solid var(--azure);margin-bottom:1.25rem">
     <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif" id="deal-form-title">New Deal</div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:14px">The bulk quantity bought. Every loading scheduled against it is deducted — by the quantity on the BL once it is marked Completed.</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+    <div class="dl-g4">
       <div class="field"><label for="dl-supplier">Supplier</label><input type="text" id="dl-supplier" placeholder="e.g. Vitol, ADNOC…"></div>
       <div class="field"><label for="dl-terminal">Terminal <span style="font-weight:400;color:var(--muted)">— where it is lifted</span></label><input type="text" id="dl-terminal" placeholder="e.g. VOPAK TERMINAL" list="ld-terminal-list"></div>
       <div class="field"><label for="dl-grade">Grade</label>
@@ -3900,7 +3906,7 @@ function flowWelcomeGo(pageId) {
       </div>
       <div class="field"><label for="dl-qty">Quantity bought (MT)</label><input type="number" id="dl-qty" min="0" step="100" placeholder="e.g. 40000"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:14px">
+    <div class="dl-g3">
       <div class="field"><label for="dl-date">Deal date</label><input type="date" id="dl-date"></div>
       <div class="field"><label for="dl-ref">Reference <span style="font-weight:400;color:var(--muted)">— contract / deal no.</span></label><input type="text" id="dl-ref" placeholder="e.g. CTR-2026-014"></div>
       <div class="field"><label for="dl-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="dl-notes" placeholder="Spec, pricing basis, remarks…"></div>
@@ -7661,6 +7667,7 @@ function _merge3(b, l, r, key, ctx, path) {
     const f = _pickIdField(key, [bArr, l, r]);
     if (f) return _mergeById(bArr, l, r, f, key, ctx, path);
   } else if (_isPlainObj(l) && _isPlainObj(r) && !_MERGE_ATOMIC_KEYS[key]) {
+    if ((key === 'loadingRecords[]' || key === 'loadingDeals[]') && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
     if (l.updatedAt != null || r.updatedAt != null) {
       _mergeConflict(ctx, path);
       return (Number(r.updatedAt) || 0) > (Number(l.updatedAt) || 0) ? r : l;
@@ -7669,6 +7676,30 @@ function _merge3(b, l, r, key, ctx, path) {
   }
   _mergeConflict(ctx, path);
   return l;
+}
+// A loading record / deal edited on both sides: per key, the side that changed
+// it vs base; a key both changed differently → the side with the newer
+// updatedAt. So a completion + BL figure, a closed status or a tombstone set
+// on one device is never undone by the other's edit of another field.
+function _mergeByNewer(b, l, r, ctx, path) {
+  const newer = (Number(r.updatedAt) || 0) > (Number(l.updatedAt) || 0) ? r : l;
+  const has = function(o, k) { return Object.prototype.hasOwnProperty.call(o, k) && o[k] !== undefined; };
+  const keys = Array.from(new Set(Object.keys(l).concat(Object.keys(r), Object.keys(b))));
+  const out = {};
+  let clash = false;
+  keys.forEach(function(k) {
+    if (k === 'updatedAt') return;
+    const inL = has(l, k), inR = has(r, k), inB = has(b, k);
+    const lCh = inL ? (!inB || !_sameJSON(l[k], b[k])) : inB;
+    const rCh = inR ? (!inB || !_sameJSON(r[k], b[k])) : inB;
+    let src = l;
+    if (lCh && rCh && !_sameJSON(inL ? l[k] : null, inR ? r[k] : null)) { src = newer; clash = true; }
+    else if (rCh && !lCh) src = r;
+    if (has(src, k)) out[k] = src[k];
+  });
+  out.updatedAt = Math.max(Number(l.updatedAt) || 0, Number(r.updatedAt) || 0);
+  if (clash) _mergeConflict(ctx, path);
+  return out;
 }
 function _mergeKeys(b, l, r, ctx, path) {
   const out = {};
@@ -8606,6 +8637,14 @@ async function _applyPulledRow(row, force) {
       return true;
     }
   }
+  // Nothing unsynced on this device: the cloud's loadings and deals are the
+  // truth — the local store's copy (which may predate a Wipe Cloud / Clear
+  // All Data elsewhere) must not be unioned back in and re-uploaded.
+  if (!_isMarkedUnsynced() && row.payload && row.payload.state) {
+    const st = row.payload.state;
+    if (Array.isArray(st.loadingRecords)) _loadingRecords = _deepClone(st.loadingRecords);
+    if (Array.isArray(st.loadingDeals)) _loadingDeals = _deepClone(st.loadingDeals);
+  }
   _applyPayload(row.payload, false);
   _adoptBase(row, true);
   _markUnsynced(false);
@@ -8824,7 +8863,9 @@ function _readLoadingForm() {
   const endOverride = document.getElementById('ld-end-date-override')?.value;
   const surveyor = (document.getElementById('ld-surveyor')?.value || '').trim();
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
-  const dealId = document.getElementById('ld-deal')?.value || '';
+  let dealId = document.getElementById('ld-deal')?.value || '';
+  const deal = dealId ? _dealById(dealId) : null;
+  if (!deal || (deal.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') !== grade) dealId = ''; // a removed deal, or a stale pick of another grade
 
   if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
@@ -8964,7 +9005,13 @@ function updateLoadingRecord(id) {
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
   if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id)) return;
-  _loadingRecords[idx] = Object.assign({ id: id }, data, { updatedAt: Date.now() });
+  // The form's fields replace the record's; everything else the record carries
+  // (Completed + its BL figure set on another device meanwhile, a tombstone…)
+  // is kept. Fields the form left out on purpose are cleared.
+  const next = Object.assign({}, _loadingRecords[idx], data, { id: id, updatedAt: Date.now() });
+  if (!data.startWin) delete next.startWin;
+  if (!data.dealId) delete next.dealId;
+  _loadingRecords[idx] = next;
   saveLoadingRecords();
   cancelLoadingEdit();
   renderLoadingList();
@@ -9063,7 +9110,7 @@ function _refreshLoadingTerminalDatalist() {
    the same local store as the loading records.
    ══════════════════════════════════════════════════════ */
 let _dealEditingId = null;
-function _dealById(id) { return (_loadingDeals || []).find(function(d) { return d && d.id === id; }) || null; }
+function _dealById(id, withDeleted) { return (_loadingDeals || []).find(function(d) { return d && d.id === id && (withDeleted || !d.deletedAt); }) || null; }
 function _dealLabel(d) {
   if (!d) return '';
   return [d.supplier || 'Deal', d.ref ? d.ref : '', (Number(d.qty) || 0).toLocaleString() + ' MT ' + (d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'), d.date ? _dealDateStr(d.date) : ''].filter(Boolean).join(' · ');
@@ -9094,13 +9141,17 @@ function _dealsOpen(grade) {
 // The deal a new loading lifts from: an open deal of that grade at that terminal with
 // quantity still available, else the oldest open deal of the grade with quantity available,
 // else any open deal of the grade (the page shows the shortfall).
-function _autoDealFor(grade, terminal) {
+function _autoDealFor(grade, terminal, qty) {
   const open = _dealsOpen(grade);
   if (!open.length) return null;
   const t = String(terminal || '').trim().toLowerCase();
+  const q = Number(qty) || 0;
+  const byTerminal = function(pool) { return (t && pool.find(function(d) { return String(d.terminal || '').trim().toLowerCase() === t; })) || pool[0]; };
+  // Deals with room for the whole loading first, then any with quantity free, then any open deal.
+  const fits = q > 0 ? open.filter(function(d) { return _dealStats(d).available >= q; }) : [];
+  if (fits.length) return byTerminal(fits);
   const avail = open.filter(function(d) { return _dealStats(d).available > 0; });
-  const pool = avail.length ? avail : open;
-  return (t && pool.find(function(d) { return String(d.terminal || '').trim().toLowerCase() === t; })) || pool[0];
+  return byTerminal(avail.length ? avail : open);
 }
 // The Deal dropdown on the Loading form: open deals of the chosen grade, the
 // matching one pre-selected unless the user picked one (or "No deal") themselves.
@@ -9109,19 +9160,24 @@ function _ldRefreshDealSelect(preferId) {
   if (!sel) return;
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const terminal = document.getElementById('ld-terminal')?.value || '';
+  const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
   const open = _dealsOpen(grade);
   const cur = preferId !== undefined ? preferId : sel.value;
-  sel.innerHTML = '<option value="">No deal — not deducted from a bulk purchase</option>' + open.map(function(d) {
+  // A record's own deal that is closed (or of another grade) is still offered,
+  // so editing the loading does not silently unlink it.
+  const own = preferId && !open.some(function(d) { return d.id === preferId; }) ? _dealById(preferId) : null;
+  const list = own ? open.concat([own]) : open;
+  sel.innerHTML = '<option value="">No deal — not deducted from a bulk purchase</option>' + list.map(function(d) {
     const st = _dealStats(d);
-    return '<option value="' + esc(d.id) + '">' + esc(_dealLabel(d)) + ' — ' + esc(_mtStr(st.available)) + ' MT available</option>';
+    return '<option value="' + esc(d.id) + '">' + esc(_dealLabel(d)) + ' — ' + esc(d.status === 'closed' ? 'closed deal' : _mtStr(st.available) + ' MT available') + '</option>';
   }).join('');
-  const valid = function(id) { return !!id && open.some(function(d) { return d.id === id; }); };
+  const valid = function(id) { return !!id && list.some(function(d) { return d.id === id; }); };
   let want = '';
   if (preferId !== undefined) { want = valid(preferId) ? preferId : ''; sel.dataset.manual = '1'; } // a record's own deal, when editing: kept
   else if (sel.dataset.manual) want = valid(cur) ? cur : '';                                         // the user's own pick (or "No deal"): kept
-  else { const a = _autoDealFor(grade, terminal); want = a ? a.id : ''; }                           // otherwise re-picked on every change
+  else { const a = _autoDealFor(grade, terminal, qty); want = a ? a.id : ''; }                      // otherwise re-picked on every change
   sel.value = want;
-  sel.disabled = !open.length && !want;
+  sel.disabled = !list.length && !want;
 }
 
 /* Completing a loading asks for the quantity on the BL — that is what the deal loses. */
@@ -9140,7 +9196,7 @@ function editLoadingBl(id) {
 function _openBlModal(rec, mode, opts) {
   const m = document.getElementById('bl-modal');
   if (!m) { if (mode === 'complete') markLoadingRecordDone(rec.id); return; }
-  _blModal = { id: rec.id, mode: mode, opts: opts };
+  _blModal = { id: rec.id, mode: mode, opts: opts, returnFocus: document.activeElement };
   const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
   document.getElementById('bl-title').textContent = mode === 'complete' ? 'Mark loading Completed' : 'Quantity loaded per BL';
   document.getElementById('bl-sub').textContent = (rec.terminal || 'Terminal') + ' · ' + (_resolveRecordBargeName(rec) || 'barge') + ' · planned ' + _mtStr(rec.qty) + ' MT ' + grade + ' · ' + fmt24(new Date(rec.startAt));
@@ -9171,9 +9227,28 @@ function _blPreview() {
     (after < 0 ? ' <span style="color:var(--red);font-weight:700">— more than the deal has left</span>' : '');
 }
 function closeBlModal() {
+  const was = _blModal;
   _blModal = null;
   const m = document.getElementById('bl-modal');
   if (m) m.style.display = 'none';
+  try { if (was && was.returnFocus && was.returnFocus.focus && document.contains(was.returnFocus)) was.returnFocus.focus(); } catch (e) {}
+}
+// Escape closes; Tab stays inside the dialog (wherever focus went).
+document.addEventListener('keydown', function(e) { if (_blModal) _blModalKeys(e); });
+function _blModalKeys(e) {
+  if (!_blModal) return;
+  if (e.key === 'Escape') { e.preventDefault(); closeBlModal(); return; }
+  if (e.key !== 'Tab') return;
+  const m = document.getElementById('bl-modal');
+  const items = Array.from(m.querySelectorAll('input, button')).filter(function(x) { return !x.disabled && x.offsetParent !== null; });
+  if (!items.length) return;
+  const i = items.indexOf(document.activeElement);
+  let next = e.shiftKey ? i - 1 : i + 1;
+  if (i === -1) next = 0;
+  if (next >= items.length) next = 0;
+  if (next < 0) next = items.length - 1;
+  e.preventDefault();
+  items[next].focus();
 }
 function blConfirm() {
   if (!_blModal) return;
@@ -9206,6 +9281,7 @@ function dealToggleForm(show) {
   if (!card) return;
   const open = show !== undefined ? show : card.style.display === 'none';
   card.style.display = open ? '' : 'none';
+  if (!open && document.activeElement && card.contains(document.activeElement)) { try { document.activeElement.blur(); } catch (e) {} }
   if (open) {
     if (!_dealEditingId) {
       const dt = document.getElementById('dl-date');
@@ -9235,6 +9311,7 @@ function _clearDealForm() {
 function dealSubmit() {
   const data = _readDealForm();
   if (!data) return;
+  const wasEdit = !!_dealEditingId;
   if (!Array.isArray(_loadingDeals)) _loadingDeals = [];
   if (_dealEditingId) {
     const d = _dealById(_dealEditingId);
@@ -9246,7 +9323,7 @@ function dealSubmit() {
   dealCancelEdit();
   renderDeals();
   _ldRefreshDealSelect();
-  showToast(_dealEditingId ? 'Deal updated.' : 'Deal added — loadings of this grade now lift from it.', 'success');
+  showToast(wasEdit ? 'Deal updated.' : 'Deal added — loadings of this grade now lift from it.', 'success');
 }
 function dealEdit(id) {
   const d = _dealById(id);
@@ -9317,7 +9394,7 @@ function _dealCardHtml(d, operator) {
   const ldMap = _bargeColorMap();
   const rows = st.loadings.map(function(r) {
     const when = r.completed ? fmt24(new Date(r.completedAt || r.endAt)) : fmt24(new Date(r.startAt));
-    const act = operator ? '<td class="deal-act" style="white-space:nowrap">' +
+    const act = operator ? '<td class="deal-act">' +
       (r.completed ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button> ' : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark Completed — asks for the BL quantity">Done</button> ') +
       '<button class="btn btn-secondary btn-sm" onclick="dealUnlinkLoading(\'' + escJs(r.id) + '\')" title="Unlink from this deal">×</button></td>' : '';
     return '<tr class="' + (r.completed ? 'done' : '') + '"><td>' + esc(when) + '</td><td>' + _bargePill(_resolveRecordBargeName(r), ldMap) + '</td><td>' + esc(r.terminal || '—') + '</td>' +
@@ -9325,7 +9402,7 @@ function _dealCardHtml(d, operator) {
       '<td>' + (r.completed ? '<span class="ld-chip" style="background:var(--green-lt);color:var(--green)">LIFTED</span>' : '<span class="ld-chip" style="background:var(--amber-lt);color:var(--amber)">SCHEDULED</span>') + '</td>' + act + '</tr>';
   });
   const linked = {}; (_loadingRecords || []).forEach(function(r) { if (r && r.dealId) linked[r.id] = 1; });
-  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && !r.dealId && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
+  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && (!r.dealId || !_dealById(r.dealId)) && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
     .sort(function(a, b) { return new Date(b.startAt) - new Date(a.startAt); }) : [];
   const linkSel = linkable.length ? '<select onchange="dealLinkLoading(\'' + escJs(d.id) + '\', this.value)" aria-label="Link a loading to this deal"><option value="">Link a loading of ' + esc(grade) + '…</option>' +
     linkable.map(function(r) { return '<option value="' + esc(r.id) + '">' + esc(fmt24(new Date(r.startAt)) + ' · ' + (_resolveRecordBargeName(r) || '') + ' · ' + (r.terminal || '') + ' · ' + _mtStr(r.completed && r.blQty != null ? r.blQty : r.qty) + ' MT' + (r.completed ? ' (lifted)' : '')) + '</option>'; }).join('') + '</select>' : '';
@@ -9348,7 +9425,7 @@ function _dealCardHtml(d, operator) {
       '<div class="deal-num"><div class="deal-num-l">Free to plan</div><div class="deal-num-v ' + (st.available < 0 ? 'bad' : '') + '">' + esc(_mtStr(st.available)) + '</div><div class="deal-num-d">left − scheduled</div></div>' +
     '</div>' +
     '<div class="deal-bar" title="' + esc(Math.round(liftedPct) + '% lifted, ' + Math.round(commPct) + '% scheduled') + '"><i class="lifted' + (grade === 'LSMGO' ? ' m' : '') + '" style="width:' + liftedPct.toFixed(1) + '%"></i><i class="committed" style="width:' + commPct.toFixed(1) + '%"></i></div>' +
-    (rows.length ? '<table class="deal-tbl"><thead><tr><th>When</th><th>Barge</th><th>Terminal</th><th class="n">Planned MT</th><th class="n">Lifted MT (BL)</th><th>Status</th>' + (operator ? '<th class="deal-act"></th>' : '') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>'
+    (rows.length ? '<div class="deal-tbl-wrap"><table class="deal-tbl"><thead><tr><th>When</th><th>Barge</th><th>Terminal</th><th class="n">Planned MT</th><th class="n">Lifted MT (BL)</th><th>Status</th>' + (operator ? '<th class="deal-act"></th>' : '') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>'
       : '<div class="deal-meta">No loading lifts from this deal yet — schedule one on the Loading page (it links automatically) or link an existing one below.</div>') +
     '<div class="deal-foot">' + linkSel + '<span style="flex:1"></span>' + actions + '</div>' +
   '</div>';
@@ -9425,7 +9502,7 @@ function renderLoadingList() {
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + esc(r.terminal || '—') + '</div>'
           + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.completed && r.blQty != null ? ' planned · <b>BL ' + Number(r.blQty).toLocaleString() + ' MT</b>' : '') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
-          + (r.dealId ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Deal: ' + esc(_dealLabel(_dealById(r.dealId)) || 'removed deal') + '</div>' : '')
+          + (r.dealId ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Deal: ' + (_dealById(r.dealId) ? esc(_dealLabel(_dealById(r.dealId))) : 'removed — link it again on the Loading Deals page') + '</div>' : '')
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + esc(r.surveyor) + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
@@ -10069,7 +10146,9 @@ function _buildReloadSafe() {
   // A form typed into but not saved yet, or an upload on its way: the Loading
   // form (new or editing), a chosen file (Barge Tracking report) not uploaded.
   if (typeof _loadingEditingId !== 'undefined' && _loadingEditingId) return false;
-  if (['ld-terminal', 'ld-qty', 'ld-surveyor', 'ld-notes'].some(function(id) { return ((document.getElementById(id) || {}).value || '').trim(); })) return false;
+  if (typeof _dealEditingId !== 'undefined' && _dealEditingId) return false;
+  if (typeof _blModal !== 'undefined' && _blModal) return false;
+  if (['ld-terminal', 'ld-qty', 'ld-surveyor', 'ld-notes', 'dl-supplier', 'dl-terminal', 'dl-qty', 'dl-ref', 'dl-notes'].some(function(id) { return ((document.getElementById(id) || {}).value || '').trim(); })) return false;
   const btrFile = document.getElementById('btr-file');
   if (btrFile && btrFile.files && btrFile.files.length) return false;
   const up = document.getElementById('btr-upload-btn');
@@ -16932,6 +17011,7 @@ function rlPlanLoading(bargeId, key, hrs) {
   var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.terminal && r.barge === rec.bargeName; })
     .sort(function(a, c) { return new Date(c.startAt) - new Date(a.startAt); })[0];
   set('ld-terminal', last ? last.terminal : '');
+  _ldRefreshDealSelect(); // the deal for THIS grade, terminal and quantity (the form may have held another grade)
   set('ld-notes', 'Reload plan — ' + rec.grade + ' for ' + rec.vessel + ' (' + _rlFmt(rec.jobStart) + '), reload by ' + _rlFmt(rec.reloadBy));
   _recalcLoadingEstimate();
   var card = document.getElementById('loading-form-card');
@@ -24111,6 +24191,18 @@ async function nuclearClear() {
   _calcParams       = { hoseHrs: 6, travelHrs: 1, contingencyHrs: 1 };
   _bargeBlocks      = []; // blocks belong to the wiped barges
   _lastSchedMeta    = null;
+  // Loadings and deals: tombstoned (like archives) so another device's copy
+  // cannot union them back; the local store is rewritten with the tombstones.
+  (function() {
+    const now = Date.now();
+    const tomb = function(x) { return Object.assign({}, x, { deletedAt: x.deletedAt || now, updatedAt: now }); };
+    _loadingRecords = (_loadingRecords || []).map(tomb);
+    _loadingDeals = (_loadingDeals || []).map(tomb);
+    _loadingEditingId = null; _dealEditingId = null;
+    _saveLoadingToLocal();
+    if (typeof renderLoadingList === 'function') renderLoadingList();
+    if (typeof renderDeals === 'function') renderDeals();
+  })();
   saveCalcParams();
   renderCalcParamsView();
   if (typeof _ciClearTemplates === 'function') _ciClearTemplates();
@@ -24644,13 +24736,13 @@ async function init() {
 <!-- ═══ RELOAD QUANTITY MODAL ═══ -->
 <!-- Loading completed: the quantity actually loaded (per BL) — deducted from the deal -->
 <div id="bl-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9650;align-items:center;justify-content:center" onclick="if(event.target===this)closeBlModal()">
-  <div style="background:var(--surface);border-radius:16px;width:min(460px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+  <div role="dialog" aria-modal="true" aria-labelledby="bl-title" style="background:var(--surface);border-radius:16px;width:min(460px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
     <div style="background:linear-gradient(135deg,var(--ink-solid),var(--pg-loading));color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
       <div>
         <div style="font-size:15px;font-weight:700;font-family:DM Sans,sans-serif" id="bl-title">Mark loading Completed</div>
         <div style="font-size:11px;opacity:.65;margin-top:2px" id="bl-sub"></div>
       </div>
-      <button onclick="closeBlModal()" aria-label="Close" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
+      <button onclick="closeBlModal()" aria-label="Close" id="bl-close-btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
     </div>
     <div style="padding:20px">
       <div class="field"><label for="bl-qty">Quantity loaded per BL (MT)</label><input type="number" id="bl-qty" min="0" step="1" inputmode="decimal" oninput="_blPreview()" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
