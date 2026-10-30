@@ -1376,6 +1376,7 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
 .lc-rng{font-size:10.5px;font-weight:600;font-family:'DM Mono',monospace}
 .lc-hold-btn{margin-left:5px;font:inherit;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--azure);background:var(--azure-lt);color:var(--azure);cursor:pointer;vertical-align:middle;white-space:nowrap}
 .lc-hold-btn:hover{background:var(--azure);color:#fff}
+.rl-pending-note{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);border:1px solid var(--amber-bd);border-left:3px solid var(--amber);border-radius:6px;padding:7px 10px;margin-bottom:6px;line-height:1.5}
 .rl-events li.rl-pending{background:var(--amber-lt);border:1px solid var(--amber-bd);border-radius:6px;padding:3px 8px;margin:3px 0}
 .rl-done-btn{margin-left:6px;font:inherit;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--amber);background:#fff;color:var(--amber);cursor:pointer;vertical-align:middle;white-space:nowrap}
 .rl-done-btn:hover{background:var(--amber);color:#fff}
@@ -11137,13 +11138,15 @@ function renderRemainingSupplyTracker(){
   if(!el)return;
   var recs=Object.values(_checklistRecords||{}).filter(function(r){return r.state!=='completed';}).sort(function(a,b){return a.sno-b.sno;});
 
-  // Deduplicate by vessel name — if the same vessel appears more than once
-  // (e.g. from stale schedule re-injection), keep only the first occurrence.
-  var seenVessels = new Set();
+  // Deduplicate PER NOMINATION (as the Checklist does): a row per nomUid;
+  // only legacy rows without one fall back to the vessel name. Deduping by
+  // name alone dropped a genuine second call of the same ship (different
+  // dates, grades, even barges) from the table.
+  var seenKeys = new Set();
   recs = recs.filter(function(r) {
-    var key = (r.vessel || '').trim().toLowerCase();
-    if (seenVessels.has(key)) return false;
-    seenVessels.add(key);
+    var key = r.nomUid ? 'n:' + r.nomUid : 'v:' + (r.vessel || '').trim().toLowerCase();
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 
@@ -16562,6 +16565,22 @@ var FW_LOOKAHEAD_DAYS = 30;  // later commitments still claim stock even outside
    (completed ones skipped by _getBargeTimeline), Unavailable blocks and
    planned Loadings. opts.liveROBs: a getAllLiveROBs() result to reuse when
    projecting several barges in one pass. ─── */
+// Why an ended-but-uncompleted loading must NOT be added to the stock
+// forecast ('' = it counts): its fuel is evidently already in the live ROB,
+// or the record is too old to trust. The ROB figure a reload event or an
+// ROB Update gives already holds whatever that loading delivered.
+var PL_MAX_AGE_HRS = 48;
+function _pendingLoadingNotCounted(bargeId, grade, start, end, now) {
+  var gk = grade === 'LSMGO' ? 'm' : 'v';
+  var ts = function(x) { var n = typeof x === 'number' ? x : new Date(x).getTime(); return isNaN(n) ? -1 : n; };
+  var s0 = start.getTime();
+  if ((_bargeReloads || []).some(function(rl) { return rl && rl.kind !== 'correction' && String(rl.bargeId) === String(bargeId) && Number(rl[gk]) > 0 && ts(rl.at) >= s0; })) return 'a ' + grade + ' reload was recorded in ROB after it started';
+  var fin = (_manualROB || {})[bargeId + '_final'];
+  var measured = Math.max(_robMeasuredAt(bargeId, gk), fin ? ts(fin.editedAt) : -1);
+  if (measured >= s0) return 'ROB was updated after it started';
+  if (now.getTime() - end.getTime() > PL_MAX_AGE_HRS * 3600000) return 'it ended over ' + (PL_MAX_AGE_HRS / 24) + ' days ago';
+  return '';
+}
 function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   var now = new Date();
   var cont = _contingencyHrs();
@@ -16573,7 +16592,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   var vcap = liveRob.vcap || 0, mcap = liveRob.mcap || 0;
   var st = { v: liveRob.liveV || 0, m: liveRob.liveM || 0 };
 
-  var items = [], past = [];
+  var items = [], past = [], pre = [];
   var pastBusyEnd = null;
   // A job commits its planning quantity (nominated, top of a range) — not
   // the scheduler's vQ/mQ, which stop at whatever ROB it saw at generation
@@ -16584,9 +16603,8 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     if (op.pastEtc) {
       // ETC passed but supply not saved: still committed fuel (live ROB
       // hasn't deducted it) and the barge may still be in its contingency.
-      st.v = Math.max(0, st.v - qV(op));
-      st.m = Math.max(0, st.m - qM(op));
-      past.push({ vessel: op.vessel, nomUid: op.nomUid, nomV: qV(op), nomM: qM(op), start: op.start, end: op.etc });
+      var pj = { kind: 'overdue', t: op.start, vessel: op.vessel, nomUid: op.nomUid, nomV: qV(op), nomM: qM(op), start: op.start, end: op.etc };
+      past.push(pj); pre.push(pj);
       var pe = _opBusyEnd(op);
       if (!pastBusyEnd || pe > pastBusyEnd) pastBusyEnd = pe;
       return;
@@ -16597,17 +16615,35 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   });
   // A loading whose window has passed but that nobody marked Completed: the
   // plan says the fuel is on board, so it counts from now — until it is marked
-  // Completed (then the reload recorded in ROB takes over). Flagged in the
-  // forecast's events so it is not forgotten.
+  // Completed (then the reload recorded in ROB takes over). Not counted (only
+  // flagged) once the ROB evidently already holds it — a reload of that grade
+  // recorded after it started, the ROB updated after it started — or when it
+  // ended so long ago that a forgotten record would inflate stock forever.
   var pendingLoads = [];
+  var bid = barge.id != null ? barge.id : bargeId;
   (_loadingRecords || []).filter(function(r) {
     return r && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
   }).sort(function(a, b) { return new Date(a.endAt) - new Date(b.endAt); }).forEach(function(r) {
     var q = Number(r.qty) || 0, g = r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
     if (!q) return;
-    if (g === 'LSMGO') st.m = mcap ? Math.min(mcap, st.m + q) : st.m + q; else st.v = vcap ? Math.min(vcap, st.v + q) : st.v + q;
-    pendingLoads.push({ loadingId: r.id, terminal: r.terminal || '', grade: g, qty: q, start: new Date(r.startAt), end: new Date(r.endAt) });
+    var en = new Date(r.endAt), st0 = new Date(r.startAt);
+    if (isNaN(st0.getTime())) st0 = en;
+    var why = _pendingLoadingNotCounted(bid, g, st0, en, now);
+    var p = { kind: 'pending', t: en, loadingId: r.id, terminal: r.terminal || '', grade: g, qty: q, start: st0, end: en, counted: !why, why: why };
+    pendingLoads.push(p); pre.push(p);
   });
+  // Overdue jobs (at their start) and pending loadings (at their end) in the
+  // order they happened: a loading that ended before an overdue job topped
+  // the tank up BEFORE that job drew on it.
+  pre.sort(function(a, b) { return a.t - b.t; });
+  function applyPre(p, s) {
+    if (p.kind === 'overdue') { s.v = Math.max(0, s.v - p.nomV); s.m = Math.max(0, s.m - p.nomM); }
+    else if (p.counted) {
+      if (p.grade === 'LSMGO') s.m = mcap ? Math.min(mcap, s.m + p.qty) : s.m + p.qty;
+      else s.v = vcap ? Math.min(vcap, s.v + p.qty) : s.v + p.qty;
+    }
+  }
+  pre.forEach(function(p) { applyPre(p, st); });
   (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
     var s = new Date(r.startAt), e = new Date(r.endAt);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= lookEnd) return;
@@ -16637,7 +16673,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     }
     return { v: Math.max(0, minV - vbuf), m: Math.max(0, minM - mbuf), lowV: minV, lowM: minM };
   }
-  return { now: now, barge: barge, liveRob: liveRob, pendingLoads: pendingLoads, vcap: vcap, mcap: mcap, vbuf: vbuf, mbuf: mbuf, cont: cont,
+  return { now: now, barge: barge, liveRob: liveRob, pendingLoads: pendingLoads, pre: pre, applyPre: applyPre, vcap: vcap, mcap: mcap, vbuf: vbuf, mbuf: mbuf, cont: cont,
            robNow: { v: liveRob.liveV || 0, m: liveRob.liveM || 0 }, start: { v: st.v, m: st.m },
            past: past, pastBusyEnd: pastBusyEnd, items: items, apply: apply, atpFrom: atpFrom };
 }
@@ -16892,14 +16928,11 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
   // ── Time series: the projection walked exactly as Free Windows walks it.
   var s = { v: proj.robNow.v, m: proj.robNow.m };
   var events = [{ t: now, kind: 'now', label: 'ROB now', v: s.v, m: s.m, dv: 0, dm: 0 }];
-  proj.past.forEach(function(p) {
-    s.v = Math.max(0, s.v - p.nomV); s.m = Math.max(0, s.m - p.nomM);
-    events.push({ t: now, kind: 'overdue', label: p.vessel, vessel: p.vessel, nomUid: p.nomUid, jobStart: p.start, dv: -p.nomV, dm: -p.nomM, v: s.v, m: s.m });
-  });
-  (proj.pendingLoads || []).forEach(function(p) {
+  (proj.pre || []).forEach(function(p) {
     var bv = s.v, bm = s.m;
-    if (p.grade === 'LSMGO') s.m = proj.mcap ? Math.min(proj.mcap, s.m + p.qty) : s.m + p.qty; else s.v = proj.vcap ? Math.min(proj.vcap, s.v + p.qty) : s.v + p.qty;
-    events.push({ t: now, kind: 'pending-loading', label: p.terminal || 'Terminal', loadingId: p.loadingId, grade: p.grade, qty: p.qty, start: p.start, end: p.end, dv: s.v - bv, dm: s.m - bm, v: s.v, m: s.m });
+    proj.applyPre(p, s);
+    if (p.kind === 'overdue') events.push({ t: now, kind: 'overdue', label: p.vessel, vessel: p.vessel, nomUid: p.nomUid, jobStart: p.start, dv: -p.nomV, dm: -p.nomM, v: s.v, m: s.m });
+    else events.push({ t: now, kind: 'pending-loading', label: p.terminal || 'Terminal', loadingId: p.loadingId, grade: p.grade, qty: p.qty, start: p.start, end: p.end, counted: p.counted, why: p.why, dv: s.v - bv, dm: s.m - bm, v: s.v, m: s.m });
   });
   s = { v: proj.start.v, m: proj.start.m };
   var lastT = now;
@@ -17261,7 +17294,8 @@ function _rlRecHtml(r, operator, hrs) {
 // "Mark Completed" on a pending loading in the forecast: same as on the Loading page.
 function rlCompleteLoading(id) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
-  if (!rec) { showToast('That loading is no longer in the list.', 'warning'); return; }
+  if (!rec || rec.deletedAt) { showToast('That loading is no longer in the list.', 'warning'); return; }
+  if (rec.completed) { showToast('That loading is already marked Completed.', 'warning'); _refreshLoadingConsumers(); return; }
   markLoadingRecordDone(id); // saves, re-renders the forecast (via _refreshLoadingConsumers)
   showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed. Now record the reload (' + Number(rec.qty || 0).toLocaleString() + ' MT ' + (rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') + ') in the barge\'s ROB so the stock shows.', 'success', 8000);
 }
@@ -17275,13 +17309,28 @@ function _rlEventListHtml(fc) {
     }
     if (e.kind === 'loading') return '<li>' + when + ' — Loading at ' + esc(e.label) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
     if (e.kind === 'pending-loading') {
-      var btn = (typeof isTrader === 'function' && isTrader()) ? '' : ' <button type="button" class="rl-done-btn" onclick="rlCompleteLoading(' + JSON.stringify(String(e.loadingId)).replace(/"/g, '&quot;') + ')" title="Mark this loading Completed on the Loading page — then record the reload in the barge\'s ROB">Mark Completed</button>';
-      return '<li class="rl-pending">' + esc(_rlFmt(e.end)) + ' — Loading at ' + esc(e.label) + ' ended, <b>not marked Completed</b>: +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is → ' + esc(after) + btn + '</li>';
+      return '<li class="rl-pending">' + esc(_rlFmt(e.end)) + ' — Loading at ' + esc(e.label) + ' ended, <b>not marked Completed</b>' +
+        (e.counted ? ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is' : ' — ' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' not counted (' + esc(e.why) + ')') +
+        ' → ' + esc(after) + _rlDoneBtn(e) + '</li>';
     }
     return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
   });
   return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +
     (rows.length ? '<ol>' + rows.join('') + '</ol>' : '<div style="padding:4px 0">No committed jobs or loadings in this period.</div>') + '</details>';
+}
+
+function _rlDoneBtn(e) {
+  if (typeof isTrader === 'function' && isTrader()) return '';
+  return ' <button type="button" class="rl-done-btn" onclick="rlCompleteLoading(' + JSON.stringify(String(e.loadingId)).replace(/"/g, '&quot;') + ')" title="Mark this loading Completed on the Loading page — then record the reload in the barge\'s ROB">Mark Completed</button>';
+}
+// Ended-but-uncompleted loadings, shown above the recommendations so they
+// are not buried in the collapsed events list.
+function _rlPendingNoticeHtml(fc) {
+  return fc.events.filter(function(e) { return e.kind === 'pending-loading'; }).map(function(e) {
+    return '<div class="rl-pending-note">⚠ Loading at ' + esc(e.label) + ' ended ' + esc(_rlFmt(e.end)) + ' but is <b>not marked Completed</b>' +
+      (e.counted ? ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' is counted in this forecast until it is.' : ' — its ' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' is not counted (' + esc(e.why) + ').') +
+      _rlDoneBtn(e) + '</div>';
+  }).join('');
 }
 
 function _rlCardHtml(fc, operator) {
@@ -17300,7 +17349,7 @@ function _rlCardHtml(fc, operator) {
     : '<div class="rl-ok">All good through ' + esc(_rlFmt(fc.end)) + ' — stock stays above buffer for every committed job.</div>';
   var flash = _rlFlash && _rlFlash.key === _fwKey(fc.bargeId) && Date.now() < _rlFlash.until ? ' rl-flash' : '';
   return '<div class="card rl-card' + flash + '" data-barge-key="' + esc(_fwKey(fc.bargeId)) + '" data-barge-id="' + esc(String(fc.bargeId)) + '">' +
-    head + _rlChartHtml(fc) + legend + '<div class="rl-recs">' + recs + '</div>' + _rlEventListHtml(fc) + '</div>';
+    head + _rlChartHtml(fc) + legend + '<div class="rl-recs">' + _rlPendingNoticeHtml(fc) + recs + '</div>' + _rlEventListHtml(fc) + '</div>';
 }
 
 // Render the planner into a host element (Barge Fleet section for

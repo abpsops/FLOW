@@ -7,6 +7,11 @@
      to the ROB) with a toast saying to record the reload; the Loading page shows it completed
    • a loading already marked Completed, a deleted one, or another barge's: not counted
    • capped at tank capacity; a trader sees the line but no button
+   • NOT counted (only flagged) once the ROB already holds it: a reload of that grade recorded
+     after the loading started, an ROB Update after it started, or ended over 2 days ago
+   • a loading that ended before an overdue job tops the tank up before that job draws on it
+   • the flag is visible on the Barge Fleet card itself (not only in the collapsed events list);
+     Mark Completed twice does not re-save
    node suites/fix2/pending-loading.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -104,6 +109,70 @@ const forecast = p => p.evaluate(async () => {
     await sleep(800);
     const t = await T.page.evaluate(() => { const fc = _bargeStockForecast(2, 7 * 24, {}); const d = document.createElement('div'); d.innerHTML = _rlCardHtml(fc, false); const li = d.querySelector('li.rl-pending'); return { line: !!li, btn: !!(li && li.querySelector('.rl-done-btn')) }; });
     check('P3 trader: the flagged line without the Mark Completed button', t.line && !t.btn, t);
+  });
+
+  /* P4 — not counted once the ROB already holds it */
+  await scenario('P4 superseded', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator');
+    // (a) the reload recorded through the Reload box after the loading started
+    const a = await A.page.evaluate(async () => {
+      calculate(); await _waitForSaveIdle();
+      openReloadModal(2); document.getElementById('reload-vlsfo').value = '4350'; document.getElementById('reload-mgo').value = ''; await saveReloadQty(); await _waitForSaveIdle();
+      const fc = _bargeStockForecast(2, 7 * 24, {}); const ev = fc.events.find(e => e.kind === 'pending-loading');
+      const d = document.createElement('div'); d.innerHTML = _rlCardHtml(fc, true);
+      return { robNow: Math.round(fc.robNow.v), start: Math.round(fc.start.v), counted: ev && ev.counted, why: ev && ev.why, dv: ev && ev.dv, note: (d.querySelector('.rl-pending-note') || {}).textContent, li: (d.querySelector('li.rl-pending') || {}).textContent, recs: fc.recs.map(r => r.grade) };
+    });
+    check('P4a reload recorded in ROB after the loading started: ROB 4,774, NOT added again (start 4,774, not 5,000), flagged as not counted', a.robNow === 4774 && a.start === 4774 && a.counted === false && /reload was recorded/.test(a.why) && a.dv === 0 && /not counted \(a VLSFO reload was recorded in ROB after it started\)/.test(a.note) && /not counted/.test(a.li) && /Mark Completed/.test(a.note), a);
+    // (b) an ROB Update after the loading started (cloud dataset without the reload)
+    const db2 = H.createDb({ workspace: seed(), realtime: false });
+    const B = await openT(db2, 'user-operator');
+    const b = await B.page.evaluate(async () => {
+      calculate(); await _waitForSaveIdle();
+      _manualROB['2_final'] = { v: 424, m: 486, reason: 'sounding', editedAt: new Date().toISOString(), editedBy: 'ROB Update', atIds: [], updatedAt: Date.now() };
+      const noMarker = _bargeStockForecast(2, 7 * 24, {});
+      _robMeasured(2);
+      const fc = _bargeStockForecast(2, 7 * 24, {}); const ev = fc.events.find(e => e.kind === 'pending-loading');
+      return { start: Math.round(fc.start.v), legacyStart: Math.round(noMarker.start.v), counted: ev && ev.counted, why: ev && ev.why, recs: fc.recs.map(r => r.grade) };
+    });
+    check('P4b ROB updated after the loading started (with or without the measured marker): not counted, stock stays 424, VLSFO reload still recommended', b.start === 424 && b.legacyStart === 424 && b.counted === false && /ROB was updated/.test(b.why) && b.recs.includes('VLSFO'), b);
+    // (c) a forgotten record from 3 weeks ago
+    const db3 = H.createDb({ workspace: seed({ loadings: [loading({ id: 'ld_old', qty: 4350, barge: 'FNSA 11', s: -21 * 24 - 11, e: -21 * 24 })] }), realtime: false });
+    const C = await openT(db3, 'user-operator');
+    const c = await C.page.evaluate(async () => { calculate(); await _waitForSaveIdle(); const fc = _bargeStockForecast(2, 7 * 24, {}); const ev = fc.events.find(e => e.kind === 'pending-loading'); return { start: Math.round(fc.start.v), counted: ev && ev.counted, why: ev && ev.why, recs: fc.recs.map(r => r.grade) }; });
+    check('P4c a loading that ended 3 weeks ago: flagged but not counted, VLSFO reload still recommended', c.start === 424 && c.counted === false && /over 2 days ago/.test(c.why) && c.recs.includes('VLSFO'), c);
+  });
+
+  /* P5 — a loading that ended before an overdue job is added before that job's deduction */
+  await scenario('P5 order against an overdue job', async (openT) => {
+    const s5 = U.seedPayload({ vessels: [Object.assign({}, VBASE, { nomUid: 'n1', name: 'ERA S', type: 'VLSFO', qty: 1000, mgo: 0, eta: fmtDT(hrs(-6)), bargeId: '2' })] });
+    s5.state.barges = [Object.assign({ id: 1, name: 'FNSA 10', vrob: 3229, mrob: 260 }, BARGE), Object.assign({ id: 2, name: 'FNSA 11', vrob: 424, mrob: 486 }, BARGE)];
+    s5.state.loadingRecords = [loading({ id: 'ld_pending', qty: 4350, barge: 'FNSA 11', s: -30, e: -20 })];
+    const db = H.createDb({ workspace: s5, realtime: false });
+    const A = await openT(db, 'user-operator');
+    const f = await A.page.evaluate(async () => { calculate(); await _waitForSaveIdle(); const fc = _bargeStockForecast(2, 7 * 24, {}); return { kinds: fc.events.map(e => e.kind), v: fc.events.map(e => Math.round(e.v)), start: Math.round(fc.start.v) }; });
+    check('P5 loading (ended −20 h) before the overdue job (−6 h): 424 + 4,350 − 1,000 = 3,774 (not 0 + 4,350)', f.start === 3774 && JSON.stringify(f.kinds.slice(0, 3)) === JSON.stringify(['now', 'pending-loading', 'overdue']) && f.v[1] === 4774 && f.v[2] === 3774, f);
+  });
+
+  /* P6 — the flag is visible on the Barge Fleet card; Mark Completed twice does not re-save */
+  await scenario('P6 card notice and guard', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await A.page.evaluate(async () => { calculate(); await _waitForSaveIdle(); showPage('bargefleet'); renderReloadPlanner('reload-planner-body'); });
+    const vis = await A.page.evaluate(() => {
+      const card = document.querySelector('.rl-card[data-barge-id="2"]'); const note = card && card.querySelector('.rl-recs .rl-pending-note'); const btn = note && note.querySelector('.rl-done-btn');
+      const r = btn && btn.getBoundingClientRect();
+      return { note: note && note.textContent.replace(/\s+/g, ' ').trim(), btnShown: !!(r && r.width > 0 && r.height > 0), detailsOpen: !!(card && card.querySelector('details.rl-events[open]')) };
+    });
+    check('P6 the "not marked Completed" notice with its Mark Completed button is visible on the card without expanding Projected events', /ended .* but is not marked Completed: \+4,350 MT VLSFO is counted/.test(vis.note || '') && vis.btnShown, vis);
+    const g = await A.page.evaluate(async () => {
+      window.__toasts = []; rlCompleteLoading('ld_pending'); await _waitForSaveIdle();
+      const rec = _loadingRecords.find(r => r.id === 'ld_pending'); const at = rec.completedAt, up = rec.updatedAt;
+      await new Promise(r => setTimeout(r, 20));
+      rlCompleteLoading('ld_pending'); await _waitForSaveIdle();
+      return { toasts: window.__toasts, same: rec.completedAt === at && rec.updatedAt === up, note: !!document.querySelector('.rl-card[data-barge-id="2"] .rl-pending-note') };
+    });
+    check('P6 a second Mark Completed does not re-save or re-toast the success; the notice is gone', g.same && g.toasts.filter(t => /marked Completed\. Now record/.test(t)).length === g.toasts.filter(t => /already marked Completed/.test(t)).length && g.toasts.some(t => /already marked Completed/.test(t)) && !g.note, g);
   });
 
   await browser.close();
