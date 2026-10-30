@@ -1376,6 +1376,10 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
 .lc-rng{font-size:10.5px;font-weight:600;font-family:'DM Mono',monospace}
 .lc-hold-btn{margin-left:5px;font:inherit;font-size:9.5px;font-weight:700;padding:2px 7px;border-radius:999px;border:1px solid var(--azure);background:var(--azure-lt);color:var(--azure);cursor:pointer;vertical-align:middle;white-space:nowrap}
 .lc-hold-btn:hover{background:var(--azure);color:#fff}
+.rl-events li.rl-pending{background:var(--amber-lt);border:1px solid var(--amber-bd);border-radius:6px;padding:3px 8px;margin:3px 0}
+.rl-done-btn{margin-left:6px;font:inherit;font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid var(--amber);background:#fff;color:var(--amber);cursor:pointer;vertical-align:middle;white-space:nowrap}
+.rl-done-btn:hover{background:var(--amber);color:#fff}
+@media print{.rl-done-btn{display:none}}
 @media print{.lc-hold-btn{display:none}}
 .lc-rng.in{color:var(--green)}.lc-rng.out{color:var(--amber)}
 
@@ -16591,6 +16595,19 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     if (op.kind === 'block') items.push({ kind: 'block', start: op.start, end: op.etc, busyEnd: op.etc, label: 'Unavailable — ' + (op.reason || 'blocked'), reason: op.reason || '', blockId: op.blockId });
     else items.push({ kind: 'vessel', start: op.start, end: op.etc, busyEnd: _opBusyEnd(op), label: 'Vessel — ' + op.vessel, vessel: op.vessel, nomUid: op.nomUid, sno: op.sno, nomV: qV(op), nomM: qM(op) });
   });
+  // A loading whose window has passed but that nobody marked Completed: the
+  // plan says the fuel is on board, so it counts from now — until it is marked
+  // Completed (then the reload recorded in ROB takes over). Flagged in the
+  // forecast's events so it is not forgotten.
+  var pendingLoads = [];
+  (_loadingRecords || []).filter(function(r) {
+    return r && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
+  }).sort(function(a, b) { return new Date(a.endAt) - new Date(b.endAt); }).forEach(function(r) {
+    var q = Number(r.qty) || 0, g = r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+    if (!q) return;
+    if (g === 'LSMGO') st.m = mcap ? Math.min(mcap, st.m + q) : st.m + q; else st.v = vcap ? Math.min(vcap, st.v + q) : st.v + q;
+    pendingLoads.push({ loadingId: r.id, terminal: r.terminal || '', grade: g, qty: q, start: new Date(r.startAt), end: new Date(r.endAt) });
+  });
   (_loadingsForBargeName(bargeName) || []).forEach(function(r) {
     var s = new Date(r.startAt), e = new Date(r.endAt);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || s >= lookEnd) return;
@@ -16620,7 +16637,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     }
     return { v: Math.max(0, minV - vbuf), m: Math.max(0, minM - mbuf), lowV: minV, lowM: minM };
   }
-  return { now: now, barge: barge, liveRob: liveRob, vcap: vcap, mcap: mcap, vbuf: vbuf, mbuf: mbuf, cont: cont,
+  return { now: now, barge: barge, liveRob: liveRob, pendingLoads: pendingLoads, vcap: vcap, mcap: mcap, vbuf: vbuf, mbuf: mbuf, cont: cont,
            robNow: { v: liveRob.liveV || 0, m: liveRob.liveM || 0 }, start: { v: st.v, m: st.m },
            past: past, pastBusyEnd: pastBusyEnd, items: items, apply: apply, atpFrom: atpFrom };
 }
@@ -16878,6 +16895,11 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
   proj.past.forEach(function(p) {
     s.v = Math.max(0, s.v - p.nomV); s.m = Math.max(0, s.m - p.nomM);
     events.push({ t: now, kind: 'overdue', label: p.vessel, vessel: p.vessel, nomUid: p.nomUid, jobStart: p.start, dv: -p.nomV, dm: -p.nomM, v: s.v, m: s.m });
+  });
+  (proj.pendingLoads || []).forEach(function(p) {
+    var bv = s.v, bm = s.m;
+    if (p.grade === 'LSMGO') s.m = proj.mcap ? Math.min(proj.mcap, s.m + p.qty) : s.m + p.qty; else s.v = proj.vcap ? Math.min(proj.vcap, s.v + p.qty) : s.v + p.qty;
+    events.push({ t: now, kind: 'pending-loading', label: p.terminal || 'Terminal', loadingId: p.loadingId, grade: p.grade, qty: p.qty, start: p.start, end: p.end, dv: s.v - bv, dm: s.m - bm, v: s.v, m: s.m });
   });
   s = { v: proj.start.v, m: proj.start.m };
   var lastT = now;
@@ -17236,6 +17258,13 @@ function _rlRecHtml(r, operator, hrs) {
     '</div>';
 }
 
+// "Mark Completed" on a pending loading in the forecast: same as on the Loading page.
+function rlCompleteLoading(id) {
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
+  if (!rec) { showToast('That loading is no longer in the list.', 'warning'); return; }
+  markLoadingRecordDone(id); // saves, re-renders the forecast (via _refreshLoadingConsumers)
+  showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed. Now record the reload (' + Number(rec.qty || 0).toLocaleString() + ' MT ' + (rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') + ') in the barge\'s ROB so the stock shows.', 'success', 8000);
+}
 function _rlEventListHtml(fc) {
   var rows = fc.events.filter(function(e) { return e.kind !== 'now'; }).map(function(e) {
     var when = esc(_rlFmt(e.kind === 'overdue' ? e.jobStart : e.kind === 'loading' ? e.end : e.start));
@@ -17245,6 +17274,10 @@ function _rlEventListHtml(fc) {
       return '<li>' + when + ' — ' + esc(e.vessel) + (e.kind === 'overdue' ? ' (ETC passed, supply not saved)' : '') + ': ' + esc(q) + ' → ' + esc(after) + '</li>';
     }
     if (e.kind === 'loading') return '<li>' + when + ' — Loading at ' + esc(e.label) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
+    if (e.kind === 'pending-loading') {
+      var btn = (typeof isTrader === 'function' && isTrader()) ? '' : ' <button type="button" class="rl-done-btn" onclick="rlCompleteLoading(' + JSON.stringify(String(e.loadingId)).replace(/"/g, '&quot;') + ')" title="Mark this loading Completed on the Loading page — then record the reload in the barge\'s ROB">Mark Completed</button>';
+      return '<li class="rl-pending">' + esc(_rlFmt(e.end)) + ' — Loading at ' + esc(e.label) + ' ended, <b>not marked Completed</b>: +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is → ' + esc(after) + btn + '</li>';
+    }
     return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
   });
   return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +
