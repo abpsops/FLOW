@@ -37,11 +37,23 @@ const { check } = U;
       // realtime push could land on B first (it did under CPU load), so delivery is
       // off for this step and B's save has to merge.
       db.realtime = false;
+      // A realtime event from T1 may still have a pull scheduled on B (debounced, retried
+      // behind B's save), and a pull in flight queues B's save behind it: both would hand B
+      // A's version before it saves (no clash → no toast). Both run through _syncInterval,
+      // so it is off for this step and B waits until nothing is in flight.
+      await B.page.evaluate(async () => {
+        clearInterval(_syncInterval); _syncInterval = null;
+        if (_rtPullTimer) { clearTimeout(_rtPullTimer); _rtPullTimer = null; }
+        while (_pullRunning || _isSyncing || _saveRunning || _saveQueued) await new Promise(r => setTimeout(r, 25));
+      });
       // …and B is typing in that very field meanwhile, which (as for a real user)
       // defers B's own periodic pull until the field is left.
       await B.page.evaluate(() => { document.getElementById('v' + __cardFor('n1') + '-agent').focus(); });
       await A.page.evaluate(async () => { __setV('n1', 'agent', 'FROM-A'); return saveSharedState(); });
+      const vBefore = await B.page.evaluate(() => Number(_lastKnownVersion));
+      check(vBefore < U.row(db).version, 'B has not seen A\'s edit before its own save (a true clash)');
       await B.page.evaluate(async () => { __setV('n1', 'agent', 'FROM-B'); document.activeElement && document.activeElement.blur(); return saveSharedState(); });
+      await B.page.evaluate(() => startAutoSync());
       db.realtime = true;
       const n1b = U.row(db).payload.state.vessels.find(v => v.nomUid === 'n1');
       check(n1b.agent === 'FROM-B', 'later saver (local) wins a true clash');
