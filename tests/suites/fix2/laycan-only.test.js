@@ -5,10 +5,8 @@
      opening, the row says "On Laycan · held", the flag is in the cloud and on a fresh device
    • unticking plans it early again and removes the flag
    • a time-frame ETA (AM) before the laycan is held the same way (no frame wait at the laycan)
-   • the What-if Planner takes the same rule
    • a trader sees no button
    • the button with an incomplete card elsewhere: the tick is saved, no false "planned" message (L5)
-   • What-if: a held AM vessel shifted into its laycan keeps its frame (L3)
    • the nomination e-mail carries "Supply within laycan only" (L6)
    node suites/fix2/laycan-only.test.js [appDir] */
 const path = require('path');
@@ -103,27 +101,6 @@ const ticked = (p, nu) => p.evaluate(nu => !!document.getElementById('v' + __car
     const it = await planned(A.page, 'n1');
     const v = await A.page.evaluate(() => { const x = getVessels(true).find(y => y.nomUid === 'n1'); return { held: x.held, winHrs: x.winHrs, frameEnd: _vesselFrameEnd(x), eff: x.effectiveETA.getTime() }; });
     check('L2 AM frame a day before the laycan, Laycan only: held, the frame kept on the row but no frame wait at the laycan, starts at the laycan opening', it && it.held && v.held && v.winHrs === 6 && v.frameEnd === null && v.eff === it.lcFrom && it.start === it.lcFrom, [it, v]);
-  });
-
-  /* L3 — What-if Planner takes the same rule */
-  await scenario('L3 what-if parity', async (openT) => {
-    const db = H.createDb({ workspace: seed({ n1: { lcOnly: true } }), realtime: false });
-    const A = await openT(db, 'user-operator');
-    await generate(A.page);
-    const r = await A.page.evaluate(() => { const t = _simTake(); const v = t.vessels.find(x => x.nomUid === 'n1'); return { held: !!v.held, eff: v.effectiveETA.getTime(), lcFrom: v.lc.from.getTime() }; });
-    check('L3 the sandbox copy of ALPHA is held to the laycan opening too', r.held && r.eff === r.lcFrom, r);
-    // A held AM vessel shifted +72h into its laycan is no longer held: planned with its frame
-    // (ready at the frame END), exactly like an unheld AM vessel.
-    const db2 = H.createDb({ workspace: seed({ n1: { eta: fmtDT(dayAt(1, 0)), etaWin: 'AM', lcOnly: true } }), realtime: false });
-    const B = await openT(db2, 'user-operator');
-    await generate(B.page);
-    const sh = await B.page.evaluate(() => {
-      const t = _simTake(); const v0 = t.vessels.find(x => x.nomUid === 'n1');
-      const v = _simApplyVessel ? _simApplyVessel(v0, { shiftHrs: 72 }) : null;
-      if (!v) return { noFn: true };
-      return { held: !!v.held, winHrs: v.winHrs, etaWin: v.etaWin, frameEnd: _vesselFrameEnd(v) ? _vesselFrameEnd(v).getTime() : null, eff: v.effectiveETA.getTime() };
-    });
-    check('L3 shifted +72h into the laycan: not held any more, AM frame kept (ready at the frame end, 6 h after the start)', !sh.noFn && !sh.held && sh.winHrs === 6 && sh.etaWin === 'AM' && sh.frameEnd === sh.eff + 6 * 3600000, sh);
   });
 
   /* L5 — the button while another card is incomplete: tick saved, honest message */

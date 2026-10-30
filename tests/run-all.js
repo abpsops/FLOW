@@ -38,7 +38,6 @@ const SUITES = [
   ['sync-race', 'suites/fw/race.test.js', 'deletions survive a save racing a pull (forced interleavings)'],
   ['reload-planner', 'suites/reload/reload.test.js', 'stock forecast, breaches, reload-by, slot, Plan this loading, alerts'],
   ['planner-core', 'suites/planner/planner.test.js', 'planSchedule() is the exact planner calculate() always was (300 recorded random weeks) and is pure'],
-  ['what-if-planner', 'suites/planner/sim.test.js', 'What-if sandbox equals the real planner for every kind of change, nothing saved or synced, look-ahead suggestions never worse + apply, limits, traders, phone'],
   ['skin', 'suites/skin/skin.test.js', 'Harbour Light / Classic look switch'],
   ['bunker-modal', 'suites/layout/bunker.test.js', 'Bunker Message opens from dashboard links'],
   ['layout-space', 'suites/layout/space.test.js', 'sidebar and activity feed fill the window'],
@@ -55,10 +54,11 @@ const SUITES = [
   ['fix-checklist', 'suites/fix2/checklist.test.js', 'audit fixes: no ghost Pending row for a supplied vessel, one record per delivery across devices (ROB once), completion only via Save'],
   ['fix-supplyedit', 'suites/fix2/supplyedit.test.js', 'audit fixes: editing / moving / deleting a saved supply corrects barge ROB on every device'],
   ['fix-stalebuild', 'suites/fix2/stalebuild.test.js', 'audit fixes: new deploy detected (banner / safe auto-reload, no loops), fields from a newer build survive an older open copy'],
-  ['fix-laycan-only', 'suites/fix2/laycan-only.test.js', 'Laycan only: an early arrival held to its laycan — button on the schedule row, card tick, synced, what-if parity, trader sees no button'],
+  ['fix-laycan-only', 'suites/fix2/laycan-only.test.js', 'Laycan only: an early arrival held to its laycan — button on the schedule row, card tick, synced, trader sees no button'],
   ['fix-voyage-email', 'suites/fix2/voyage-email.test.js', 'Email to Barge: the ticked rows of the barge tab as the delivery-schedule e-mail (table layout, Captain e-mail To line, unsent mail file, formatted copy)'],
   ['fix-pending-loading', 'suites/fix2/pending-loading.test.js', 'Stock forecast: a loading that ended but was not marked Completed counts until it is (not once the ROB already holds it), flagged with Mark Completed'],
   ['fix-tracker-samename', 'suites/fix2/tracker-samename.test.js', 'Remaining Supply Tracker: a second call of the same vessel (another nomination) is its own row'],
+  ['fix-deals', 'suites/fix2/deals.test.js', 'Loading Deals: bulk purchases drawn down by loadings (BL quantity on completion), linked automatically, synced, closed/removed; What-if Planner gone'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];
 

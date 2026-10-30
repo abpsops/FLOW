@@ -1,5 +1,5 @@
 /* The schedule planner core — planSchedule(), the pure function behind
-   calculate() and the what-if sandbox.
+   calculate().
    1. GOLDEN: 300 seeded random weeks (1–3 barges, 2–9 vessels, laycans early /
       on time / delayed, no-firm ETAs, time frames, refuels, pinned barges,
       Unavailable blocks, saved supplies, reloads) are generated and run through
