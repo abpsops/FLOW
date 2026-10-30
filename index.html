@@ -7667,7 +7667,9 @@ function _merge3(b, l, r, key, ctx, path) {
     const f = _pickIdField(key, [bArr, l, r]);
     if (f) return _mergeById(bArr, l, r, f, key, ctx, path);
   } else if (_isPlainObj(l) && _isPlainObj(r) && !_MERGE_ATOMIC_KEYS[key]) {
-    if ((key === 'loadingRecords[]' || key === 'loadingDeals[]') && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
+    // A manual end date and its flag are ONE value; a computed end (flag off) is derived again after the merge.
+    if (key === 'loadingRecords[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+    if (key === 'loadingDeals[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
     if (l.updatedAt != null || r.updatedAt != null) {
       _mergeConflict(ctx, path);
       return (Number(r.updatedAt) || 0) > (Number(l.updatedAt) || 0) ? r : l;
@@ -7681,14 +7683,25 @@ function _merge3(b, l, r, key, ctx, path) {
 // it vs base; a key both changed differently → the side with the newer
 // updatedAt. So a completion + BL figure, a closed status or a tombstone set
 // on one device is never undone by the other's edit of another field.
-function _mergeByNewer(b, l, r, ctx, path) {
+function _mergeByNewer(b, l, r, ctx, path, groups) {
   const newer = (Number(r.updatedAt) || 0) > (Number(l.updatedAt) || 0) ? r : l;
   const has = function(o, k) { return Object.prototype.hasOwnProperty.call(o, k) && o[k] !== undefined; };
   const keys = Array.from(new Set(Object.keys(l).concat(Object.keys(r), Object.keys(b))));
   const out = {};
   let clash = false;
+  // Keys that are ONE value (a manual end date and its flag): the side that
+  // changed any of them gives all of them.
+  const grouped = {};
+  (groups || []).forEach(function(g) {
+    const pick = g.sig || function(o) { return g.keys.map(function(k) { return has(o, k) ? o[k] : null; }); };
+    const lCh = !_sameJSON(pick(l), pick(b)), rCh = !_sameJSON(pick(r), pick(b));
+    let src = l;
+    if (lCh && rCh && !_sameJSON(pick(l), pick(r))) { src = newer; clash = true; }
+    else if (rCh && !lCh) src = r;
+    g.keys.forEach(function(k) { grouped[k] = 1; if (has(src, k)) out[k] = src[k]; });
+  });
   keys.forEach(function(k) {
-    if (k === 'updatedAt') return;
+    if (k === 'updatedAt' || grouped[k]) return;
     const inL = has(l, k), inR = has(r, k), inB = has(b, k);
     const lCh = inL ? (!inB || !_sameJSON(l[k], b[k])) : inB;
     const rCh = inR ? (!inB || !_sameJSON(r[k], b[k])) : inB;
@@ -7715,13 +7728,14 @@ function _mergeLoadingDerived(merged, ld, rd) {
   const L = byId(ld), R = byId(rd);
   let changed = false;
   const out = recs.map(function(m) {
-    if (!_isPlainObj(m) || m.endOverridden) return m;
+    if (!_isPlainObj(m)) return m;
     const l = L[m.id], r = R[m.id];
     if (!l || !r) return m;
+    const manual = !!m.endOverridden; // a manual end date stays; pumping and duration still follow the inputs
     const mi = _ldInputs(m), li = _ldInputs(l), ri = _ldInputs(r);
     if (mi === li && mi === ri) return m;                       // same inputs on both sides: the per-key merge already took the changed figures
-    if (mi === li) return _sameDerived(m, l) ? m : Object.assign({}, m, _derivedOf(l));
-    if (mi === ri) return _sameDerived(m, r) ? m : Object.assign({}, m, _derivedOf(r));
+    if (mi === li) return _sameDerived(m, l, manual) ? m : Object.assign({}, m, _derivedOf(l, manual));
+    if (mi === ri) return _sameDerived(m, r, manual) ? m : Object.assign({}, m, _derivedOf(r, manual));
     const start = new Date(m.startAt);
     if (isNaN(start.getTime())) return m;
     const rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
@@ -7729,10 +7743,10 @@ function _mergeLoadingDerived(merged, ld, rd) {
     const total = (Number(m.preOpsHours) || 0) + pump + (Number(m.postOpsHours) || 0);
     const frame = m.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(m.startWin) : 0;
     changed = true;
-    return Object.assign({}, m, { pumpHours: pump, estimatedHours: total, endAt: new Date(start.getTime() + (frame + total) * 3600000).toISOString() });
+    return Object.assign({}, m, { pumpHours: pump, estimatedHours: total }, manual ? {} : { endAt: new Date(start.getTime() + (frame + total) * 3600000).toISOString() });
   });
-  function _derivedOf(x) { return { pumpHours: x.pumpHours, estimatedHours: x.estimatedHours, endAt: x.endAt }; }
-  function _sameDerived(a, x) { return a.pumpHours === x.pumpHours && a.estimatedHours === x.estimatedHours && a.endAt === x.endAt; }
+  function _derivedOf(x, manual) { return manual ? { pumpHours: x.pumpHours, estimatedHours: x.estimatedHours } : { pumpHours: x.pumpHours, estimatedHours: x.estimatedHours, endAt: x.endAt }; }
+  function _sameDerived(a, x, manual) { return a.pumpHours === x.pumpHours && a.estimatedHours === x.estimatedHours && (manual || a.endAt === x.endAt); }
   if (!changed && out.every(function(x, i) { return x === recs[i]; })) return merged;
   return Object.assign({}, merged, { state: Object.assign({}, merged.state, { loadingRecords: out }) });
 }
@@ -8156,9 +8170,13 @@ function _refreshLoadingViews() {
       if (typeof showToast === 'function') showToast('This loading was changed by a colleague meanwhile — the list shows their version. Review the form before Update (it saves every field as shown).', 'warning', 8000);
     }
   }
-  if (_dealEditingId && typeof _dealById === 'function' && !_dealById(_dealEditingId)) {
-    dealCancelEdit();
-    if (typeof showToast === 'function') showToast('The deal you were editing was removed by a colleague.', 'warning');
+  if (_dealEditingId && typeof _dealById === 'function') {
+    const d = _dealById(_dealEditingId);
+    if (!d) { dealCancelEdit(); if (typeof showToast === 'function') showToast('The deal you were editing was removed by a colleague.', 'warning'); }
+    else if (d.updatedAt && d.updatedAt !== _dealEditingSeen) {
+      _dealEditingSeen = d.updatedAt;
+      if (typeof showToast === 'function') showToast('This deal was changed by a colleague meanwhile — the card shows their version. Review the form before Update (it saves every field as shown).', 'warning', 8000);
+    }
   }
   if (typeof _blModal !== 'undefined' && _blModal) {
     const rec = (_loadingRecords || []).find(function(r) { return r && r.id === _blModal.id; });
@@ -8190,6 +8208,11 @@ function saveSharedState() {
   if (_saveQueued) return _saveQueued;
   const ahead = _saveRunning || _pullRunning;
   if (ahead) {
+    // A real change waiting behind a pull / save is flagged now: if the tab is
+    // closed before the queued save runs, the next load takes the merge path
+    // instead of adopting the cloud's copy. Nothing to push (or no base to
+    // compare with, e.g. after a wipe) → no flag.
+    try { if (!isTrader() && _lastSyncedPayload && !_samePayload(_buildLocalPayload(), _lastSyncedPayload)) _markUnsynced(true); } catch (e) {}
     _saveQueued = ahead.catch(function() {}).then(function() { _saveQueued = null; return saveSharedState(); });
     return _saveQueued;
   }
@@ -8606,7 +8629,7 @@ async function _pullAndMerge(opts) {
   _cloudBaseUnknown = false;
   _hideOfflineBanner();
   if (!localDirty) {
-    if (!base && row.payload && row.payload.state) _adoptCloudLoadings(row.payload.state, row.version); // first row after an empty cloud: no union of the local store
+    if (!base && row.payload && row.payload.state) _adoptCloudLoadings(row.payload.state); // first row after an empty cloud: no union of the local store
     _applyPayload(row.payload, !!base);
     _adoptBase(row, true);
     _markUnsynced(false);
@@ -8686,21 +8709,13 @@ async function loadSharedState(silent = false, force = false) {
 }
 // First successful pull of the session (row may be null = empty cloud).
 // The cloud's loadings and deals replace the local store's copy (nothing on
-// this device is unsynced): a Wipe Cloud / Clear All Data done elsewhere sticks.
-// Kept from the local store: an item the cloud does not have that was written
-// here AFTER the row's last save (a loading added while a pull was in flight,
-// the tab closed before its queued save) — it is pushed with the next save.
-// A row written by an older build has no loadingDeals key at all: that list
-// stays as it is here.
-function _adoptCloudLoadings(st, rowVersion) {
+// this device is unsynced — a change waiting to be pushed flags the device,
+// see saveSharedState, and then the merge path runs instead): a Wipe Cloud /
+// Clear All Data done elsewhere sticks. A row written by an older build has
+// no loadingDeals key at all: that list stays as it is here.
+function _adoptCloudLoadings(st) {
   if (_isMarkedUnsynced()) return;
-  const after = Number(rowVersion) || 0;
-  const adopt = function(cloud, local) {
-    if (!Array.isArray(cloud)) return st ? local : [];
-    const ids = {}; cloud.forEach(function(x) { if (x && x.id != null) ids[x.id] = 1; });
-    const kept = (local || []).filter(function(x) { return x && x.id != null && !ids[x.id] && !x.deletedAt && (Number(x.updatedAt) || 0) > after; });
-    return _deepClone(cloud).concat(kept);
-  };
+  const adopt = function(cloud, local) { return Array.isArray(cloud) ? _deepClone(cloud) : (st ? local : []); };
   _loadingRecords = adopt(st && st.loadingRecords, _loadingRecords);
   _loadingDeals = adopt(st && st.loadingDeals, _loadingDeals);
   _saveLoadingToLocal();
@@ -8734,7 +8749,7 @@ async function _applyPulledRow(row, force) {
   // Nothing unsynced on this device: the cloud's loadings and deals are the
   // truth — the local store's copy (which may predate a Wipe Cloud / Clear
   // All Data elsewhere) must not be unioned back in and re-uploaded.
-  if (row.payload && row.payload.state) _adoptCloudLoadings(row.payload.state, row.version);
+  if (row.payload && row.payload.state) _adoptCloudLoadings(row.payload.state);
   _applyPayload(row.payload, false);
   _adoptBase(row, true);
   _markUnsynced(false);
@@ -8801,6 +8816,17 @@ async function saveLoadingRecords() {
 
 let _loadingEditingId = null; // non-null while the form is editing an existing record
 let _loadingEditingSeen = null; // that record's updatedAt when the form was filled (a colleague's change since then is announced)
+// A loading changed on THIS device outside the form (linked, unlinked, BL edited, undone):
+// stamped, and the form — if it is editing that record — follows instead of calling it a colleague's.
+function _touchLoading(rec) {
+  rec.updatedAt = Date.now();
+  if (_loadingEditingId === rec.id) { _loadingEditingSeen = rec.updatedAt; _ldRefreshDealSelect(rec.dealId || ''); }
+}
+let _dealEditingSeen = null; // the edited deal's updatedAt when the deal form was filled
+function _touchDeal(d) {
+  d.updatedAt = Date.now();
+  if (_dealEditingId === d.id) _dealEditingSeen = d.updatedAt;
+}
 
 function _loadingRateFor(grade) {
   return (grade === 'LSMGO' ? _loadingConfig.rateLSMGO : _loadingConfig.rateVLSFO) || 1;
@@ -9170,7 +9196,7 @@ function undoLoadingRecordDone(id) {
   if (!rec) return;
   rec.completed = false;
   delete rec.completedAt;
-  rec.updatedAt = Date.now();
+  _touchLoading(rec);
   saveLoadingRecords();
   renderLoadingList();
   _refreshLoadingConsumers();
@@ -9270,17 +9296,23 @@ function _ldRefreshDealSelect(preferId, reason) {
   const valid = function(id) { return !!id && list.some(function(d) { return d.id === id; }); };
   const ownOtherGrade = !!own && (own.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') !== grade; // the record's own deal is for the other grade
   const ownFits = valid(ownId) && !ownOtherGrade;                                            // its own deal (open or closed) fits this grade
+  const manual = sel.dataset.manual; // '1' a hand pick (or the record's own deal), 'none' "No deal" by hand, 'gone' "No deal" after a pick vanished
   let want = '';
   if (preferId !== undefined) { want = valid(preferId) ? preferId : ''; sel.dataset.manual = want ? '1' : 'none'; } // the record's own deal (or none): kept
-  else if (sel.dataset.manual === 'none') want = '';                                                 // "No deal" chosen by hand: kept
-  else if (sel.dataset.manual && valid(cur) && !(cur === ownId && ownOtherGrade)) want = cur;        // the user's own pick: kept while it fits this grade
-  else if (ownFits) want = ownId;                                                                    // back on the record's own grade: its own deal
-  else if (reason === 'grade' || !sel.dataset.manual) { delete sel.dataset.manual; const a = _autoDealFor(grade, terminal, qty); want = a ? a.id : ''; } // the operator changed the grade, or never picked: (re-)picked
+  else if (manual === 'none' || (manual === 'gone' && reason !== 'grade')) want = '';               // "No deal" (by hand, or after a vanished pick): kept
+  else if (manual === '1' && valid(cur) && !(cur === ownId && ownOtherGrade)) want = cur;           // the user's own pick: kept while it fits this grade
+  else if (ownFits && (!manual || manual === 'gone' || reason === 'grade')) want = ownId;            // back on the record's own grade: its own deal
+  else if (reason === 'grade' || !manual || manual === 'gone') { delete sel.dataset.manual; const a = _autoDealFor(grade, terminal, qty); want = a ? a.id : ''; } // the operator changed the grade, or never picked: (re-)picked
   else {
     // The deal picked (or the record's own) was removed or closed meanwhile:
     // not silently another one — "No deal", and the operator is told.
-    sel.dataset.manual = 'none';
+    sel.dataset.manual = 'gone';
     if (typeof showToast === 'function') showToast('The deal this loading was to lift from is no longer available — it is not linked to a deal now. Pick one if needed.', 'warning', 7000);
+  }
+  // An automatic pick moved by a colleague's change (the deal closed / removed): said, not silent.
+  if (reason === 'pull' && cur && want !== cur && !manual && typeof showToast === 'function') {
+    const to = want ? _dealById(want) : null;
+    showToast('The deal for this loading changed' + (to ? ' to ' + (to.supplier || '') : ' to "No deal"') + ' — the one shown before is no longer available.', 'info', 6000);
   }
   sel.value = want;
   sel.disabled = !list.length && !want;
@@ -9373,7 +9405,7 @@ function blConfirm() {
     if (m.opts && m.opts.fromForecast) showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed (BL ' + _mtStr(q) + ' MT ' + grade + ').' + dealTxt + ' Now record the reload in the barge\'s ROB so the stock shows.', 'success', 8000);
     else showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed — BL ' + _mtStr(q) + ' MT ' + grade + '.' + dealTxt, 'success', 6000);
   } else {
-    rec.blQty = q; rec.blAt = Date.now(); rec.updatedAt = Date.now();
+    rec.blQty = q; rec.blAt = Date.now(); _touchLoading(rec);
     saveLoadingRecords();
     renderLoadingList();
     _refreshLoadingConsumers();
@@ -9427,8 +9459,8 @@ function dealSubmit() {
       const oldGrade = d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
       const linked = oldGrade !== data.grade ? _dealLoadings(d.id) : [];
       if (linked.length && !confirm(linked.length + ' ' + oldGrade + ' loading(s) lift from this deal. Change it to ' + data.grade + ' and unlink them?')) return;
-      linked.forEach(function(r) { delete r.dealId; r.updatedAt = Date.now(); });
-      Object.assign(d, data, { updatedAt: Date.now() });
+      linked.forEach(function(r) { delete r.dealId; _touchLoading(r); });
+      Object.assign(d, data); _touchDeal(d);
     }
   } else {
     _loadingDeals.push(Object.assign({ id: 'deal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), status: 'open', createdAt: Date.now(), updatedAt: Date.now() }, data));
@@ -9443,6 +9475,7 @@ function dealEdit(id) {
   const d = _dealById(id);
   if (!d) return;
   _dealEditingId = id;
+  _dealEditingSeen = d.updatedAt || null;
   document.getElementById('dl-supplier').value = d.supplier || '';
   document.getElementById('dl-terminal').value = d.terminal || '';
   document.getElementById('dl-grade').value = d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
@@ -9465,19 +9498,19 @@ function dealClose(id) {
   const d = _dealById(id); if (!d) return;
   const st = _dealStats(d);
   if (st.committed > 0 && !confirm(_mtStr(st.committed) + ' MT of scheduled loadings still lift from this deal. Close it anyway?')) return;
-  d.status = 'closed'; d.closedAt = Date.now(); d.updatedAt = Date.now();
+  d.status = 'closed'; d.closedAt = Date.now(); _touchDeal(d);
   saveLoadingDeals(); renderDeals(); _ldRefreshDealSelect();
 }
 function dealReopen(id) {
   const d = _dealById(id); if (!d) return;
-  d.status = 'open'; delete d.closedAt; d.updatedAt = Date.now();
+  d.status = 'open'; delete d.closedAt; _touchDeal(d);
   saveLoadingDeals(); renderDeals(); _ldRefreshDealSelect();
 }
 function dealDelete(id) {
   const d = _dealById(id); if (!d) return;
   const ls = _dealLoadings(id);
   if (!confirm('Remove the deal "' + (d.supplier || '') + '"?' + (ls.length ? '\n\n' + ls.length + ' loading(s) lift from it — they stay, unlinked from any deal.' : ''))) return;
-  ls.forEach(function(r) { delete r.dealId; r.updatedAt = Date.now(); });
+  ls.forEach(function(r) { delete r.dealId; _touchLoading(r); });
   d.deletedAt = Date.now(); d.updatedAt = Date.now();
   saveLoadingDeals(); renderDeals(); renderLoadingList(); _ldRefreshDealSelect();
 }
@@ -9486,13 +9519,13 @@ function dealLinkLoading(dealId, loadingId) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === loadingId; });
   const d = _dealById(dealId);
   if (!rec || !d) return;
-  rec.dealId = dealId; rec.updatedAt = Date.now();
+  rec.dealId = dealId; _touchLoading(rec);
   saveLoadingRecords(); renderDeals(); renderLoadingList();
 }
 function dealUnlinkLoading(loadingId) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === loadingId; });
   if (!rec) return;
-  delete rec.dealId; rec.updatedAt = Date.now();
+  delete rec.dealId; _touchLoading(rec);
   saveLoadingRecords(); renderDeals(); renderLoadingList();
 }
 function _dealCardHtml(d, operator) {

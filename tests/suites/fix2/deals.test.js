@@ -549,12 +549,12 @@ const dealView = (p, id) => p.evaluate((id) => {
     await A.page.evaluate((id) => { showPage('loading'); editLoadingRecord(id); window.__toasts = []; }, l.rec.id);
     await B.page.evaluate(async (dV) => { showPage('deals'); dealDelete(dV); await _waitForSaveIdle(); }, dV);
     const v1 = await A.page.evaluate(async (id) => { await _pollOnce(true); const sel = document.getElementById('ld-deal'); const r = { val: sel.value, manual: sel.dataset.manual, toast: window.__toasts.some(t => /no longer available/.test(t)) }; submitLoadingForm(); await _waitForSaveIdle(); r.dealId = _loadingRecords.find(x => x.id === id).dealId || null; return r; }, l.rec.id);
-    check('D11b the deal of the loading being edited is removed by a colleague: the form says so and shows "No deal" (not another deal); Update saves no link', v1.val === '' && v1.manual === 'none' && v1.toast && v1.dealId === null, v1);
+    check('D11b the deal of the loading being edited is removed by a colleague: the form says so and shows "No deal" (not another deal); Update saves no link', v1.val === '' && v1.manual === 'gone' && v1.toast && v1.dealId === null, v1);
     // a hand-picked deal for a NEW loading closed by a colleague
     await A.page.evaluate(async (dE) => { cancelLoadingEdit(); const sel = document.getElementById('ld-deal'); sel.value = dE; sel.dispatchEvent(new Event('change')); window.__toasts = []; }, dE);
     await B.page.evaluate(async (dE) => { await _pollOnce(true); showPage('deals'); dealClose(dE); await _waitForSaveIdle(); }, dE);
     const v2 = await A.page.evaluate(async () => { await _pollOnce(true); const sel = document.getElementById('ld-deal'); return { val: sel.value, manual: sel.dataset.manual, toast: window.__toasts.some(t => /no longer available/.test(t)) }; });
-    check('D11b a deal picked by hand that a colleague closes meanwhile: "No deal" + message, never a silent other deal', v2.val === '' && v2.manual === 'none' && v2.toast, v2);
+    check('D11b a deal picked by hand that a colleague closes meanwhile: "No deal" + message, never a silent other deal', v2.val === '' && v2.manual === 'gone' && v2.toast, v2);
     // the operator's own grade change: the auto pick for the new grade; back on the record's grade its own deal
     const dM = await addDeal(A.page, { supplier: 'MGOCO', terminal: 'VOPAK TERMINAL', grade: 'LSMGO', qty: 3000 });
     const dV2 = await addDeal(A.page, { supplier: 'VITOL2', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
@@ -595,6 +595,79 @@ const dealView = (p, id) => p.evaluate((id) => {
     await B.page.reload({ waitUntil: 'load' }); await sleep(2500); await U.helpers(B);
     const b = await B.page.evaluate(() => _loadingDeals.filter(d => !d.deletedAt).map(d => d.supplier));
     check('D11c a row without the loadingDeals key (older build) leaves the local deals alone', b.join() === 'VITOL', b);
+  });
+
+  /* D12 — fourth review: changes made during an in-flight pull, a manual end date in a merge, own changes
+     while editing, a hand pick that vanishes, the deal form, 'gone' + grade change, an auto pick moved by a pull */
+  await scenario('D12 changes during a pull, manual end date', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator'), B = await openT(db, 'user-operator2');
+    const dV = await addDeal(B.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    const l1 = await addLoading(B.page, { terminal: 'VOPAK TERMINAL', qty: 1000 }), l2 = await addLoading(B.page, { terminal: 'VOPAK TERMINAL', qty: 3000, dayOffset: 2 }), l3 = await addLoading(B.page, { terminal: 'VOPAK TERMINAL', qty: 4500, dayOffset: 3 });
+    await A.page.evaluate(async () => { await _pollOnce(true); addBarge({ name: 'FNSA 12' }); await saveSharedState(); await _waitForSaveIdle(); });
+    const st = await B.page.evaluate(async ({ l1, l2, l3, dV }) => {
+      const orig = window.__mockDb;
+      window.__mockDb = async function(s) { const op = JSON.parse(s); if (op.table === 'abps_workspace' && op.action === 'select') await new Promise(r => setTimeout(r, 2500)); return orig(s); };
+      _pollOnce(true); await new Promise(r => setTimeout(r, 100));
+      deleteLoadingRecord(l1); completeLoadingPrompt(l2); document.getElementById('bl-qty').value = '2900'; blConfirm();
+      editLoadingRecord(l3); document.getElementById('ld-qty').value = '1500'; submitLoadingForm();
+      showPage('deals'); dealClose(dV);
+      await new Promise(r => setTimeout(r, 100));
+      return { queued: !!_saveQueued, pull: !!_pullRunning, flagged: _isMarkedUnsynced() };
+    }, { l1: l1.rec.id, l2: l2.rec.id, l3: l3.rec.id, dV });
+    await B.page.reload({ waitUntil: 'load' }); await sleep(3000); await U.helpers(B);
+    const after = await B.page.evaluate(async ({ l1, l2, l3, dV }) => { await _waitForSaveIdle(); const f = id => _loadingRecords.find(r => r.id === id); return { del: !!f(l1).deletedAt, done: !!f(l2).completed, bl: f(l2).blQty, qty: f(l3).qty, deal: _loadingDeals.find(d => d.id === dV).status, barge: getBarges().some(b => b.name === 'FNSA 12') }; }, { l1: l1.rec.id, l2: l2.rec.id, l3: l3.rec.id, dV });
+    const cs = U.row(db).payload.state;
+    check('D12 a deletion, a completion (BL 2,900), an edit and a deal close made while a pull was in flight (tab closed before the save) all survive the reload and reach the cloud, the colleague\'s barge kept', st.queued && st.pull && st.flagged && after.del && after.done && after.bl === 2900 && after.qty === 1500 && after.deal === 'closed' && after.barge && !!cs.loadingRecords.find(r => r.id === l1.rec.id).deletedAt && cs.loadingRecords.find(r => r.id === l2.rec.id).blQty === 2900 && cs.loadingRecords.find(r => r.id === l3.rec.id).qty === 1500 && cs.loadingDeals.find(d => d.id === dV).status === 'closed', { st, after });
+    // manual end date on A, quantity on B (newer): the manual date and its flag stay together, pumping follows the quantity
+    await A.page.evaluate(() => _pollOnce(true)); await B.page.evaluate(() => _pollOnce(true));
+    const l4 = await addLoading(A.page, { terminal: 'VOPAK TERMINAL', qty: 4000, dayOffset: 4 });
+    await B.page.evaluate(() => _pollOnce(true));
+    const manualDay = await A.page.evaluate(async (id) => { showPage('loading'); editLoadingRecord(id); const d = _localDateInputStr(new Date(Date.now() + 9 * 86400000)); document.getElementById('ld-end-date-override').value = d; submitLoadingForm(); await _waitForSaveIdle(); return _loadingRecords.find(r => r.id === id).endAt; }, l4.rec.id);
+    await B.page.evaluate(async (id) => { await new Promise(r => setTimeout(r, 10)); showPage('loading'); editLoadingRecord(id); document.getElementById('ld-qty').value = '5000'; document.getElementById('ld-qty').dispatchEvent(new Event('input')); submitLoadingForm(); await _waitForSaveIdle(); }, l4.rec.id);
+    const cr = U.row(db).payload.state.loadingRecords.find(r => r.id === l4.rec.id);
+    check('D12 merge: A\'s manual end date (with its flag) survives B\'s newer quantity edit; pumping follows the 5,000 MT', cr.endOverridden === true && cr.endAt === manualDay && cr.qty === 5000 && Math.abs(cr.pumpHours - 5000 / 300) < 1e-9, { cr: [cr.endOverridden, cr.endAt, manualDay, cr.qty, cr.pumpHours] });
+  });
+
+  await scenario('D12b own changes, vanished hand pick, deal form, gone + grade, auto pick moved', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator'), B = await openT(db, 'user-operator2');
+    const d1 = await addDeal(A.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    const d2 = await addDeal(A.page, { supplier: 'EXTRA', terminal: 'FOT', grade: 'VLSFO', qty: 20000 });
+    const l = await addLoading(A.page, { terminal: 'VOPAK TERMINAL', qty: 4500 });
+    await B.page.evaluate(() => _pollOnce(true));
+    // own unlink while editing → no "colleague" toast, the form follows, Update keeps it unlinked
+    const own = await A.page.evaluate(async (id) => {
+      showPage('loading'); editLoadingRecord(id); window.__toasts = [];
+      dealUnlinkLoading(id); await _waitForSaveIdle(); const sel = document.getElementById('ld-deal').value;
+      await _pollOnce(true); const toast = window.__toasts.some(t => /changed by a colleague/.test(t));
+      submitLoadingForm(); await _waitForSaveIdle();
+      return { sel, toast, dealId: _loadingRecords.find(r => r.id === id).dealId || null };
+    }, l.rec.id);
+    check('D12b unlinking the loading being edited from the Deals page: the form shows "No deal", no "colleague" message, Update keeps it unlinked', own.sel === '' && !own.toast && own.dealId === null, own);
+    // a hand pick (d2) closed by a colleague while editing a loading of d1 → "No deal" + message, not d1
+    await A.page.evaluate(async ({ id, d1, d2 }) => { dealLinkLoading(d1, id); await _waitForSaveIdle(); showPage('loading'); editLoadingRecord(id); const sel = document.getElementById('ld-deal'); sel.value = d2; sel.dispatchEvent(new Event('change')); window.__toasts = []; }, { id: l.rec.id, d1, d2 });
+    await B.page.evaluate(async (d2) => { await _pollOnce(true); showPage('deals'); dealClose(d2); await _waitForSaveIdle(); }, d2);
+    const van = await A.page.evaluate(async () => { await _pollOnce(true); const sel = document.getElementById('ld-deal'); return { val: sel.value, manual: sel.dataset.manual, toast: window.__toasts.some(t => /no longer available/.test(t)) }; });
+    check('D12b the hand-picked deal closed by a colleague while editing: "No deal" + message (not the record\'s own deal)', van.val === '' && van.manual === 'gone' && van.toast, van);
+    // …and the operator's own grade change afterwards still takes the auto pick
+    const dM = await addDeal(B.page, { supplier: 'MGOCO', terminal: 'VOPAK TERMINAL', grade: 'LSMGO', qty: 3000 });
+    const gone = await A.page.evaluate(async (dM) => { await _pollOnce(true); const g = document.getElementById('ld-grade'); g.value = 'LSMGO'; g.dispatchEvent(new Event('change')); const v = document.getElementById('ld-deal').value; cancelLoadingEdit(); return v === dM; }, dM);
+    check('D12b after that, the operator\'s own grade change picks the LSMGO deal automatically', gone === true, gone);
+    // deal form: a colleague's change announced once
+    await A.page.evaluate((d1) => { showPage('deals'); dealEdit(d1); document.getElementById('dl-ref').value = 'R-A'; window.__toasts = []; }, d1);
+    await B.page.evaluate(async (d1) => { await _pollOnce(true); showPage('deals'); dealEdit(d1); document.getElementById('dl-qty').value = '45000'; dealSubmit(); await _waitForSaveIdle(); }, d1);
+    const df = await A.page.evaluate(async () => { await _pollOnce(true); const n1 = window.__toasts.filter(t => /deal was changed by a colleague/.test(t)).length; await _pollOnce(true); const n2 = window.__toasts.filter(t => /deal was changed by a colleague/.test(t)).length; const ref = document.getElementById('dl-ref').value; dealCancelEdit(); return { n1, n2, ref }; });
+    check('D12b a colleague\'s edit of the deal in the form is announced once; the typed ref is still there', df.n1 === 1 && df.n2 === 1 && df.ref === 'R-A', df);
+    // own close of the deal being edited: no "colleague" message
+    const oc = await A.page.evaluate(async (d1) => { showPage('deals'); dealEdit(d1); window.__toasts = []; dealClose(d1); await _waitForSaveIdle(); await _pollOnce(true); const t = window.__toasts.some(x => /deal was changed by a colleague/.test(x)); dealCancelEdit(); dealReopen(d1); await _waitForSaveIdle(); return t; }, d1);
+    check('D12b closing the deal being edited yourself is not announced as a colleague\'s change', oc === false, oc);
+    // an auto pick moved by a pull is announced
+    await B.page.evaluate(async (d2) => { showPage('deals'); dealReopen(d2); await _waitForSaveIdle(); }, d2);
+    const auto = await A.page.evaluate(async () => { await _pollOnce(true); showPage('loading'); cancelLoadingEdit(); document.getElementById('ld-grade').value = 'VLSFO'; document.getElementById('ld-grade').dispatchEvent(new Event('change')); document.getElementById('ld-terminal').value = 'VOPAK TERMINAL'; document.getElementById('ld-terminal').dispatchEvent(new Event('input')); window.__toasts = []; return document.getElementById('ld-deal').value; });
+    await B.page.evaluate(async (d1) => { await _pollOnce(true); showPage('deals'); dealDelete(d1); await _waitForSaveIdle(); }, d1);
+    const moved = await A.page.evaluate(async () => { await _pollOnce(true); return { val: document.getElementById('ld-deal').value, toast: window.__toasts.find(t => /deal for this loading changed/.test(t)) || null }; });
+    check('D12b an automatic pick moved by a colleague removing that deal is announced (to EXTRA, the open VLSFO deal)', auto === d1 && moved.val === d2 && /changed to EXTRA/.test(moved.toast || ''), { auto, moved });
   });
 
   await browser.close();
