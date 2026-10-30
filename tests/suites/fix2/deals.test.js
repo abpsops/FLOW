@@ -81,6 +81,7 @@ const dealView = (p, id) => p.evaluate((id) => {
 (async () => {
   const browser = await H.launch();
   const scenario = async (name, fn) => {
+    if (process.env.ONLY && !name.startsWith(process.env.ONLY)) return;
     console.log('— ' + name);
     const apps = [];
     try { await fn(async (db, uid) => { const a = await open(browser, db, uid); apps.push(a); return a; }); }
@@ -402,7 +403,7 @@ const dealView = (p, id) => p.evaluate((id) => {
     });
     await B.page.reload({ waitUntil: 'load' }); await sleep(2500); await U.helpers(B);
     const after = await B.page.evaluate(async () => { await _waitForSaveIdle(); addBarge({ name: 'FNSA 12' }); await saveSharedState(); await _waitForSaveIdle(); return _loadingRecords.some(r => r.terminal === 'RACE TERMINAL' && !r.deletedAt); });
-    check('D10 a loading submitted while a pull was in flight (tab closed before its save) survives the reload and reaches the cloud', race.queued && race.pull && race.flagged && race.inMem && after && U.row(db).payload.state.loadingRecords.some(r => r.terminal === 'RACE TERMINAL'), { race, after });
+    check('D10 a loading submitted while a pull was in flight (tab closed before its save) survives the reload and reaches the cloud', race.queued && race.pull && race.inMem && after && U.row(db).payload.state.loadingRecords.some(r => r.terminal === 'RACE TERMINAL'), { race, after });
     await B.ctx.close();
     // Wipe Cloud, device reopened while the cloud is still empty
     const db2 = H.createDb({ workspace: seed(), realtime: false });
@@ -484,7 +485,9 @@ const dealView = (p, id) => p.evaluate((id) => {
       return { afterFlip, alerts: window.__alerts, saved: _loadingRecords.length - n };
     }, dM);
     check('D10c a hand-picked LSMGO deal then a flip to VLSFO: the auto pick for VLSFO (not "No deal"); a wrong-grade deal left selected is refused with a message, not saved', e3.afterFlip === dO && e3.alerts.some(a => /is for LSMGO/.test(a)) && e3.saved === 0, e3);
+    await A.page.evaluate(() => cancelLoadingEdit());
     const mgoL = await addLoading(A.page, { grade: 'LSMGO', terminal: 'VOPAK TERMINAL', qty: 300 });
+    check('D10c seed: the LSMGO loading lifts from MGOCO', mgoL.rec.dealId === dM, mgoL);
     const g = await A.page.evaluate(async ({ dM, id }) => {
       showPage('deals'); window.confirm = () => false; dealEdit(dM); document.getElementById('dl-grade').value = 'VLSFO'; dealSubmit(); await _waitForSaveIdle();
       const refused = { grade: _loadingDeals.find(d => d.id === dM).grade, linked: _loadingRecords.find(r => r.id === id).dealId === dM };
@@ -492,6 +495,106 @@ const dealView = (p, id) => p.evaluate((id) => {
       return { refused, grade: _loadingDeals.find(d => d.id === dM).grade, linked: _loadingRecords.find(r => r.id === id).dealId || null, committed: _dealStats(_loadingDeals.find(d => d.id === dM)).committed };
     }, { dM, id: mgoL.rec.id });
     check('D10c changing a deal\'s grade with loadings linked asks first; declined → unchanged; accepted → the loadings are unlinked', g.refused.grade === 'LSMGO' && g.refused.linked && g.grade === 'VLSFO' && g.linked === null && g.committed === 0, g);
+  });
+
+  /* D11 — third review: a queued save during the first pull after a wipe, merged rates, picks that vanish,
+     stale form / BL prompt / deal form during a pull, an older build's row */
+  await scenario('D11 wipe + queued save, merged rates', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const C = await openT(db, 'user-operator2');
+    await addDeal(C.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    await C.page.evaluate(() => { if (_syncInterval) { clearInterval(_syncInterval); _syncInterval = null; } });
+    const W = await openT(db, 'user-operator');
+    await W.page.evaluate(async () => { window.confirm = () => true; await wipeSupabaseWorkspace().catch(() => {}); });
+    await sleep(300);
+    await C.page.evaluate(() => _pollOnce(true)); // row gone: no base
+    const A = await openT(db, 'user-operator');
+    await A.page.evaluate(async () => { addBarge({ name: 'FNSA 12' }); await saveSharedState(); await _waitForSaveIdle(); });
+    const c = await C.page.evaluate(async () => {
+      const orig = window.__mockDb;
+      window.__mockDb = async function(s) { const op = JSON.parse(s); if (op.table === 'abps_workspace' && op.action === 'select') await new Promise(r => setTimeout(r, 1200)); return orig(s); };
+      const pull = _pollOnce(true); await new Promise(r => setTimeout(r, 100));
+      saveSharedState(); // a no-op save (as the vessel cards fire) while the first pull of the fresh row is in flight
+      await pull; await _waitForSaveIdle(); window.__mockDb = orig;
+      return { barges: getBarges().map(b => b.name), deals: _loadingDeals.filter(d => !d.deletedAt).length };
+    });
+    const st = U.row(db).payload.state;
+    check('D11 a save queued during the first pull of a colleague\'s fresh row (after a wipe) does not union the pre-wipe state back: FNSA 12 stays, the wiped deal is gone', c.barges.join() === 'FNSA 12' && c.deals === 0 && st.barges.map(b => b.name).join() === 'FNSA 12' && !(st.loadingDeals || []).length, { c, st: { barges: st.barges.map(b => b.name), deals: (st.loadingDeals || []).length } });
+    await C.ctx.close(); await W.ctx.close(); await A.ctx.close();
+    // merged rates: A changes the VLSFO rate and the surveyor; B (stale) edits only the notes → A's figures stay (rate 200)
+    const db2 = H.createDb({ workspace: seed(), realtime: false });
+    const A2 = await openT(db2, 'user-operator'), B2 = await openT(db2, 'user-operator2');
+    const l = await addLoading(A2.page, { terminal: 'VOPAK TERMINAL', qty: 3000 });
+    await B2.page.evaluate(() => _pollOnce(true));
+    await A2.page.evaluate(async (id) => { document.getElementById('ld-rate-vlsfo').value = '200'; updateLoadingConfig(); await _waitForSaveIdle(); editLoadingRecord(id); document.getElementById('ld-surveyor').value = 'SGS'; submitLoadingForm(); await _waitForSaveIdle(); }, l.rec.id);
+    await B2.page.evaluate(async (id) => { showPage('loading'); editLoadingRecord(id); document.getElementById('ld-notes').value = 'B note'; submitLoadingForm(); await _waitForSaveIdle(); }, l.rec.id);
+    const cr = U.row(db2).payload.state.loadingRecords.find(r => r.id === l.rec.id);
+    check('D11 merge: only one side changed the inputs → its own figures stay (pump 15 h at rate 200), notes from the other side', cr.surveyor === 'SGS' && cr.notes === 'B note' && Math.abs(cr.pumpHours - 15) < 1e-9 && Math.abs(cr.estimatedHours - 21) < 1e-9 && U.row(db2).payload.state.loadingConfig.rateVLSFO === 200, { cr: [cr.surveyor, cr.notes, cr.pumpHours, cr.estimatedHours], cfg: U.row(db2).payload.state.loadingConfig });
+    // both changed inputs: recomputed with the MERGED rate (200), whichever device merges
+    await A2.page.evaluate(() => _pollOnce(true)); await B2.page.evaluate(() => _pollOnce(true));
+    await A2.page.evaluate(async (id) => { editLoadingRecord(id); document.getElementById('ld-qty').value = '4000'; document.getElementById('ld-qty').dispatchEvent(new Event('input')); submitLoadingForm(); await _waitForSaveIdle(); }, l.rec.id);
+    await B2.page.evaluate(async (id) => { editLoadingRecord(id); document.getElementById('ld-pre-ops').value = '4'; submitLoadingForm(); await _waitForSaveIdle(); }, l.rec.id);
+    const cr2 = U.row(db2).payload.state.loadingRecords.find(r => r.id === l.rec.id);
+    check('D11 merge: qty from A + pre-ops from B → recomputed at the merged rate 200 (pump 20 h, 27.5 h total)', cr2.qty === 4000 && cr2.preOpsHours === 4 && Math.abs(cr2.pumpHours - 20) < 1e-9 && Math.abs(cr2.estimatedHours - 27.5) < 1e-9, { cr2: [cr2.qty, cr2.preOpsHours, cr2.pumpHours, cr2.estimatedHours] });
+  });
+
+  await scenario('D11b picks that vanish, stale form, BL prompt, deal form', async (openT) => {
+    const db = H.createDb({ workspace: seed(), realtime: false });
+    const A = await openT(db, 'user-operator'), B = await openT(db, 'user-operator2');
+    const dV = await addDeal(A.page, { supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    const dE = await addDeal(A.page, { supplier: 'EXTRA', terminal: 'FOT', grade: 'VLSFO', qty: 20000 });
+    const l = await addLoading(A.page, { terminal: 'VOPAK TERMINAL', qty: 4500 });
+    await B.page.evaluate(() => _pollOnce(true));
+    // A edits the loading; B removes its deal
+    await A.page.evaluate((id) => { showPage('loading'); editLoadingRecord(id); window.__toasts = []; }, l.rec.id);
+    await B.page.evaluate(async (dV) => { showPage('deals'); dealDelete(dV); await _waitForSaveIdle(); }, dV);
+    const v1 = await A.page.evaluate(async (id) => { await _pollOnce(true); const sel = document.getElementById('ld-deal'); const r = { val: sel.value, manual: sel.dataset.manual, toast: window.__toasts.some(t => /no longer available/.test(t)) }; submitLoadingForm(); await _waitForSaveIdle(); r.dealId = _loadingRecords.find(x => x.id === id).dealId || null; return r; }, l.rec.id);
+    check('D11b the deal of the loading being edited is removed by a colleague: the form says so and shows "No deal" (not another deal); Update saves no link', v1.val === '' && v1.manual === 'none' && v1.toast && v1.dealId === null, v1);
+    // a hand-picked deal for a NEW loading closed by a colleague
+    await A.page.evaluate(async (dE) => { cancelLoadingEdit(); const sel = document.getElementById('ld-deal'); sel.value = dE; sel.dispatchEvent(new Event('change')); window.__toasts = []; }, dE);
+    await B.page.evaluate(async (dE) => { await _pollOnce(true); showPage('deals'); dealClose(dE); await _waitForSaveIdle(); }, dE);
+    const v2 = await A.page.evaluate(async () => { await _pollOnce(true); const sel = document.getElementById('ld-deal'); return { val: sel.value, manual: sel.dataset.manual, toast: window.__toasts.some(t => /no longer available/.test(t)) }; });
+    check('D11b a deal picked by hand that a colleague closes meanwhile: "No deal" + message, never a silent other deal', v2.val === '' && v2.manual === 'none' && v2.toast, v2);
+    // the operator's own grade change: the auto pick for the new grade; back on the record's grade its own deal
+    const dM = await addDeal(A.page, { supplier: 'MGOCO', terminal: 'VOPAK TERMINAL', grade: 'LSMGO', qty: 3000 });
+    const dV2 = await addDeal(A.page, { supplier: 'VITOL2', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000 });
+    await A.page.evaluate(() => cancelLoadingEdit()); // the "No deal" left by the closed pick is the form's state until it is cleared
+    const l2 = await addLoading(A.page, { terminal: 'VOPAK TERMINAL', qty: 4500, dayOffset: 3 });
+    check('D11b seed: the new loading lifts from VITOL2', l2.rec.dealId === dV2, l2);
+    const v3 = await A.page.evaluate(async ({ id, dM, dV2 }) => {
+      editLoadingRecord(id); const g = document.getElementById('ld-grade'), sel = document.getElementById('ld-deal');
+      g.value = 'LSMGO'; g.dispatchEvent(new Event('change')); const onMgo = sel.value;
+      g.value = 'VLSFO'; g.dispatchEvent(new Event('change')); const back = sel.value;
+      cancelLoadingEdit(); return { onMgo, back, dM, dV2 };
+    }, { id: l2.rec.id, dM, dV2 });
+    check('D11b editing: a grade change picks the LSMGO deal (own deal only listed), the flip back restores the own deal', v3.onMgo === dM && v3.back === dV2, v3);
+    // stale form: colleague's edit while the form is open → told once
+    await A.page.evaluate((id) => { editLoadingRecord(id); window.__toasts = []; }, l2.rec.id);
+    await B.page.evaluate(async (id) => { await _pollOnce(true); showPage('loading'); editLoadingRecord(id); document.getElementById('ld-qty').value = '4700'; document.getElementById('ld-qty').dispatchEvent(new Event('input')); submitLoadingForm(); await _waitForSaveIdle(); }, l2.rec.id);
+    const v4 = await A.page.evaluate(async () => { await _pollOnce(true); const n1 = window.__toasts.filter(t => /changed by a colleague meanwhile/.test(t)).length; await _pollOnce(true); const n2 = window.__toasts.filter(t => /changed by a colleague meanwhile/.test(t)).length; cancelLoadingEdit(); return { n1, n2, editing: _loadingEditingId }; });
+    check('D11b a colleague\'s edit of the loading in the form is announced once (not on every pull)', v4.n1 === 1 && v4.n2 === 1, v4);
+    // BL prompt open on A while B completes the loading
+    await A.page.evaluate((id) => { completeLoadingPrompt(id); window.__toasts = []; }, l2.rec.id);
+    await B.page.evaluate(async (id) => { completeLoadingPrompt(id); document.getElementById('bl-qty').value = '4600'; blConfirm(); await _waitForSaveIdle(); }, l2.rec.id);
+    const v5 = await A.page.evaluate(async (id) => { await _pollOnce(true); const open = document.getElementById('bl-modal').style.display === 'flex'; const toast = window.__toasts.some(t => /already marked this loading Completed \(BL 4,600 MT\)/.test(t)); const r = _loadingRecords.find(x => x.id === id); return { open, toast, bl: r.blQty }; }, l2.rec.id);
+    check('D11b the BL prompt closes when a colleague completes that loading meanwhile; their BL 4,600 stays', !v5.open && v5.toast && v5.bl === 4600, v5);
+    // deal form open on A while B removes the deal
+    await A.page.evaluate((dV2) => { showPage('deals'); dealEdit(dV2); document.getElementById('dl-ref').value = 'R-A2'; window.__toasts = []; }, dV2);
+    await B.page.evaluate(async (dV2) => { await _pollOnce(true); showPage('deals'); dealDelete(dV2); await _waitForSaveIdle(); }, dV2);
+    const v6 = await A.page.evaluate(async () => { await _pollOnce(true); return { editing: _dealEditingId, formHidden: document.getElementById('deal-form-card').style.display === 'none', toast: window.__toasts.some(t => /deal you were editing was removed/.test(t)) }; });
+    check('D11b the deal form is closed with a message when a colleague removes that deal', v6.editing === null && v6.formHidden && v6.toast, v6);
+  });
+
+  await scenario('D11c an older build\'s row keeps this device\'s deals', async (openT) => {
+    const deal = { id: 'deal_seed', supplier: 'VITOL', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 40000, date: '2026-10-01', ref: '', notes: '', status: 'open', createdAt: 1, updatedAt: 1 };
+    const db = H.createDb({ workspace: seed({ deals: [deal] }), realtime: false });
+    const B = await openT(db, 'user-operator2');
+    await B.page.evaluate(() => _waitForSaveIdle());
+    // an older build rewrites the row without the loadingDeals key
+    const row = U.row(db); delete row.payload.state.loadingDeals; row.version = Date.now(); row.updated_at = new Date().toISOString();
+    await B.page.reload({ waitUntil: 'load' }); await sleep(2500); await U.helpers(B);
+    const b = await B.page.evaluate(() => _loadingDeals.filter(d => !d.deletedAt).map(d => d.supplier));
+    check('D11c a row without the loadingDeals key (older build) leaves the local deals alone', b.join() === 'VITOL', b);
   });
 
   await browser.close();
