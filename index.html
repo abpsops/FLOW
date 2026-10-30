@@ -248,9 +248,9 @@ function _chartTextColor() {
   --pg-alerts:       #A23347;
   --pg-bargefleet:   #A17A22;
   --pg-availability: #AD611C;
-  --pg-simulator:    #6A4C93;
   --pg-agents:       #8A6D2E;
   --pg-reports:      #B4502F;
+  --pg-deals:        #6A4C93;
   --pg-commandcenter:#633B91;
   --pg-checklist:    #A03A54;
   --pg-records:      #8B4230;
@@ -654,6 +654,38 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 #page-availability .page-title{color:var(--pg-availability)}
 #page-agents .page-title{color:var(--pg-agents)}
 #page-reports .page-title{color:var(--pg-reports)}
+#page-deals .page-title{color:var(--pg-deals)}
+/* ── Loading Deals (bulk purchases) ── */
+.deal-card{margin-bottom:12px}
+.deal-card.deal-closed{opacity:.65}
+.deal-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.deal-name{font-size:15px;font-weight:700;color:var(--ink);font-family:'DM Sans',sans-serif}
+.deal-meta{font-size:11px;color:var(--sub)}
+.deal-pill{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;font-family:'DM Mono',monospace;letter-spacing:.04em}
+.deal-nums{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin:8px 0 6px}
+.deal-num{background:var(--surface2);border-radius:8px;padding:8px 10px;min-width:0}
+.deal-num-l{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deal-num-v{font-size:17px;font-weight:700;color:var(--ink);font-family:'DM Mono',monospace}
+.deal-num-v.good{color:var(--green)}.deal-num-v.bad{color:var(--red)}.deal-num-v.warn{color:var(--amber)}
+.deal-num-d{font-size:10px;color:var(--muted)}
+.deal-bar{height:10px;border-radius:999px;background:var(--surface2);overflow:hidden;display:flex;margin:2px 0 10px}
+.deal-bar i{display:block;height:100%}
+.deal-bar .lifted{background:var(--fuel-v)}.deal-bar .lifted.m{background:var(--fuel-m)}
+.deal-bar .committed{background:repeating-linear-gradient(45deg,var(--amber),var(--amber) 4px,var(--amber-lt) 4px,var(--amber-lt) 8px)}
+.deal-warn{font-size:11px;font-weight:700;color:var(--amber);background:var(--amber-lt);border:1px solid var(--amber-bd);border-left:3px solid var(--amber);border-radius:6px;padding:6px 10px;margin-bottom:8px}
+.deal-warn.bad{color:var(--red);background:var(--red-lt);border-color:var(--red-bd);border-left-color:var(--red)}
+.deal-tbl{width:100%;border-collapse:collapse;font-size:11.5px}
+.deal-tbl th{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);text-align:left;padding:4px 6px;border-bottom:1px solid var(--border)}
+.deal-tbl td{padding:5px 6px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle}
+.deal-tbl th.n,.deal-tbl td.n{text-align:right;font-family:'DM Mono',monospace}
+.deal-tbl tr.done td{color:var(--sub)}
+.deal-foot{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.deal-foot select{font:inherit;font-size:11.5px;padding:5px 8px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);max-width:100%}
+.deal-empty{font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center}
+.deal-sec{font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--sub);margin:16px 0 8px}
+.ld-chip{font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;font-family:'DM Mono',monospace;letter-spacing:.04em;background:var(--surface2);color:var(--sub)}
+@media(max-width:900px){.deal-nums{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media print{.deal-foot,.deal-tbl .deal-act{display:none}}
 #page-commandcenter .page-title{color:var(--pg-commandcenter)}
 #page-checklist .page-title{color:var(--pg-checklist)}
 #page-records .page-title{color:var(--pg-records)}
@@ -1384,53 +1416,6 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
 @media print{.lc-hold-btn{display:none}}
 .lc-rng.in{color:var(--green)}.lc-rng.out{color:var(--amber)}
 
-/* ════════════════════════════════════════
-   WHAT-IF PLANNER
-════════════════════════════════════════ */
-#page-simulator .page-title{color:var(--pg-simulator)}
-.sim-banner{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--sub);background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--pg-simulator);border-radius:var(--radius-sm);padding:9px 12px;margin-bottom:12px}
-.sim-banner strong{color:var(--ink)}
-.sim-note{font-size:12.5px;color:var(--sub);background:var(--surface);border:1px dashed var(--border);border-radius:var(--radius);padding:18px;text-align:center}
-.sim-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:6px}
-.sim-kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:10px 12px;display:flex;flex-direction:column;gap:3px;min-width:0}
-.sim-kpi-l{font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--sub)}
-.sim-kpi-v{font-size:19px;font-weight:700;color:var(--ink);font-family:'DM Mono',monospace}
-.sim-kpi-d{font-size:10.5px;color:var(--muted)}
-.sim-kpi.sim-good{border-color:var(--green-bd)}.sim-kpi.sim-good .sim-kpi-d{color:var(--green);font-weight:600}
-.sim-kpi.sim-bad{border-color:var(--red-bd)}.sim-kpi.sim-bad .sim-kpi-d{color:var(--red);font-weight:600}
-.sim-sub{font-size:10.5px;color:var(--muted);margin-top:2px;white-space:normal}
-.sim-muted{color:var(--muted);font-size:11.5px}
-.sim-wrap{margin-bottom:6px}
-.sim-tbl td{vertical-align:top}
-.sim-tbl td.sim-res,.sim-tbl td.sim-vs{white-space:normal;min-width:150px}
-.sim-tbl tr.sim-diff td{background:rgba(14,122,155,.05)}
-.sim-tbl tr.sim-off td{opacity:.55}
-.sim-in{font:inherit;font-size:11.5px;color:var(--text);background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:4px 6px;max-width:100%;min-width:0}
-.sim-in.sim-qty{width:78px}
-.sim-in.sim-edited{border-color:var(--azure);box-shadow:0 0 0 2px rgba(14,122,155,.12)}
-.sim-quick{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
-.sim-qb{font:inherit;font-size:10px;font-weight:600;color:var(--sub);background:var(--surface2);border:1px solid var(--border);border-radius:5px;padding:1px 6px;cursor:pointer}
-.sim-qb:hover{color:var(--azure);border-color:var(--azure)}
-.sim-qb:disabled{opacity:.4;cursor:default}
-.sim-chip{display:inline-block;font-size:10px;font-weight:600;padding:1px 6px;margin:0 3px 3px 0;border-radius:4px;border:1px solid var(--border);color:var(--sub);background:var(--surface2);white-space:normal}
-.sim-chip.sim-good{color:var(--green);background:var(--green-lt);border-color:var(--green-bd)}
-.sim-chip.sim-bad{color:var(--red);background:var(--red-lt);border-color:var(--red-bd)}
-.sim-chip.sim-warn{color:var(--amber);background:var(--amber-lt);border-color:var(--amber-bd)}
-.sim-chip.sim-chg{color:var(--azure);background:var(--azure-lt);border-color:var(--azure-bd)}
-.sim-bad{color:var(--red);font-weight:600}
-.sim-card{margin-bottom:10px}
-.sim-list{margin:0;padding-left:18px;font-size:12px;color:var(--text);display:flex;flex-direction:column;gap:5px}
-.sim-barges{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px}
-.sim-barge{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--bc,var(--border));border-radius:var(--radius);padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-width:0}
-.sim-barge-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
-.sim-row{display:flex;gap:8px 12px;flex-wrap:wrap;align-items:flex-end;font-size:11px;color:var(--sub)}
-.sim-row label{display:flex;flex-direction:column;gap:2px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sub)}
-.sim-blk{font-size:11px;color:var(--amber);background:var(--amber-lt);border:1px solid var(--amber-bd);border-radius:6px;padding:3px 8px}
-.sim-found{font-size:12px;color:var(--text);background:var(--green-lt);border:1px solid var(--green-bd);border-radius:var(--radius-sm);padding:10px 12px}
-.sim-found ul{margin:6px 0 8px;padding-left:18px;display:flex;flex-direction:column;gap:3px}
-.sim-spin{display:inline-block;width:10px;height:10px;border:2px solid var(--border);border-top-color:var(--azure);border-radius:50%;animation:simspin .8s linear infinite;vertical-align:-1px}
-@keyframes simspin{to{transform:rotate(360deg)}}
-@media(max-width:900px){.sim-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
 
 /* ════════════════════════════════════════
    NSC
@@ -1682,8 +1667,8 @@ html[data-skin="harbour"]{
   --fuel-v:#1565C0; --fuel-v-lt:#E3EEFB; --fuel-v-bd:#BBD3F2;
   --fuel-m:#0E9F8E; --fuel-m-lt:#E2F5F2; --fuel-m-bd:#A9DDD5;
   --pg-dashboard:#0B2545; --pg-nominations:#0B2545; --pg-schedule:#0B2545; --pg-loading:#0B2545;
-  --pg-timeline:#0B2545; --pg-alerts:#0B2545; --pg-bargefleet:#0B2545; --pg-availability:#0B2545; --pg-simulator:#0B2545;
-  --pg-agents:#0B2545; --pg-reports:#0B2545; --pg-commandcenter:#0B2545; --pg-checklist:#0B2545;
+  --pg-timeline:#0B2545; --pg-alerts:#0B2545; --pg-bargefleet:#0B2545; --pg-availability:#0B2545;
+  --pg-agents:#0B2545; --pg-reports:#0B2545; --pg-deals:#0B2545; --pg-commandcenter:#0B2545; --pg-checklist:#0B2545;
   --pg-records:#0B2545; --pg-deliverylog:#0B2545; --pg-archives:#0B2545; --pg-trash:#0B2545;
   --pg-bargetracking:#0B2545;
   --bg:#EEF2F7; --surface:#FFFFFF; --surface2:#F6F8FB; --surface3:#EEF2F7;
@@ -2989,10 +2974,6 @@ function flowWelcomeGo(pageId) {
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
     Availability Check
   </a>
-  <a class="sidebar-item" role="button" tabindex="0" onclick="showPage('simulator')" id="nav-simulator">
-    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>
-    What-if Planner
-  </a>
   <a class="sidebar-item" role="button" tabindex="0" onclick="showPage('agents')" id="nav-agents">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
     Agent Directory
@@ -3002,6 +2983,10 @@ function flowWelcomeGo(pageId) {
   <a class="sidebar-item" role="button" tabindex="0" onclick="showPage('reports')" id="nav-reports">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     Reports &amp; Analytics
+  </a>
+  <a class="sidebar-item" role="button" tabindex="0" onclick="showPage('deals')" id="nav-deals">
+    <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-4-9 4 9 4 9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 16l9 4 9-4"/></svg>
+    Loading Deals
   </a>
   <a class="sidebar-item" role="button" tabindex="0" onclick="showPage('bargetracking')" id="nav-bargetracking">
     <svg class="sidebar-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="15" x2="15" y2="15"/><line x1="9" y1="11" x2="12" y2="11"/></svg>
@@ -3547,9 +3532,9 @@ function flowWelcomeGo(pageId) {
       <div class="field"><label for="ld-barge">Barge</label>
         <select id="ld-barge"></select>
       </div>
-      <div class="field"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list"></div>
+      <div class="field"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
       <div class="field"><label for="ld-grade">Grade</label>
-        <select id="ld-grade" onchange="_recalcLoadingEstimate()">
+        <select id="ld-grade" onchange="_recalcLoadingEstimate();_ldRefreshDealSelect()">
           <option value="VLSFO">VLSFO</option>
           <option value="LSMGO">LSMGO</option>
         </select>
@@ -3580,7 +3565,10 @@ function flowWelcomeGo(pageId) {
       <div class="field"><label for="ld-end-date-override">End Date <span style="font-weight:400;color:var(--muted)">— override if it won't match the estimate</span></label><input type="date" id="ld-end-date-override"></div>
       <div class="field"><label for="ld-surveyor">Surveyor</label><input type="text" id="ld-surveyor" placeholder="e.g. SGS, Intertek, independent surveyor"></div>
     </div>
-    <div style="display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:14px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="field"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
+        <select id="ld-deal" onchange="this.dataset.manual='1'"><option value="">No deal</option></select>
+      </div>
       <div class="field"><label for="ld-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
     </div>
 
@@ -3780,19 +3768,6 @@ function flowWelcomeGo(pageId) {
 </div>
 
 <!-- ══════════════════════════════════════════════════
-     PAGE: WHAT-IF PLANNER — private sandbox, nothing here is saved or synced
-══════════════════════════════════════════════════ -->
-<div class="page" id="page-simulator" data-section="planning">
-  <div class="page-header-row">
-    <div>
-      <div class="page-title">What-if Planner</div>
-      <div class="page-subtitle">Try a change on a private copy of the plan — nothing is saved, shared or sent</div>
-    </div>
-  </div>
-  <div id="sim-root"></div>
-</div>
-
-<!-- ══════════════════════════════════════════════════
      PAGE: AVAILABILITY CHECK
 ══════════════════════════════════════════════════ -->
 <div class="page" id="page-availability" data-section="planning">
@@ -3876,6 +3851,67 @@ function flowWelcomeGo(pageId) {
       <button class="btn btn-secondary btn-sm" onclick="showPage('alerts')" style="margin-left:10px">Go to Alerts</button>
     </div>
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════
+     PAGE: LOADING DEALS — bulk purchases and what each loading lifted from them
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-deals" data-section="reports">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Loading Deals</div>
+      <div class="page-subtitle">Bulk purchases — each loading is deducted from its deal by the quantity on the BL; what is left to lift is shown per deal</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary btn-sm" id="deal-new-btn" onclick="dealToggleForm()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Deal
+      </button>
+    </div>
+  </div>
+
+  <div class="kpi-grid kpi-grid-4" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Open Deals</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-open">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">VLSFO left to lift (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-v">0</span>
+    </div>
+    <div class="kpi-card kpi-teal" style="padding:13px 16px">
+      <span class="kpi-label">LSMGO left to lift (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-m">0</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">Committed to scheduled loadings (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-committed">0</span>
+    </div>
+  </div>
+
+  <div class="card" id="deal-form-card" style="display:none;border-top:2px solid var(--azure);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif" id="deal-form-title">New Deal</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">The bulk quantity bought. Every loading scheduled against it is deducted — by the quantity on the BL once it is marked Completed.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="field"><label for="dl-supplier">Supplier</label><input type="text" id="dl-supplier" placeholder="e.g. Vitol, ADNOC…"></div>
+      <div class="field"><label for="dl-terminal">Terminal <span style="font-weight:400;color:var(--muted)">— where it is lifted</span></label><input type="text" id="dl-terminal" placeholder="e.g. VOPAK TERMINAL" list="ld-terminal-list"></div>
+      <div class="field"><label for="dl-grade">Grade</label>
+        <select id="dl-grade"><option value="VLSFO">VLSFO</option><option value="LSMGO">LSMGO</option></select>
+      </div>
+      <div class="field"><label for="dl-qty">Quantity bought (MT)</label><input type="number" id="dl-qty" min="0" step="100" placeholder="e.g. 40000"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:12px;margin-bottom:14px">
+      <div class="field"><label for="dl-date">Deal date</label><input type="date" id="dl-date"></div>
+      <div class="field"><label for="dl-ref">Reference <span style="font-weight:400;color:var(--muted)">— contract / deal no.</span></label><input type="text" id="dl-ref" placeholder="e.g. CTR-2026-014"></div>
+      <div class="field"><label for="dl-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="dl-notes" placeholder="Spec, pricing basis, remarks…"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="deal-submit-btn" onclick="dealSubmit()"><span id="deal-submit-label">Add Deal</span></button>
+      <button class="btn btn-secondary" onclick="dealCancelEdit()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="deal-list"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════
@@ -4868,9 +4904,9 @@ const PAGE_META = {
   alerts:       { title: 'Alerts & Notices',            sub: 'PAQ status · Barge ROB alerts · Replenishment · Schedule reminders',        section: 'operations' },
   bargefleet:   { title: 'Barge Fleet Configuration',   sub: 'Register barges, ROB, pump rates and operational parameters',               section: 'planning' },
   availability: { title: 'Availability Check',          sub: 'Next Supply Availability — multi-barge checker with split recommendation', section: 'planning' },
-  simulator:    { title: 'What-if Planner',             sub: 'Private sandbox — move ETAs, delay or cancel vessels, pin or park barges, see the plan change', section: 'planning' },
   agents:       { title: 'Agent Directory',             sub: 'Fujairah shipping agents — company names & email contacts',                section: 'planning' },
   reports:      { title: 'Reports & Analytics',         sub: 'Supply performance, fuel volumes, barge utilisation',                      section: 'reports' },
+  deals:        { title: 'Loading Deals',               sub: 'Bulk purchases — what each loading lifted (per BL) and what is left to lift', section: 'reports' },
   commandcenter:{ title: 'Command Center',              sub: 'Live wallboard — barge ROB, vessel schedule, active alerts',                section: 'system' },
   checklist:    { title: 'Supply Operations Checklist', sub: 'Enter actuals and save each supply',                                         section: 'reports' },
   records:      { title: 'Saved Supply Records',        sub: 'All completed supply operations — historical log',                          section: 'reports' },
@@ -4913,6 +4949,7 @@ function showPage(id) {
   // Page-specific refresh hooks
   if (id === 'dashboard')    refreshDashboard();
   if (id === 'reports')      refreshReports();
+  if (id === 'deals')        renderDeals();
   if (id === 'commandcenter') renderCommandCenter();
   if (id === 'records')      renderSavedRecords();
   if (id === 'checklist')    { renderChecklist(_lastSched || []); }
@@ -4932,7 +4969,6 @@ function showPage(id) {
   if (id === 'agents')       renderAgentDirectory();
   if (id === 'trash')        renderTrashBin();
   if (id === 'alerts')       refreshAlertsPage();
-  if (id === 'simulator')    _simOpen();
 }
 
 /* ─── Topbar overflow menu (Full Reset / Wipe Cloud / Clear All Data / Log Out) ─── */
@@ -7590,7 +7626,7 @@ function _isPlainObj(x) { return !!x && typeof x === 'object' && !Array.isArray(
 
 // Stable identity per collection — matched per item in a three-way merge.
 // Agents are matched by name: their numeric ids are assigned per device.
-const _MERGE_ID_FIELDS   = { vessels: 'nomUid', barges: 'id', records: 'id', loadingRecords: 'id', bargeTrackingReports: 'id', bargeReloads: 'id', bargeBlocks: 'id', agents: 'name' };
+const _MERGE_ID_FIELDS   = { vessels: 'nomUid', barges: 'id', records: 'id', loadingRecords: 'id', loadingDeals: 'id', bargeTrackingReports: 'id', bargeReloads: 'id', bargeBlocks: 'id', agents: 'name' };
 const _MERGE_ATOMIC_KEYS = { lastSched: 1, lastSchedMeta: 1 };   // derived as a whole by calculate() — never splice two schedules together (meta travels with its schedule)
 const _MERGE_SET_KEYS    = { robAuditLog: 1 }; // append-only log — union of both sides
 
@@ -8008,6 +8044,7 @@ function _applyPayload(payload, replaceUnions) {
     }
     if (_isPlainObj(st.deliveryLog)) { _deliveryLog = _deepClone(st.deliveryLog); if (typeof _saveDeliveryLog === 'function') _saveDeliveryLog(); }
     if (Array.isArray(st.loadingRecords)) _loadingRecords = _deepClone(st.loadingRecords);
+    if (Array.isArray(st.loadingDeals)) _loadingDeals = _deepClone(st.loadingDeals);
     if (_isPlainObj(st.fuelingInitiated)) _fuelingInitiated = _deepClone(st.fuelingInitiated);
     if (_isPlainObj(st.bakedSupplyIds)) _bakedSupplyIds = _deepClone(st.bakedSupplyIds);
   }
@@ -8787,6 +8824,7 @@ function _readLoadingForm() {
   const endOverride = document.getElementById('ld-end-date-override')?.value;
   const surveyor = (document.getElementById('ld-surveyor')?.value || '').trim();
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
+  const dealId = document.getElementById('ld-deal')?.value || '';
 
   if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
@@ -8814,7 +8852,7 @@ function _readLoadingForm() {
     endOverridden: !!endOverride,
     surveyor,
     notes,
-  }, startWin ? { startWin } : {});
+  }, startWin ? { startWin } : {}, dealId ? { dealId } : {});
 }
 
 function _clearLoadingForm() {
@@ -8822,6 +8860,9 @@ function _clearLoadingForm() {
   ['ld-terminal','ld-qty','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
+  const dl = document.getElementById('ld-deal');
+  if (dl) { delete dl.dataset.manual; dl.value = ''; }
+  _ldRefreshDealSelect();
 }
 
 // ── Loading vs. vessel-supply / other-loading conflict check ──────────
@@ -8907,6 +8948,7 @@ function editLoadingRecord(id) {
   document.getElementById('ld-end-date-override').value = rec.endOverridden ? _localDateInputStr(new Date(rec.endAt)) : '';
   document.getElementById('ld-surveyor').value = rec.surveyor || '';
   document.getElementById('ld-notes').value = rec.notes || '';
+  _ldRefreshDealSelect(rec.dealId || '');
 
   document.getElementById('loading-submit-btn-label').textContent = 'Update Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = '';
@@ -8970,11 +9012,12 @@ function deleteLoadingRecord(id) {
 // record itself isn't deleted; it stays visible (greyed, tagged Done)
 // in the Loading page's own list, with an Undo option in case it was
 // marked by mistake.
-function markLoadingRecordDone(id) {
+function markLoadingRecordDone(id, blQty) {
   const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
   if (!rec) return;
   rec.completed = true;
   rec.completedAt = Date.now();
+  if (blQty != null && blQty !== '' && !isNaN(Number(blQty))) { rec.blQty = Number(blQty); rec.blAt = Date.now(); }
   rec.updatedAt = Date.now(); // so the merge knows this is the newer copy
   saveLoadingRecords();
   if (_loadingEditingId === id) cancelLoadingEdit();
@@ -9001,6 +9044,7 @@ function _refreshLoadingConsumers() {
   if (typeof renderTimelineLoadingStrip === 'function') renderTimelineLoadingStrip();
   if (typeof refreshDashboard === 'function' && document.getElementById('page-dashboard')?.classList.contains('active')) refreshDashboard();
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // forecast + reload alerts
+  if (typeof _refreshDealsIfShown === 'function') _refreshDealsIfShown(); // deal balances
 }
 
 function _refreshLoadingTerminalDatalist() {
@@ -9008,6 +9052,324 @@ function _refreshLoadingTerminalDatalist() {
   if (!dl) return;
   const known = Array.from(new Set((_loadingRecords || []).filter(function(r) { return !r.deletedAt; }).map(function(r) { return r.terminal; }).filter(Boolean)));
   dl.innerHTML = known.map(function(t) { return '<option value="' + t.replace(/"/g,'&quot;') + '">'; }).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   LOADING DEALS — bulk purchases (e.g. 40,000 MT) lifted a few thousand MT
+   at a time. A loading record names the deal it lifts from (dealId); once it
+   is marked Completed the quantity on its BL (blQty) is what the deal loses.
+   Scheduled (uncompleted) loadings count as committed against the balance.
+   Deals live in the workspace payload (loadingDeals, merged by id) and in
+   the same local store as the loading records.
+   ══════════════════════════════════════════════════════ */
+let _dealEditingId = null;
+function _dealById(id) { return (_loadingDeals || []).find(function(d) { return d && d.id === id; }) || null; }
+function _dealLabel(d) {
+  if (!d) return '';
+  return [d.supplier || 'Deal', d.ref ? d.ref : '', (Number(d.qty) || 0).toLocaleString() + ' MT ' + (d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'), d.date ? _dealDateStr(d.date) : ''].filter(Boolean).join(' · ');
+}
+function _dealDateStr(ymd) {
+  const d = new Date(String(ymd) + 'T00:00:00');
+  return isNaN(d.getTime()) ? String(ymd) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+function _mtStr(x) { return Math.round(Number(x) || 0).toLocaleString(); }
+// What a completed loading lifted: the BL quantity, or the planned quantity until a BL figure is entered.
+function _loadingLifted(r) { return r.blQty != null && r.blQty !== '' && !isNaN(Number(r.blQty)) ? Number(r.blQty) : (Number(r.qty) || 0); }
+function _dealLoadings(dealId) {
+  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.dealId === dealId; })
+    .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
+}
+function _dealStats(d) {
+  const ls = _dealLoadings(d.id);
+  let lifted = 0, committed = 0, liftings = 0;
+  ls.forEach(function(r) { if (r.completed) { lifted += _loadingLifted(r); liftings++; } else committed += Number(r.qty) || 0; });
+  const bought = Number(d.qty) || 0;
+  return { loadings: ls, bought: bought, lifted: lifted, liftings: liftings, committed: committed, remaining: bought - lifted, available: bought - lifted - committed };
+}
+// Open deals of a grade, oldest first.
+function _dealsOpen(grade) {
+  return (_loadingDeals || []).filter(function(d) { return d && !d.deletedAt && d.status !== 'closed' && (!grade || (d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade); })
+    .sort(function(a, b) { return String(a.date || '').localeCompare(String(b.date || '')) || ((a.createdAt || 0) - (b.createdAt || 0)); });
+}
+// The deal a new loading lifts from: an open deal of that grade at that terminal with
+// quantity still available, else the oldest open deal of the grade with quantity available,
+// else any open deal of the grade (the page shows the shortfall).
+function _autoDealFor(grade, terminal) {
+  const open = _dealsOpen(grade);
+  if (!open.length) return null;
+  const t = String(terminal || '').trim().toLowerCase();
+  const avail = open.filter(function(d) { return _dealStats(d).available > 0; });
+  const pool = avail.length ? avail : open;
+  return (t && pool.find(function(d) { return String(d.terminal || '').trim().toLowerCase() === t; })) || pool[0];
+}
+// The Deal dropdown on the Loading form: open deals of the chosen grade, the
+// matching one pre-selected unless the user picked one (or "No deal") themselves.
+function _ldRefreshDealSelect(preferId) {
+  const sel = document.getElementById('ld-deal');
+  if (!sel) return;
+  const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
+  const terminal = document.getElementById('ld-terminal')?.value || '';
+  const open = _dealsOpen(grade);
+  const cur = preferId !== undefined ? preferId : sel.value;
+  sel.innerHTML = '<option value="">No deal — not deducted from a bulk purchase</option>' + open.map(function(d) {
+    const st = _dealStats(d);
+    return '<option value="' + esc(d.id) + '">' + esc(_dealLabel(d)) + ' — ' + esc(_mtStr(st.available)) + ' MT available</option>';
+  }).join('');
+  const valid = function(id) { return !!id && open.some(function(d) { return d.id === id; }); };
+  let want = '';
+  if (preferId !== undefined) { want = valid(preferId) ? preferId : ''; sel.dataset.manual = '1'; } // a record's own deal, when editing: kept
+  else if (sel.dataset.manual) want = valid(cur) ? cur : '';                                         // the user's own pick (or "No deal"): kept
+  else { const a = _autoDealFor(grade, terminal); want = a ? a.id : ''; }                           // otherwise re-picked on every change
+  sel.value = want;
+  sel.disabled = !open.length && !want;
+}
+
+/* Completing a loading asks for the quantity on the BL — that is what the deal loses. */
+let _blModal = null;
+function completeLoadingPrompt(id, opts) {
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
+  if (!rec || rec.deletedAt) { showToast('That loading is no longer in the list.', 'warning'); return; }
+  if (rec.completed) { showToast('That loading is already marked Completed.', 'warning'); _refreshLoadingConsumers(); return; }
+  _openBlModal(rec, 'complete', opts || {});
+}
+function editLoadingBl(id) {
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
+  if (!rec || rec.deletedAt) return;
+  _openBlModal(rec, 'edit', {});
+}
+function _openBlModal(rec, mode, opts) {
+  const m = document.getElementById('bl-modal');
+  if (!m) { if (mode === 'complete') markLoadingRecordDone(rec.id); return; }
+  _blModal = { id: rec.id, mode: mode, opts: opts };
+  const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  document.getElementById('bl-title').textContent = mode === 'complete' ? 'Mark loading Completed' : 'Quantity loaded per BL';
+  document.getElementById('bl-sub').textContent = (rec.terminal || 'Terminal') + ' · ' + (_resolveRecordBargeName(rec) || 'barge') + ' · planned ' + _mtStr(rec.qty) + ' MT ' + grade + ' · ' + fmt24(new Date(rec.startAt));
+  document.getElementById('bl-confirm-btn').textContent = mode === 'complete' ? 'Mark Completed' : 'Save';
+  const q = document.getElementById('bl-qty');
+  q.value = rec.blQty != null && rec.blQty !== '' ? rec.blQty : (Number(rec.qty) || '');
+  _blPreview();
+  m.style.display = 'flex';
+  setTimeout(function() { try { q.focus(); q.select(); } catch (e) {} }, 30);
+}
+function _blPreview() {
+  const el = document.getElementById('bl-deal');
+  if (!el || !_blModal) return;
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === _blModal.id; });
+  if (!rec) return;
+  const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  const q = parseFloat(document.getElementById('bl-qty').value);
+  const d = rec.dealId ? _dealById(rec.dealId) : null;
+  if (!d || d.deletedAt) {
+    el.innerHTML = 'Not linked to a deal — nothing is deducted from a bulk purchase.' + (_dealsOpen(grade).length ? ' Link it on the <b>Loading Deals</b> page.' : '');
+    return;
+  }
+  const st = _dealStats(d);
+  // Balance without this loading's own current contribution, then with the figure typed.
+  const own = rec.completed ? _loadingLifted(rec) : 0;
+  const before = st.remaining + own, after = before - (isNaN(q) ? 0 : q);
+  el.innerHTML = 'Deal <b>' + esc(_dealLabel(d)) + '</b><br>Left to lift: ' + esc(_mtStr(before)) + ' MT → <b>' + esc(_mtStr(after)) + ' MT</b> after this BL' +
+    (after < 0 ? ' <span style="color:var(--red);font-weight:700">— more than the deal has left</span>' : '');
+}
+function closeBlModal() {
+  _blModal = null;
+  const m = document.getElementById('bl-modal');
+  if (m) m.style.display = 'none';
+}
+function blConfirm() {
+  if (!_blModal) return;
+  const q = parseFloat(document.getElementById('bl-qty').value);
+  if (isNaN(q) || q < 0) { alert('Enter the quantity loaded per BL (0 or more).'); return; }
+  const m = _blModal;
+  closeBlModal();
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === m.id; });
+  if (!rec) return;
+  const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  if (m.mode === 'complete') {
+    markLoadingRecordDone(rec.id, q); // saves, re-renders the list, forecast and deals
+    const d = rec.dealId ? _dealById(rec.dealId) : null;
+    const dealTxt = d ? ' Deal ' + (d.supplier || '') + ': ' + _mtStr(_dealStats(d).remaining) + ' MT left to lift.' : '';
+    if (m.opts && m.opts.fromForecast) showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed (BL ' + _mtStr(q) + ' MT ' + grade + ').' + dealTxt + ' Now record the reload in the barge\'s ROB so the stock shows.', 'success', 8000);
+    else showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed — BL ' + _mtStr(q) + ' MT ' + grade + '.' + dealTxt, 'success', 6000);
+  } else {
+    rec.blQty = q; rec.blAt = Date.now(); rec.updatedAt = Date.now();
+    saveLoadingRecords();
+    renderLoadingList();
+    _refreshLoadingConsumers();
+  }
+}
+
+/* ── Loading Deals page ── */
+function saveLoadingDeals() { return saveLoadingRecords(); } // same local store + the shared workspace
+function _refreshDealsIfShown() { if (_currentPage === 'deals') renderDeals(); }
+function dealToggleForm(show) {
+  const card = document.getElementById('deal-form-card');
+  if (!card) return;
+  const open = show !== undefined ? show : card.style.display === 'none';
+  card.style.display = open ? '' : 'none';
+  if (open) {
+    if (!_dealEditingId) {
+      const dt = document.getElementById('dl-date');
+      if (dt && !dt.value) dt.value = _localDateInputStr(new Date());
+      document.getElementById('deal-form-title').textContent = 'New Deal';
+      document.getElementById('deal-submit-label').textContent = 'Add Deal';
+    }
+    try { document.getElementById('dl-supplier').focus(); } catch (e) {}
+  }
+}
+function _readDealForm() {
+  const supplier = (document.getElementById('dl-supplier')?.value || '').trim();
+  const terminal = (document.getElementById('dl-terminal')?.value || '').trim();
+  const grade = document.getElementById('dl-grade')?.value === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  const qty = parseFloat(document.getElementById('dl-qty')?.value);
+  const date = document.getElementById('dl-date')?.value || '';
+  const ref = (document.getElementById('dl-ref')?.value || '').trim();
+  const notes = (document.getElementById('dl-notes')?.value || '').trim();
+  if (!supplier) { alert('Enter the supplier.'); return null; }
+  if (isNaN(qty) || qty <= 0) { alert('Enter the quantity bought (MT), greater than 0.'); return null; }
+  return { supplier: supplier, terminal: terminal, grade: grade, qty: qty, date: date, ref: ref, notes: notes };
+}
+function _clearDealForm() {
+  ['dl-supplier', 'dl-terminal', 'dl-qty', 'dl-ref', 'dl-notes', 'dl-date'].forEach(function(id) { const el = document.getElementById(id); if (el) el.value = ''; });
+  const g = document.getElementById('dl-grade'); if (g) g.value = 'VLSFO';
+}
+function dealSubmit() {
+  const data = _readDealForm();
+  if (!data) return;
+  if (!Array.isArray(_loadingDeals)) _loadingDeals = [];
+  if (_dealEditingId) {
+    const d = _dealById(_dealEditingId);
+    if (d) Object.assign(d, data, { updatedAt: Date.now() });
+  } else {
+    _loadingDeals.push(Object.assign({ id: 'deal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7), status: 'open', createdAt: Date.now(), updatedAt: Date.now() }, data));
+  }
+  saveLoadingDeals();
+  dealCancelEdit();
+  renderDeals();
+  _ldRefreshDealSelect();
+  showToast(_dealEditingId ? 'Deal updated.' : 'Deal added — loadings of this grade now lift from it.', 'success');
+}
+function dealEdit(id) {
+  const d = _dealById(id);
+  if (!d) return;
+  _dealEditingId = id;
+  document.getElementById('dl-supplier').value = d.supplier || '';
+  document.getElementById('dl-terminal').value = d.terminal || '';
+  document.getElementById('dl-grade').value = d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  document.getElementById('dl-qty').value = d.qty || '';
+  document.getElementById('dl-date').value = d.date || '';
+  document.getElementById('dl-ref').value = d.ref || '';
+  document.getElementById('dl-notes').value = d.notes || '';
+  document.getElementById('deal-form-title').textContent = 'Edit Deal';
+  document.getElementById('deal-submit-label').textContent = 'Update Deal';
+  dealToggleForm(true);
+  const card = document.getElementById('deal-form-card');
+  if (card) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function dealCancelEdit() {
+  _dealEditingId = null;
+  _clearDealForm();
+  dealToggleForm(false);
+}
+function dealClose(id) {
+  const d = _dealById(id); if (!d) return;
+  const st = _dealStats(d);
+  if (st.committed > 0 && !confirm(_mtStr(st.committed) + ' MT of scheduled loadings still lift from this deal. Close it anyway?')) return;
+  d.status = 'closed'; d.closedAt = Date.now(); d.updatedAt = Date.now();
+  saveLoadingDeals(); renderDeals(); _ldRefreshDealSelect();
+}
+function dealReopen(id) {
+  const d = _dealById(id); if (!d) return;
+  d.status = 'open'; delete d.closedAt; d.updatedAt = Date.now();
+  saveLoadingDeals(); renderDeals(); _ldRefreshDealSelect();
+}
+function dealDelete(id) {
+  const d = _dealById(id); if (!d) return;
+  const ls = _dealLoadings(id);
+  if (!confirm('Remove the deal "' + (d.supplier || '') + '"?' + (ls.length ? '\n\n' + ls.length + ' loading(s) lift from it — they stay, unlinked from any deal.' : ''))) return;
+  ls.forEach(function(r) { delete r.dealId; r.updatedAt = Date.now(); });
+  d.deletedAt = Date.now(); d.updatedAt = Date.now();
+  saveLoadingDeals(); renderDeals(); renderLoadingList(); _ldRefreshDealSelect();
+}
+function dealLinkLoading(dealId, loadingId) {
+  if (!loadingId) return;
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === loadingId; });
+  const d = _dealById(dealId);
+  if (!rec || !d) return;
+  rec.dealId = dealId; rec.updatedAt = Date.now();
+  saveLoadingRecords(); renderDeals(); renderLoadingList();
+}
+function dealUnlinkLoading(loadingId) {
+  const rec = (_loadingRecords || []).find(function(r) { return r && r.id === loadingId; });
+  if (!rec) return;
+  delete rec.dealId; rec.updatedAt = Date.now();
+  saveLoadingRecords(); renderDeals(); renderLoadingList();
+}
+function _dealCardHtml(d, operator) {
+  const st = _dealStats(d);
+  const grade = d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  const gc = grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)', gbg = grade === 'LSMGO' ? 'var(--fuel-m-lt)' : 'var(--fuel-v-lt)';
+  const closed = d.status === 'closed';
+  const pct = function(x) { return st.bought > 0 ? Math.max(0, Math.min(100, x / st.bought * 100)) : 0; };
+  const liftedPct = pct(st.lifted), commPct = Math.min(100 - liftedPct, pct(st.committed));
+  let warn = '';
+  if (st.remaining <= 0) warn = '<div class="deal-warn bad">Exhausted — the whole deal has been lifted' + (st.remaining < 0 ? ' (' + _mtStr(-st.remaining) + ' MT over the quantity bought)' : '') + '.</div>';
+  else if (st.available < 0) warn = '<div class="deal-warn">Scheduled loadings exceed what is left by <b>' + esc(_mtStr(-st.available)) + ' MT</b> — a loading will come up short, or a new deal is needed.</div>';
+  const ldMap = _bargeColorMap();
+  const rows = st.loadings.map(function(r) {
+    const when = r.completed ? fmt24(new Date(r.completedAt || r.endAt)) : fmt24(new Date(r.startAt));
+    const act = operator ? '<td class="deal-act" style="white-space:nowrap">' +
+      (r.completed ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button> ' : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark Completed — asks for the BL quantity">Done</button> ') +
+      '<button class="btn btn-secondary btn-sm" onclick="dealUnlinkLoading(\'' + escJs(r.id) + '\')" title="Unlink from this deal">×</button></td>' : '';
+    return '<tr class="' + (r.completed ? 'done' : '') + '"><td>' + esc(when) + '</td><td>' + _bargePill(_resolveRecordBargeName(r), ldMap) + '</td><td>' + esc(r.terminal || '—') + '</td>' +
+      '<td class="n">' + esc(_mtStr(r.qty)) + '</td><td class="n">' + (r.completed ? '<b>' + esc(_mtStr(_loadingLifted(r))) + '</b>' + (r.blQty == null ? ' <span title="No BL figure entered — the planned quantity is used" style="color:var(--amber)">*</span>' : '') : '—') + '</td>' +
+      '<td>' + (r.completed ? '<span class="ld-chip" style="background:var(--green-lt);color:var(--green)">LIFTED</span>' : '<span class="ld-chip" style="background:var(--amber-lt);color:var(--amber)">SCHEDULED</span>') + '</td>' + act + '</tr>';
+  });
+  const linked = {}; (_loadingRecords || []).forEach(function(r) { if (r && r.dealId) linked[r.id] = 1; });
+  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && !r.dealId && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
+    .sort(function(a, b) { return new Date(b.startAt) - new Date(a.startAt); }) : [];
+  const linkSel = linkable.length ? '<select onchange="dealLinkLoading(\'' + escJs(d.id) + '\', this.value)" aria-label="Link a loading to this deal"><option value="">Link a loading of ' + esc(grade) + '…</option>' +
+    linkable.map(function(r) { return '<option value="' + esc(r.id) + '">' + esc(fmt24(new Date(r.startAt)) + ' · ' + (_resolveRecordBargeName(r) || '') + ' · ' + (r.terminal || '') + ' · ' + _mtStr(r.completed && r.blQty != null ? r.blQty : r.qty) + ' MT' + (r.completed ? ' (lifted)' : '')) + '</option>'; }).join('') + '</select>' : '';
+  const actions = operator ? (closed
+    ? '<button class="btn btn-secondary btn-sm" onclick="dealReopen(\'' + escJs(d.id) + '\')">Reopen</button>'
+    : '<button class="btn btn-secondary btn-sm" onclick="dealEdit(\'' + escJs(d.id) + '\')">Edit</button><button class="btn btn-secondary btn-sm" onclick="dealClose(\'' + escJs(d.id) + '\')" title="No more loadings lift from it; the history stays">Close deal</button>') +
+    '<button class="btn btn-secondary btn-sm" onclick="dealDelete(\'' + escJs(d.id) + '\')" title="Remove">Remove</button>' : '';
+  return '<div class="card deal-card' + (closed ? ' deal-closed' : '') + '" data-deal-id="' + esc(d.id) + '">' +
+    '<div class="deal-head"><span class="deal-name">' + esc(d.supplier || 'Deal') + '</span>' +
+      '<span class="deal-pill" style="background:' + gbg + ';color:' + gc + '">' + esc(grade) + '</span>' +
+      (closed ? '<span class="deal-pill" style="background:var(--surface2);color:var(--sub)">CLOSED</span>' : '') +
+      '<span class="deal-meta">' + esc([d.ref ? 'Ref ' + d.ref : '', d.date ? _dealDateStr(d.date) : '', d.terminal ? 'Lifted at ' + d.terminal : ''].filter(Boolean).join(' · ')) + '</span>' +
+      (d.notes ? '<span class="deal-meta">— ' + esc(d.notes) + '</span>' : '') + '</div>' +
+    warn +
+    '<div class="deal-nums">' +
+      '<div class="deal-num"><div class="deal-num-l">Bought</div><div class="deal-num-v">' + esc(_mtStr(st.bought)) + '</div><div class="deal-num-d">MT</div></div>' +
+      '<div class="deal-num"><div class="deal-num-l">Lifted</div><div class="deal-num-v">' + esc(_mtStr(st.lifted)) + '</div><div class="deal-num-d">' + st.liftings + ' loading' + (st.liftings === 1 ? '' : 's') + ' · per BL</div></div>' +
+      '<div class="deal-num"><div class="deal-num-l">Left to lift</div><div class="deal-num-v ' + (st.remaining <= 0 ? 'bad' : 'good') + '">' + esc(_mtStr(st.remaining)) + '</div><div class="deal-num-d">bought − lifted</div></div>' +
+      '<div class="deal-num"><div class="deal-num-l">Scheduled</div><div class="deal-num-v' + (st.committed ? ' warn' : '') + '">' + esc(_mtStr(st.committed)) + '</div><div class="deal-num-d">loadings not yet completed</div></div>' +
+      '<div class="deal-num"><div class="deal-num-l">Free to plan</div><div class="deal-num-v ' + (st.available < 0 ? 'bad' : '') + '">' + esc(_mtStr(st.available)) + '</div><div class="deal-num-d">left − scheduled</div></div>' +
+    '</div>' +
+    '<div class="deal-bar" title="' + esc(Math.round(liftedPct) + '% lifted, ' + Math.round(commPct) + '% scheduled') + '"><i class="lifted' + (grade === 'LSMGO' ? ' m' : '') + '" style="width:' + liftedPct.toFixed(1) + '%"></i><i class="committed" style="width:' + commPct.toFixed(1) + '%"></i></div>' +
+    (rows.length ? '<table class="deal-tbl"><thead><tr><th>When</th><th>Barge</th><th>Terminal</th><th class="n">Planned MT</th><th class="n">Lifted MT (BL)</th><th>Status</th>' + (operator ? '<th class="deal-act"></th>' : '') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table>'
+      : '<div class="deal-meta">No loading lifts from this deal yet — schedule one on the Loading page (it links automatically) or link an existing one below.</div>') +
+    '<div class="deal-foot">' + linkSel + '<span style="flex:1"></span>' + actions + '</div>' +
+  '</div>';
+}
+function renderDeals() {
+  const host = document.getElementById('deal-list');
+  if (!host) return;
+  const operator = !isTrader();
+  const all = (_loadingDeals || []).filter(function(d) { return d && !d.deletedAt; });
+  const open = _dealsOpen(null), closed = all.filter(function(d) { return d.status === 'closed'; }).sort(function(a, b) { return (b.closedAt || 0) - (a.closedAt || 0); });
+  let remV = 0, remM = 0, comm = 0;
+  open.forEach(function(d) { const st = _dealStats(d); if (d.grade === 'LSMGO') remM += Math.max(0, st.remaining); else remV += Math.max(0, st.remaining); comm += st.committed; });
+  const setTxt = function(id, v) { const e = document.getElementById(id); if (e) e.textContent = v; };
+  setTxt('deal-kpi-open', String(open.length)); setTxt('deal-kpi-v', _mtStr(remV)); setTxt('deal-kpi-m', _mtStr(remM)); setTxt('deal-kpi-committed', _mtStr(comm));
+  const nb = document.getElementById('deal-new-btn'); if (nb) nb.style.display = operator ? '' : 'none';
+  if (!all.length) {
+    host.innerHTML = '<div class="deal-empty">No deals yet. Add the bulk quantity you bought — every loading of that grade is then deducted from it, by the quantity on its BL once completed.</div>';
+    return;
+  }
+  host.innerHTML = (open.length ? open.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '<div class="deal-empty">No open deal — new loadings are not deducted from a bulk purchase.</div>') +
+    (closed.length ? '<div class="deal-sec">Closed deals</div>' + closed.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '');
 }
 
 function renderLoadingList() {
@@ -9040,13 +9402,14 @@ function renderLoadingList() {
       const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
       const doneStyle = r.completed ? 'opacity:.55' : '';
       const actionBtns = r.completed
-        ? '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
+        ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button>'
+          + '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>'
-        : '<button class="btn btn-primary btn-sm" onclick="markLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Mark as done — removes it from the calendar and timeline">'
+        : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + escJs(r.id) + '\')" title="Edit">'
@@ -9061,7 +9424,8 @@ function renderLoadingList() {
         + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + esc(r.terminal || '—') + '</div>'
-          + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+          + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.completed && r.blQty != null ? ' planned · <b>BL ' + Number(r.blQty).toLocaleString() + ' MT</b>' : '') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+          + (r.dealId ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Deal: ' + esc(_dealLabel(_dealById(r.dealId)) || 'removed deal') + '</div>' : '')
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + esc(r.surveyor) + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
@@ -9104,6 +9468,7 @@ function renderLoadingPage() {
     document.getElementById('ld-start-date').value = _localDateInputStr(new Date());
   }
   _populateLoadingBargeSelect();
+  _ldRefreshDealSelect();
   _recalcLoadingEstimate();
   renderLoadingList();
 }
@@ -9699,7 +10064,7 @@ function _buildReloadSafe() {
   const el = document.activeElement;
   if (el && (/^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.isContentEditable)) return false;
   if (document.fullscreenElement || document.webkitFullscreenElement) return false; // wallboard screen mode — a reload would end it
-  if (_currentPage === 'simulator' || _niDrafts.length || _niImage || ((document.getElementById('nimp-text') || {}).value || '').trim()) return false; // a what-if or an import, never saved
+  if (_niDrafts.length || _niImage || ((document.getElementById('nimp-text') || {}).value || '').trim()) return false; // an import, never saved
   if (document.querySelector('.flatpickr-calendar.open')) return false;
   // A form typed into but not saved yet, or an upload on its way: the Loading
   // form (new or editing), a chosen file (Barge Tracking report) not uploaded.
@@ -9863,7 +10228,7 @@ function captureCurrentState() {
     }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
-  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
+  return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingDeals: _loadingDeals||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
 }
 
 /* ── ANTI-ZERO-RESET GUARD (Fix #1) ──────────────────────────────────
@@ -10049,6 +10414,16 @@ function applyState(state, trusted) {
       }
     });
     _loadingRecords = Object.values(localById);
+  }
+  // Loading deals: the same merge by id (newer updatedAt wins, tie → local).
+  if (state.loadingDeals && state.loadingDeals.length) {
+    const dealsById = {};
+    (_loadingDeals || []).forEach(function(d) { dealsById[d.id] = d; });
+    state.loadingDeals.forEach(function(remote) {
+      const local = dealsById[remote.id];
+      if (!local || (remote.updatedAt || 0) > (local.updatedAt || 0)) dealsById[remote.id] = remote;
+    });
+    _loadingDeals = Object.values(dealsById);
   }
   if (state.loadingConfig) _loadingConfig = Object.assign({}, _loadingConfig, state.loadingConfig);
 
@@ -12156,6 +12531,9 @@ let _checklistRecords = {}; // Persistent independent checklist records
 // calendar. _loadingConfig holds a configurable rate (MT/hour) per grade,
 // used to auto-estimate how long a loading operation will take.
 let _loadingRecords = [];
+// Bulk purchases (Loading Deals): [{id, supplier, terminal, grade, qty, date, ref, notes, status, createdAt, updatedAt, closedAt?, deletedAt?}].
+// A loading record's dealId names the deal it lifts from; its blQty is the quantity on the BL.
+let _loadingDeals = [];
 let _loadingConfig = { rateVLSFO: 300, rateLSMGO: 150 }; // MT/hour, editable on the Loading page
 const LS_LOADING_KEY = 'flow_loading_' + _FLOW_BUILD_ID;
 function _loadLoadingFromLocal() {
@@ -12164,12 +12542,13 @@ function _loadLoadingFromLocal() {
     if (raw) {
       const parsed = JSON.parse(raw);
       _loadingRecords = parsed.records || [];
+      _loadingDeals = parsed.deals || [];
       _loadingConfig = Object.assign({ rateVLSFO: 300, rateLSMGO: 150 }, parsed.config || {});
     }
   } catch(e) {}
 }
 function _saveLoadingToLocal() {
-  try { localStorage.setItem(LS_LOADING_KEY, JSON.stringify({ records: _loadingRecords, config: _loadingConfig })); } catch(e) {}
+  try { localStorage.setItem(LS_LOADING_KEY, JSON.stringify({ records: _loadingRecords, deals: _loadingDeals, config: _loadingConfig })); } catch(e) {}
 }
 _loadLoadingFromLocal();
 
@@ -14703,8 +15082,8 @@ function addVessel(def = {}) {
 
 /* How a vessel's times classify: the ETA the planner works from, whether it
    is late / early against the laycan, and whether it counts as "no firm ETA".
-   One place, shared by the nomination cards (getVessels) and the what-if
-   sandbox when it moves an ETA, so they can never disagree. */
+   One place, shared by the nomination cards (getVessels) and the planner,
+   so they can never disagree. */
 function _planVesselTimes(eta, winHrs, lc, hasFrame, lcOnly) {
   // "Laycan only": a vessel due before its laycan opens is supplied once it
   // does — planned as ready at the laycan start (its time frame is over by then).
@@ -14774,8 +15153,7 @@ function getVessels(quiet) {
 
 /* The planner's inputs that live outside the vessel and barge rows: transit
    and hose-up hours, and a barge's Unavailable blocks. planSchedule() takes
-   them as a plain object so it never reads app state itself — the what-if
-   sandbox hands it a frozen copy instead. */
+   them as a plain object so it never reads app state itself. */
 function _planCtxLive() {
   const hoseHrs = _calcParams.hoseHrs, travelHrs = _calcParams.travelHrs;
   return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name) };
@@ -14817,8 +15195,7 @@ function _vesselJobETC(start, v, vtph, mtph, P) {
 /* ─── PLANNER CORE ───
    Pure: the same inputs always give the same plan, and nothing outside the
    returned object is read or written (no DOM, no globals, inputs untouched).
-   calculate() gathers the live inputs, calls this, then renders; the what-if
-   sandbox calls it on a private copy.
+   calculate() gathers the live inputs, calls this, then renders.
      vessels  getVessels()-shaped rows        barges   getBarges()-shaped rows
      opening  {bargeId: {v, m}} — ROB on board when the plan starts
      params   _planCtxLive()-shaped {hoseHrs, travelHrs, blocksFor(barge)}
@@ -15056,595 +15433,6 @@ function calculate() {
   } finally {
     _calculating = false; // Always release guard, even if generation threw partway through
   }
-}
-
-/* ═══════════════════════════════════════════════════════
-   WHAT-IF PLANNER — a private sandbox on top of planSchedule()
-   Everything here lives in memory (_sim) and is never saved, synced, emailed
-   or written into the schedule: it takes a COPY of the nominations, barges,
-   live ROB and Unavailable blocks, lets the user move ETAs, delay / cancel
-   vessels, pin barges, take a barge out of service, then re-plans that copy
-   with the very same planner Generate uses and shows it next to the current
-   plan. The one thing that can reach the real plan is the explicit "Apply
-   barge choices" button (it only sets the barge dropdowns on the nomination
-   cards, exactly like choosing them by hand).
-═══════════════════════════════════════════════════════ */
-let _sim = null;
-// Most assignments the look-ahead tries (barges ^ vessels) before it only
-// looks ahead over the earliest vessels and leaves the rest to the normal rule.
-const SIM_SEARCH_BUDGET = 12000;
-
-function _simKey(v) { return v.nomUid || ('card' + v.id); }
-
-function _simTake() {
-  const vessels = getVessels(true);           // throws Error(message) on an unreadable card
-  const barges = getBarges();
-  const opening = {};
-  barges.forEach(b => {
-    let ov = b.vrob, om = b.mrob;
-    try { const live = computeLiveROB(b.id, b.name, b.vrob, b.mrob, null); ov = live.v; om = live.m; } catch (e) {}
-    opening[b.id] = { v: ov, m: om };
-  });
-  return {
-    vessels, barges, opening,
-    hoseHrs: _calcParams.hoseHrs, travelHrs: _calcParams.travelHrs,
-    blocks: JSON.parse(JSON.stringify((_bargeBlocks || []).filter(b => b && !b.deletedAt))),
-    takenAt: new Date()
-  };
-}
-// What the live data looked like when taken — to tell the user it has moved on since.
-function _simSig(snap) {
-  const t = d => d ? +d : 0;
-  return JSON.stringify([
-    snap.vessels.map(v => [v.nomUid || v.id, v.name, v.type, v.vq, v.mq, t(v.eta), t(v.effectiveETA), v.etaWin, v.bargeId, v.refuel, v.rfv, v.rfm, v.rfvr, v.rfmr, v.lc ? t(v.lc.from) : 0, v.lc ? t(v.lc.to) : 0]),
-    snap.barges.map(b => [b.id, b.name, b.vcap, b.mcap, b.vbuf, b.mbuf, b.vtph, b.mtph]),
-    snap.opening, snap.hoseHrs, snap.travelHrs,
-    snap.blocks.map(b => [b.id, b.bargeId, b.start, b.end])
-  ]);
-}
-
-function _simEmptyEdits() { return { v: {}, b: {}, blocks: [] }; }
-function _simHasEdits(ed) {
-  return Object.keys(ed.v).length > 0 || Object.keys(ed.b).length > 0 || ed.blocks.length > 0;
-}
-// Only barge choices changed — the one case that can be copied onto the real plan.
-function _simOnlyPins(ed) {
-  if (ed.blocks.length || Object.keys(ed.b).length) return false;
-  return Object.keys(ed.v).every(k => { const e = ed.v[k]; return Object.keys(e).every(f => f === 'pin'); });
-}
-
-// Quantity and barge edits on a copy of the vessel. A grade the nomination does not
-// carry (VLSFO on an MGO-only card, MGO on a VLSFO-only card) can't be added here.
-function _simQtyPin(o, v, e) {
-  if (e.vq != null && v.type !== 'MGO') { o.vq = e.vq; o.vqMin = null; }
-  if (e.mq != null && v.type !== 'VLSFO') { o.mq = e.mq; o.mqMin = null; }
-  if (e.pin !== undefined) o.bargeId = e.pin;
-  return o;
-}
-function _simApplyVessel(v, e) {
-  if (e.etaExact === undefined && !e.shiftHrs) {
-    // Nothing about the arrival moved: keep the vessel's times exactly as read from its card.
-    return _simQtyPin(Object.assign({}, v), v, e);
-  }
-  let eta = e.etaExact instanceof Date ? new Date(e.etaExact.getTime()) : (v.eta || v.effectiveETA);
-  let winHrs = v.winHrs, etaWin = v.etaWin;
-  if (e.etaExact instanceof Date) { winHrs = 0; etaWin = ''; }       // an exact time replaces a time frame
-  if (e.shiftHrs) eta = addHrs(eta, e.shiftHrs);                     // a frame moves as a whole
-  const T = _planVesselTimes(eta, winHrs, v.lc, !!etaWin, v.lcOnly);
-  return _simQtyPin(Object.assign({}, v, { eta, winHrs, etaWin, effectiveETA: T.effectiveETA, isDelayed: T.isDelayed, isEarly: T.isEarly, noFirmETA: T.noFirmETA, held: T.held }), v, e);
-}
-// The planner's inputs for the snapshot as edited — pure.
-function _simInputs(snap, ed) {
-  const vessels = [];
-  snap.vessels.forEach(v => {
-    const e = ed.v[_simKey(v)];
-    if (e && e.cancel) return;
-    vessels.push(e ? _simApplyVessel(v, e) : v);
-  });
-  const opening = {};
-  snap.barges.forEach(b => {
-    const o = snap.opening[b.id], be = ed.b[b.id] || {};
-    opening[b.id] = { v: be.v != null ? be.v : o.v, m: be.m != null ? be.m : o.m };
-  });
-  const blocks = snap.blocks.concat(ed.blocks);
-  return { vessels, barges: snap.barges, opening, params: { hoseHrs: snap.hoseHrs, travelHrs: snap.travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name, blocks) } };
-}
-
-function _simMetrics(plan) {
-  const m = { n: plan.sched.length, delV: 0, delM: 0, short: 0, wait: 0, late: 0, low: plan.vAl.length + plan.mAl.length, moved: plan.blockMoves.length };
-  plan.sched.forEach(i => { m.delV += i.vQ; m.delM += i.mQ; m.short += (i.nomVQ - i.vQ) + (i.nomMQ - i.mQ); });
-  plan.meta.forEach(x => { m.wait += x.waitHrs; if (x.pastLaycan) m.late++; });
-  m.wait = Math.round(m.wait * 100) / 100;
-  return m;
-}
-/* A plan is only offered as "better" when it is no worse than the one it
-   replaces on shortfall, vessel waiting and supplies starting after laycan,
-   and clearly better on at least one. Reload alerts are held to "no more"
-   only while the same fuel is moved: a plan that delivers more fuel
-   naturally leaves the barges lower, so it may raise them (the page says by
-   how much). The weights in _simGain only rank plans that already pass. */
-function _simDominates(m, g) {
-  if (m.short > g.short + 0.5 || m.wait > g.wait + 0.01 || m.late > g.late) return false;
-  if (m.delV + m.delM <= g.delV + g.delM + 0.5 && m.low > g.low) return false;
-  return (g.short - m.short) >= 10 || (g.wait - m.wait) >= 0.5 || g.late > m.late || g.low > m.low;
-}
-function _simGain(g, m) { return (g.short - m.short) + 25 * (g.wait - m.wait) + 60 * (g.late - m.late) + 40 * (g.low - m.low); }
-
-// Row-by-row: the same vessel in the current plan and in the what-if plan.
-function _simCompare(basePlan, scenPlan) {
-  const side = (plan, i) => {
-    const it = plan.sched[i], m = plan.meta[i];
-    return { barge: it.bargeLabel, bargeId: m.bargeId, start: it.bargeStart, etc: it.etc, vQ: it.vQ, mQ: it.mQ, nomV: it.nomVQ, nomM: it.nomMQ, wait: m.waitHrs, late: m.pastLaycan, eta: it.eta, partial: it.isPartial, refuel: it.refuelSlot ? { start: it.refuelSlot.rfStart, end: it.refuelSlot.rfEnd } : null };
-  };
-  const S = new Map();
-  scenPlan.meta.forEach((m, i) => S.set(_simKey(m.vessel), side(scenPlan, i)));
-  const rows = [];
-  basePlan.meta.forEach((m, i) => {
-    const key = _simKey(m.vessel), b = side(basePlan, i), s = S.get(key) || null;
-    const r = { key, name: m.vessel.name, base: b, scen: s, cancelled: !s, changes: [] };
-    if (s) {
-      if (s.barge !== b.barge) r.changes.push('barge');
-      if (Math.abs(s.start - b.start) >= 60000) r.changes.push('start');
-      if (Math.abs(s.etc - b.etc) >= 60000) r.changes.push('etc');
-      if (s.vQ !== b.vQ || s.mQ !== b.mQ || s.nomV !== b.nomV || s.nomM !== b.nomM) r.changes.push('qty');
-    }
-    r.differs = r.cancelled || r.changes.length > 0;
-    rows.push(r);
-  });
-  return rows;
-}
-
-/* Look-ahead over barge choices. The normal rule picks a barge for each vessel
-   in turn without knowing what comes after; this tries combinations for the
-   vessels not pinned and keeps the best one that dominates the current plan.
-   Exhaustive up to SIM_SEARCH_BUDGET assignments; beyond that it covers the
-   earliest vessels and leaves the rest to the normal rule. Async + chunked so
-   the page stays responsive; `ctl` = {cancelled(), onProgress(done,total)}. */
-async function _simSearch(inp, ctl) {
-  const base = planSchedule(inp), g = _simMetrics(base);
-  const nb = inp.barges.length;
-  const free = base.sequence.filter(v => !v.bargeId || !inp.barges.some(b => String(b.id) === String(v.bargeId)));
-  if (nb < 2) return { status: 'single', metrics: g };
-  if (!free.length) return { status: 'pinned', metrics: g };
-  let K = 0, total = 1;
-  while (K < free.length && total * nb <= SIM_SEARCH_BUDGET) { total *= nb; K++; }
-  const cand = free.slice(0, K);
-  const baseBarge = new Map();
-  base.meta.forEach(m => baseBarge.set(m.vessel, m.bargeId));
-  let best = null, bestGain = 0, bestChanges = 0, done = 0, t0 = Date.now();
-  const digits = new Array(K).fill(0);
-  const run = pins => planSchedule({ vessels: inp.vessels.map(v => pins.has(v) ? Object.assign({}, v, { bargeId: String(pins.get(v)) }) : v), barges: inp.barges, opening: inp.opening, params: inp.params });
-  for (let idx = 0; idx < total; idx++) {
-    let x = idx; for (let k = 0; k < K; k++) { digits[k] = x % nb; x = (x - digits[k]) / nb; }
-    const assign = new Map();
-    cand.forEach((v, k) => assign.set(v, inp.barges[digits[k]].id));
-    const m = _simMetrics(run(assign));
-    if (_simDominates(m, g)) {
-      const gain = _simGain(g, m);
-      let changes = 0; cand.forEach(v => { if (String(assign.get(v)) !== String(baseBarge.get(v))) changes++; });
-      if (gain > bestGain + 1e-9 || (Math.abs(gain - bestGain) <= 1e-9 && best && changes < bestChanges)) {
-        bestGain = gain; bestChanges = changes; best = { metrics: m, assign: new Map(assign) };
-      }
-    }
-    done++;
-    if (done % 200 === 0 && Date.now() - t0 > 30) {
-      if (ctl && ctl.onProgress) ctl.onProgress(done, total);
-      await new Promise(r => setTimeout(r, 0));
-      if (ctl && ctl.cancelled && ctl.cancelled()) return { status: 'cancelled' };
-      t0 = Date.now();
-    }
-  }
-  if (best) {
-    // Pin only the vessels that actually move, if that gives exactly the same
-    // plan (the others then keep following the normal rule); else pin them all.
-    const sig = plan => plan.meta.map(m => _simKey(m.vessel) + ':' + m.bargeId).sort().join('|');
-    const moved = new Map([...best.assign].filter(([v, b]) => String(b) !== String(baseBarge.get(v))));
-    const pins = sig(run(moved)) === sig(run(best.assign)) ? moved : best.assign;
-    best.picks = [...pins].map(([v, b]) => ({ key: _simKey(v), name: v.name, bargeId: String(b), from: String(baseBarge.get(v)), moves: String(b) !== String(baseBarge.get(v)) }));
-    delete best.assign;
-  }
-  return { status: best ? 'found' : 'none', best, base: g, checked: total, vessels: free.length, covered: K, truncated: K < free.length, barges: nb };
-}
-
-/* ── What-if Planner: page ── */
-function _simDtl(d) {
-  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
-  const p = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes());
-}
-function _simParseDtl(s) {
-  const m = /^(\d{4})-(\d\d)-(\d\d)T(\d\d):(\d\d)/.exec(String(s || ''));
-  if (!m) return null;
-  if (+m[1] < 2000 || +m[1] > 2100) return null;      // a half-typed year (0002, 0020 …) is not a date yet
-  const d = new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0, 0);
-  return isNaN(d.getTime()) ? null : d;
-}
-function _simDur(h) {
-  const t = Math.round(Math.abs(h) * 60), hh = Math.floor(t / 60), mm = t % 60;
-  return hh + 'h' + (mm ? ' ' + mm + 'm' : '');
-}
-function _simHrs(h) { return (h < 0 ? '−' : '+') + _simDur(h); }
-function _simMT(n) { return Math.round(n || 0).toLocaleString(); }
-
-function _simOpen() {
-  if (!document.getElementById('sim-root')) return;
-  _simBind();
-  if (!_sim) _sim = { snap: null, sig: '', edits: _simEmptyEdits(), suggest: null, searchSeq: 0, error: '', seq: 0 };
-  // With nothing tried yet, always start from the live data as it is now.
-  if (!_sim.snap || !_simHasEdits(_sim.edits)) _simRetake();
-  _simRender();
-}
-function _simRetake() {
-  const ed = _sim.edits;
-  try { _sim.snap = _simTake(); _sim.sig = _simSig(_sim.snap); _sim.error = ''; }
-  catch (e) { _sim.snap = null; _sim.error = (e && e.message) || 'The nominations could not be read.'; }
-  _sim.suggest = null; _sim.searchSeq++;
-  if (!_sim.snap) return;
-  // Carry what-ifs over only for vessels / barges that still exist.
-  const keys = new Set(_sim.snap.vessels.map(_simKey)), ids = new Set(_sim.snap.barges.map(b => String(b.id)));
-  Object.keys(ed.v).forEach(k => { if (!keys.has(k)) delete ed.v[k]; else if (ed.v[k].pin && !ids.has(String(ed.v[k].pin))) { delete ed.v[k].pin; if (!Object.keys(ed.v[k]).length) delete ed.v[k]; } });
-  _sim.snap.vessels.forEach(v => {                 // a grade the nomination no longer carries
-    const k = _simKey(v), e = ed.v[k]; if (!e) return;
-    if (v.type === 'MGO') delete e.vq;
-    if (v.type === 'VLSFO') delete e.mq;
-    if (!Object.keys(e).length) delete ed.v[k];
-  });
-  Object.keys(ed.b).forEach(k => { if (!ids.has(String(k))) delete ed.b[k]; });
-  ed.blocks = ed.blocks.filter(b => ids.has(String(b.bargeId)));
-}
-function _simLiveChanged() {
-  if (!_sim || !_sim.snap) return false;
-  try { return _simSig(_simTake()) !== _sim.sig; } catch (e) { return true; }
-}
-/* A box being typed in commits (and the page redraws) the moment the mouse goes down on
-   something else; the redraw can move that something before the mouse comes up, and the
-   browser then drops the click. So while a pointer is down on the page the redraw waits
-   until it is up (with a safety timer in case the release is never seen). */
-let _simPointerDown = false;
-function _simEdited() {
-  _sim.suggest = null; _sim.searchSeq++;
-  if (_simPointerDown) { _sim.dirty = true; clearTimeout(_sim.dirtyTimer); _sim.dirtyTimer = setTimeout(_simFlush, 1500); }
-  else _simRender();
-}
-function _simFlush() {
-  _simPointerDown = false;
-  if (_sim && _sim.dirty) { _sim.dirty = false; clearTimeout(_sim.dirtyTimer); _simRender(); }
-}
-
-function _simVessel(key) { return _sim.snap.vessels.find(v => _simKey(v) === key); }
-function _simEdit(key) { return _sim.edits.v[key] || (_sim.edits.v[key] = {}); }
-function _simTidy(key) { const e = _sim.edits.v[key]; if (e && !Object.keys(e).length) delete _sim.edits.v[key]; }
-
-function _simRender() {
-  const root = document.getElementById('sim-root');
-  if (root) _simMorph(root, _simHtml());
-}
-/* Make `root` show `html` while reusing the elements that can stay, so the
-   box being typed in keeps focus and its text, a button keeps focus after it
-   is pressed, and the out-of-service date boxes keep what was typed. Elements
-   carrying data-k are matched by that key, the rest by position. */
-function _simMorph(root, html) {
-  const tmp = document.createElement('div'); tmp.innerHTML = html;
-  const attrs = (a, b) => {
-    Array.from(a.attributes).forEach(at => { if (!b.hasAttribute(at.name)) a.removeAttribute(at.name); });
-    Array.from(b.attributes).forEach(at => { if (a.getAttribute(at.name) !== at.value) a.setAttribute(at.name, at.value); });
-  };
-  const patch = (x, y) => {
-    attrs(x, y);
-    const typing = x === document.activeElement && !x.disabled;      // a box the user is in right now
-    if (x.tagName === 'INPUT') {
-      if (!typing && !x.hasAttribute('data-keep')) { const v = y.getAttribute('value') || ''; if (x.value !== v) x.value = v; }
-    } else if (x.tagName === 'SELECT') {
-      if (!typing) { x.innerHTML = y.innerHTML; x.value = y.value; }
-    } else kids(x, y);
-  };
-  const compatible = (x, y) => x && x.nodeType === y.nodeType && (x.nodeType !== 1 || (x.tagName === y.tagName && !x.hasAttribute('data-k') && !y.hasAttribute('data-k')));
-  const kids = (a, b) => {
-    const old = Array.from(a.childNodes), want = Array.from(b.childNodes);
-    const keyed = new Map(), loose = [];
-    old.forEach(n => { if (n.nodeType === 1 && n.hasAttribute('data-k')) keyed.set(n.getAttribute('data-k'), n); else loose.push(n); });
-    const out = want.map(y => {
-      let x = null;
-      if (y.nodeType === 1 && y.hasAttribute('data-k')) {
-        x = keyed.get(y.getAttribute('data-k')) || null;
-        if (x && x.tagName !== y.tagName) x = null;
-      } else {
-        while (loose.length && !x) { const c = loose.shift(); if (compatible(c, y)) x = c; }
-      }
-      if (!x) return y.cloneNode(true);
-      if (x.nodeType !== 1) { if (x.nodeValue !== y.nodeValue) x.nodeValue = y.nodeValue; return x; }
-      patch(x, y);
-      return x;
-    });
-    out.forEach((n, i) => { if (a.childNodes[i] !== n) a.insertBefore(n, a.childNodes[i] || null); });
-    while (a.childNodes.length > out.length) a.removeChild(a.lastChild);
-  };
-  kids(root, tmp);
-}
-function _simHtml() {
-  const note = (msg, extra) => '<div class="sim-note">' + msg + (extra || '') + '</div>';
-  if (!_sim || !_sim.snap) return note(esc(_sim && _sim.error ? _sim.error : 'Add vessel nominations and barges first.'), ' <button class="btn btn-secondary btn-sm" data-sim="refresh">Try again</button>');
-  const snap = _sim.snap, ed = _sim.edits;
-  if (!snap.vessels.length || !snap.barges.length) return note('Add at least one vessel nomination and one barge, then come back — this page plans a copy of them.');
-  let basePlan, scenPlan;
-  try {
-    basePlan = planSchedule(_simInputs(snap, _simEmptyEdits()));
-    scenPlan = planSchedule(_simInputs(snap, ed));
-  } catch (e) {
-    return note('That combination can’t be planned: ' + esc((e && e.message) || e) + ' ', '<button class="btn btn-secondary btn-sm" data-sim="reset">Undo all what-ifs</button>');
-  }
-  const rows = _simCompare(basePlan, scenPlan), mb = _simMetrics(basePlan), ms = _simMetrics(scenPlan);
-  const cmap = _bargeColorMap(), bname = id => { const b = snap.barges.find(x => String(x.id) === String(id)); return b ? b.name : ''; };
-  const scenByKey = new Map(); scenPlan.meta.forEach(m => scenByKey.set(_simKey(m.vessel), m.vessel));
-  const edited = _simHasEdits(ed), changedRows = rows.filter(r => r.differs).length;
-  const liveChanged = _simLiveChanged();
-  const bdg = n => { const nm = bname(n) || String(n); return _bargeDot(nm, cmap) + esc(nm); };
-
-  /* summary strip */
-  const kpi = (label, a, b, fmt, goodDown, unit) => {
-    const d = Math.round((b - a) * 100) / 100, cls = d === 0 ? '' : ((d < 0) === goodDown ? ' sim-good' : ' sim-bad');
-    return '<div class="sim-kpi' + cls + '"><span class="sim-kpi-l">' + label + '</span><span class="sim-kpi-v">' + fmt(b) + (unit || '') + '</span>' +
-      '<span class="sim-kpi-d">' + (d === 0 ? 'same as current plan' : (d > 0 ? '+' : '−') + fmt(Math.abs(d)) + (unit || '') + ' vs ' + fmt(a) + (unit || '') + ' now') + '</span></div>';
-  };
-  const mtf = n => _simMT(n), hf = n => (Math.round(n * 10) / 10).toLocaleString() + ' h', nf = n => String(Math.round(n));
-  const summary = '<div class="sim-kpis" data-k="kpis">' +
-    kpi('Delivered', mb.delV + mb.delM, ms.delV + ms.delM, mtf, false, ' MT') +
-    kpi('Short of nominated', mb.short, ms.short, mtf, true, ' MT') +
-    kpi('Vessel waiting for a barge', mb.wait, ms.wait, hf, true, '') +
-    kpi('Supply starts after laycan', mb.late, ms.late, nf, true, '') +
-    kpi('Replenishment alerts', mb.low, ms.low, nf, true, '') + '</div>';
-
-  /* vessel rows */
-  const barOpts = (sel) => '<option value="">Auto</option>' + snap.barges.map(b => '<option value="' + esc(b.id) + '"' + (String(sel) === String(b.id) ? ' selected' : '') + '>' + esc(b.name) + '</option>').join('');
-  const chip = (t, cls) => '<span class="sim-chip' + (cls ? ' ' + cls : '') + '">' + t + '</span>';
-  const vesselRows = [];
-  const orderKeys = rows.map(r => r.key);
-  snap.vessels.slice().sort((a, b) => orderKeys.indexOf(_simKey(a)) - orderKeys.indexOf(_simKey(b))).forEach((v0, idx) => {
-    const key = _simKey(v0), e = ed.v[key] || {}, row = rows.find(r => r.key === key);
-    const sv = scenByKey.get(key) || _simApplyVessel(v0, e);
-    const cancelled = !!e.cancel, etaShown = sv.eta || sv.effectiveETA;
-    const etaEdited = !!(e.etaExact || e.shiftHrs), s = row && row.scen, b = row && row.base;
-    const tags = (sv.sts ? '<span class="sts-tag" style="margin:0 3px 3px 0">STS</span>' : '') + (sv.etaWin ? chip(esc(sv.etaWin) + ' frame') : '') + (sv.noFirmETA ? chip('No firm ETA') : '') + (sv.isDelayed ? chip('After laycan', 'sim-warn') : '') + (sv.isEarly ? chip('Before laycan') : '');
-    let result = '', vs = '';
-    if (cancelled) result = '<span class="sim-muted">Cancelled in this what-if</span>';
-    else if (s) {
-      result = '<div>' + _bargeDot(s.barge, cmap) + '<strong>' + esc(s.barge) + '</strong></div><div class="sim-sub">' + esc(fmt24(s.start)) + ' → ' + esc(fmt24(s.etc)) + '</div>' + (s.refuel ? '<div class="sim-sub">then refuels until ' + esc(fmt24(s.refuel.end)) + '</div>' : '');
-      const c = [];
-      if (row.changes.indexOf('barge') >= 0) c.push(chip(bdg(b.bargeId) + ' → ' + bdg(s.bargeId), 'sim-chg'));
-      const dS = (s.start - b.start) / 3600000, dE = (s.etc - b.etc) / 3600000, chS = row.changes.indexOf('start') >= 0, chE = row.changes.indexOf('etc') >= 0;
-      if (chS) c.push(chip('starts ' + _simHrs(dS), dS > 0 ? 'sim-bad' : 'sim-good'));
-      if (chE && !(chS && Math.abs(dS - dE) < 1 / 60)) c.push(chip('ends ' + _simHrs(dE), dE > 0 ? 'sim-bad' : 'sim-good'));
-      if (e.etaExact && v0.etaWin) c.push(chip('time frame replaced by an exact time', 'sim-chg'));
-      const shortS = (s.nomV - s.vQ) + (s.nomM - s.mQ), shortB = (b.nomV - b.vQ) + (b.nomM - b.mQ);
-      if (shortS > 0) c.push(chip('short ' + _simMT(shortS) + ' MT', shortS > shortB ? 'sim-bad' : 'sim-warn'));
-      else if (shortB > 0) c.push(chip('no longer short', 'sim-good'));
-      if (s.wait > 0.01) c.push(chip('waits ' + _simDur(s.wait), s.wait > b.wait + 0.01 ? 'sim-bad' : 'sim-warn'));
-      if (s.late && !b.late) c.push(chip('starts after laycan', 'sim-bad'));
-      else if (!s.late && b.late) c.push(chip('back inside laycan', 'sim-good'));
-      vs = c.join(' ');
-      if (row.differs && !c.length) vs = chip(row.changes.length === 1 && row.changes[0] === 'qty' ? 'quantity changes' : 'timing changes', 'sim-chg');
-    }
-    const eid = (f) => 'data-sim="' + f + '" data-key="' + esc(key) + '"';
-    vesselRows.push('<tr data-k="vr-' + esc(key) + '" class="' + (cancelled ? 'sim-off' : (row && row.differs ? 'sim-diff' : '')) + '">' +
-      '<td class="sno">' + (idx + 1) + '</td>' +
-      '<td><strong>' + esc(v0.name) + '</strong><div class="sim-sub">' + tags + '</div>' +
-        '<div class="sim-quick"><button class="sim-qb" ' + eid(cancelled ? 'restore' : 'cancel') + '>' + (cancelled ? 'Restore vessel' : 'Cancel vessel') + '</button>' +
-        (e && Object.keys(e).length && !cancelled ? '<button class="sim-qb" ' + eid('vreset') + '>Undo changes</button>' : '') + '</div></td>' +
-      '<td><input type="datetime-local" min="2000-01-01T00:00" max="2100-12-31T23:59" class="sim-in' + (etaEdited ? ' sim-edited' : '') + '" ' + eid('eta') + ' value="' + esc(_simDtl(etaShown)) + '"' + (cancelled ? ' disabled' : '') + ' aria-label="ETA of ' + esc(v0.name) + '">' +
-        '<div class="sim-quick">' + [6, 12, 24].map(h => '<button class="sim-qb" ' + eid('shift') + ' data-h="' + h + '"' + (cancelled ? ' disabled' : '') + '>+' + h + 'h</button>').join('') +
-        (etaEdited ? '<button class="sim-qb" ' + eid('eta-reset') + '>reset</button>' : '') + '</div>' +
-        (etaEdited ? '<div class="sim-sub">was ' + esc(fmt24(v0.eta || v0.effectiveETA)) + '</div>' : '') + '</td>' +
-      '<td><input type="number" min="0" step="50" class="sim-in sim-qty' + (e.vq != null ? ' sim-edited' : '') + '" ' + eid('vq') + ' value="' + esc(sv.vq || 0) + '"' + (cancelled || v0.type === 'MGO' ? ' disabled' : '') + (v0.type === 'MGO' ? ' title="MGO-only nomination"' : '') + ' aria-label="VLSFO of ' + esc(v0.name) + '"></td>' +
-      '<td><input type="number" min="0" step="25" class="sim-in sim-qty' + (e.mq != null ? ' sim-edited' : '') + '" ' + eid('mq') + ' value="' + esc(sv.mq || 0) + '"' + (cancelled || v0.type === 'VLSFO' ? ' disabled' : '') + (v0.type === 'VLSFO' ? ' title="VLSFO-only nomination"' : '') + ' aria-label="MGO of ' + esc(v0.name) + '"></td>' +
-      '<td><select class="sim-in' + (e.pin !== undefined ? ' sim-edited' : '') + '" ' + eid('pin') + (cancelled ? ' disabled' : '') + ' aria-label="Barge for ' + esc(v0.name) + '">' + barOpts(e.pin !== undefined ? e.pin : v0.bargeId) + '</select></td>' +
-      '<td class="sim-res">' + result + '</td><td class="sim-vs">' + vs + '</td></tr>');
-  });
-  const vesselTbl = '<div class="voy-wrap sim-wrap" data-k="vessels"><table class="voy-tbl sim-tbl"><thead><tr><th>#</th><th>Vessel</th><th>ETA</th><th>VLSFO MT</th><th>MGO MT</th><th>Barge</th><th>What-if plan</th><th>Compared with the current plan</th></tr></thead><tbody>' + vesselRows.join('') + '</tbody></table></div>';
-
-  /* barges */
-  const firstEta = snap.vessels.reduce((m, v) => { const t = +(v.eta || v.effectiveETA); return t && (!m || t < m) ? t : m; }, 0);
-  const defFrom = new Date(Math.floor((firstEta || Date.now()) / 3600000) * 3600000);
-  const bargeCards = snap.barges.map(b => {
-    const be = ed.b[b.id] || {}, o = snap.opening[b.id];
-    const mine = ed.blocks.filter(x => String(x.bargeId) === String(b.id));
-    const live = snap.blocks.filter(x => String(x.bargeId) === String(b.id) || (x.bargeId == null || x.bargeId === '') && x.bargeName === b.name);
-    return '<div class="sim-barge" data-k="bc-' + esc(b.id) + '"' + _bargeAttrs(b.name, cmap) + '><div class="sim-barge-h">' + _bargeDot(b.name, cmap) + '<strong>' + esc(b.name) + '</strong>' +
-        '<span class="sim-sub">on board now ' + _simMT(o.v) + ' VLSFO · ' + _simMT(o.m) + ' MGO</span></div>' +
-      '<div class="sim-row"><label>Start with VLSFO <input type="number" min="0" step="50" class="sim-in sim-qty' + (be.v != null ? ' sim-edited' : '') + '" data-sim="brob-v" data-bid="' + esc(b.id) + '" value="' + esc(be.v != null ? be.v : Math.round(o.v)) + '"></label>' +
-        '<label>MGO <input type="number" min="0" step="25" class="sim-in sim-qty' + (be.m != null ? ' sim-edited' : '') + '" data-sim="brob-m" data-bid="' + esc(b.id) + '" value="' + esc(be.m != null ? be.m : Math.round(o.m)) + '"></label>' +
-        (be.v != null || be.m != null ? '<button class="sim-qb" data-sim="brob-reset" data-bid="' + esc(b.id) + '">reset</button>' : '') + '</div>' +
-      live.map(x => '<div class="sim-sub">Already blocked: ' + esc(x.reason || 'Unavailable') + ' · ' + esc(fmt24(new Date(x.start))) + ' → ' + esc(fmt24(new Date(x.end))) + '</div>').join('') +
-      mine.map(x => '<div class="sim-blk" data-k="blk-' + esc(x.id) + '">Out of service (what-if): ' + esc(fmt24(new Date(x.start))) + ' → ' + esc(fmt24(new Date(x.end))) + ' <button class="sim-qb" data-sim="blk-del" data-id="' + esc(x.id) + '">remove</button></div>').join('') +
-      '<div class="sim-row"><label>Out of service from <input type="datetime-local" class="sim-in" data-keep="1" min="2000-01-01T00:00" max="2100-12-31T23:59" id="sim-blk-from-' + esc(b.id) + '" value="' + esc(_simDtl(defFrom)) + '"></label>' +
-        '<label>until <input type="datetime-local" class="sim-in" data-keep="1" min="2000-01-01T00:00" max="2100-12-31T23:59" id="sim-blk-to-' + esc(b.id) + '" value="' + esc(_simDtl(new Date(defFrom.getTime() + 24 * 3600000))) + '"></label>' +
-        '<button class="btn btn-secondary btn-sm" data-sim="blk-add" data-bid="' + esc(b.id) + '">Take out of service</button></div></div>';
-  }).join('');
-
-  /* suggestion */
-  const sg = _sim.suggest;
-  let sgHtml = '';
-  const onlyPins = _simOnlyPins(ed);
-  if (snap.barges.length < 2) sgHtml = '<div class="sim-sub">There is only one barge, so there is no choice to improve.</div>';
-  else if (sg && sg.running) sgHtml = '<div class="sim-sub"><span class="sim-spin"></span> Trying barge combinations… <span id="sim-progress"></span> <button class="btn btn-ghost btn-sm" data-sim="suggest-cancel">Stop</button></div>';
-  else if (sg && sg.result) {
-    const r = sg.result;
-    if (r.status === 'found') {
-      const pm = r.best.metrics, g = r.base, gains = [];
-      if (g.short - pm.short >= 0.5) gains.push(_simMT(g.short - pm.short) + ' MT less short');
-      if (g.wait - pm.wait >= 0.01) gains.push((Math.round((g.wait - pm.wait) * 10) / 10) + ' h less vessel waiting');
-      if (g.late > pm.late) gains.push((g.late - pm.late) + ' fewer supplies after laycan');
-      if (g.low > pm.low) gains.push((g.low - pm.low) + ' fewer replenishment alerts');
-      const moreFuel = (pm.delV + pm.delM) - (g.delV + g.delM);
-      sgHtml = '<div class="sim-found"><strong>A better plan exists:</strong> ' + esc(gains.join(' · ')) + '. It is no worse than the plan above on shortfall, waiting or laycan.' +
-        (pm.low > g.low ? ' <span class="sim-sub">Replenishment alerts go from ' + g.low + ' to ' + pm.low + ' because ' + _simMT(moreFuel) + ' MT more fuel leaves the barges.</span>' : '') +
-        '<ul>' + r.best.picks.map(p => '<li><strong>' + esc(p.name) + '</strong> ' + (p.moves ? 'on ' + bdg(p.bargeId) + ' <span class="sim-sub">(instead of ' + bdg(p.from) + ')</span>' : 'stays on ' + bdg(p.bargeId) + ' <span class="sim-sub">(kept there so the plan holds)</span>') + '</li>').join('') + '</ul>' +
-        (sg.tried ? '<div class="sim-sub">Tried in this what-if — see the table above.</div>' : '<button class="btn btn-primary btn-sm" data-sim="suggest-try">Try it in this what-if</button>') + '</div>';
-    } else if (r.status === 'none') sgHtml = '<div class="sim-sub">No better barge choice found — the plan above is already the best of the ' + r.checked.toLocaleString() + ' combinations tried.</div>';
-    else if (r.status === 'pinned') sgHtml = '<div class="sim-sub">Every vessel is pinned to a barge, so there is nothing to reassign.</div>';
-    if (r.status === 'found' || r.status === 'none') {
-      sgHtml += '<div class="sim-sub">Tried ' + r.checked.toLocaleString() + ' ways to share ' + r.covered + ' vessel' + (r.covered === 1 ? '' : 's') + ' between ' + r.barges + ' barges' + (r.truncated ? '; looked ahead over the first ' + r.covered + ' of ' + r.vessels + ' unpinned vessels, the rest follow the normal rule' : '') + '. Judged on shortfall, vessel waiting and laycan, with reload alerts as a tie-break.</div>';
-    }
-  } else sgHtml = '<div class="sim-sub">Tries every way to share the unpinned vessels between your barges and offers a plan only if it is no worse than the one above on shortfall, vessel waiting or laycan.</div>';
-  const canSuggest = snap.barges.length > 1 && !(sg && sg.running);
-  const canApply = onlyPins && !liveChanged && Object.keys(ed.v).length > 0;
-  const suggest = '<div class="card sim-card" id="sim-suggest" data-k="suggest"><div class="card-title">Suggest a better barge plan</div><div data-k="sg-body">' + sgHtml + '</div>' +
-    '<div class="sim-row" data-k="sg-actions" style="margin-top:10px">' + (canSuggest ? '<button class="btn btn-secondary btn-sm" data-sim="suggest">' + (sg && sg.result ? 'Look again' : 'Find a better plan') + '</button>' : '') +
-    (canApply ? '<button class="btn btn-primary btn-sm" data-sim="apply">Apply these barge choices to my real plan…</button>' : '') + '</div>' +
-    (edited && !onlyPins ? '<div class="sim-sub" data-k="sg-note" style="margin-top:6px">Applying to the real plan is offered only when the barge choice is the only thing changed here — other what-ifs (ETAs, quantities, cancellations, out-of-service times) stay in this sandbox.</div>' : '') + '</div>';
-
-  /* what changed, in words */
-  const changed = rows.filter(r => r.differs);
-  const words = changed.length ? '<ul class="sim-list">' + changed.map(r => {
-    if (r.cancelled) return '<li><strong>' + esc(r.name) + '</strong> — cancelled; the barge time it held is freed.</li>';
-    const parts = [], b = r.base, s = r.scen;
-    if (r.changes.indexOf('barge') >= 0) parts.push('moves from ' + bdg(b.bargeId) + ' to ' + bdg(s.bargeId));
-    const wS = r.changes.indexOf('start') >= 0, wE = r.changes.indexOf('etc') >= 0, dS = (s.start - b.start) / 3600000, dE = (s.etc - b.etc) / 3600000;
-    if (wS) parts.push('starts ' + _simDur(dS) + (dS > 0 ? ' later' : ' earlier') + ' (' + esc(fmt24(s.start)) + ')');
-    if (wE && !(wS && Math.abs(dS - dE) < 1 / 60)) parts.push('finishes ' + _simDur(dE) + (dE > 0 ? ' later' : ' earlier'));
-    if (ed.v[r.key] && ed.v[r.key].etaExact && (ed.v[r.key].etaExact instanceof Date) && snap.vessels.some(q => _simKey(q) === r.key && q.etaWin)) parts.push('time frame replaced by the exact time');
-    if (r.changes.indexOf('qty') >= 0) {
-      const dSup = s.vQ + s.mQ, bSup = b.vQ + b.mQ;
-      parts.push(dSup !== bSup ? 'supply ' + _simMT(dSup) + ' MT (was ' + _simMT(bSup) + ' MT)' : 'nominated ' + _simMT(s.nomV + s.nomM) + ' MT (was ' + _simMT(b.nomV + b.nomM) + ' MT)');
-    }
-    const own = ed.v[r.key];
-    return '<li><strong>' + esc(r.name) + '</strong> — ' + parts.join('; ') + (own ? '' : ' <span class="sim-sub">(knock-on)</span>') + '</li>';
-  }).join('') + '</ul>' : '<div class="sim-sub">' + (edited ? 'These changes leave every supply where it is in the current plan.' : 'Nothing changed yet — move an ETA, delay or cancel a vessel, pin a barge or take one out of service to see what happens.') + '</div>';
-
-  let schedNote = '';
-  try { const st = _fwScheduleStaleness(); if (st && st.stale) schedNote = ' <span class="sim-bad">The saved Schedule Planner is out of date' + (st.reasons && st.reasons.length ? ' (' + esc(st.reasons.join(', ')) + ')' : '') + ' — “current plan” here is what Generate would produce right now.</span>'; } catch (e) {}
-  const banner = '<div class="sim-banner" data-k="banner"><strong>Private sandbox.</strong> Nothing here is saved, shared with colleagues or sent. Copy taken ' + esc(fmt24(snap.takenAt)) + '.' + schedNote +
-    (liveChanged ? ' <span class="sim-bad">The live nominations or barges have changed since — refresh to plan the latest.</span>' : '') +
-    ' <button class="btn btn-secondary btn-sm" data-sim="refresh">Refresh from live data</button>' +
-    (edited ? ' <button class="btn btn-ghost btn-sm" data-sim="reset">Undo all what-ifs</button>' : '') + '</div>';
-
-  return banner + summary +
-    '<div class="sec-hdr" data-k="h-ves"><span class="sec-label">Vessels</span><span class="sim-sub">' + (edited ? changedRows + ' of ' + rows.length + ' supplies differ from the current plan' : 'Same as the current plan') + '</span></div>' + vesselTbl +
-    '<div class="sec-hdr" data-k="h-chg"><span class="sec-label">What changes</span></div><div class="card sim-card" data-k="chg">' + words + '</div>' +
-    '<div class="sec-hdr" data-k="h-bar"><span class="sec-label">Barges</span></div><div class="sim-barges" data-k="barges">' + bargeCards + '</div>' +
-    '<div class="sec-hdr" data-k="h-look"><span class="sec-label">Look ahead</span></div>' + suggest;
-}
-
-let _simBound = false;
-function _simBind() {
-  const root = document.getElementById('sim-root');
-  if (!root || _simBound) return;
-  _simBound = true;
-  document.addEventListener('pointerdown', ev => { if (root.contains(ev.target)) _simPointerDown = true; }, true);
-  const released = () => { if (_simPointerDown) setTimeout(_simFlush, 0); };
-  document.addEventListener('pointerup', released, true);
-  document.addEventListener('pointercancel', released, true);
-  const num = s => { const n = parseFloat(s); return isFinite(n) && n >= 0 ? n : null; };
-  root.addEventListener('change', function(ev) {
-    const t = ev.target.closest && ev.target.closest('[data-sim]'); if (!t || !_sim || !_sim.snap) return;
-    const kind = t.dataset.sim, key = t.dataset.key, bid = t.dataset.bid;
-    if (kind === 'eta') {
-      const v = _simVessel(key); if (!v) return;
-      const d = _simParseDtl(t.value);
-      if (!d) return;                                   // incomplete while typing — "reset" is the way back
-      const e = _simEdit(key);
-      e.etaExact = d; delete e.shiftHrs;
-      _simTidy(key);
-    } else if (kind === 'vq' || kind === 'mq') {
-      const v = _simVessel(key); if (!v) return;
-      const n = num(t.value), e = _simEdit(key), orig = kind === 'vq' ? v.vq : v.mq;
-      if (n == null || n === orig) delete e[kind]; else e[kind] = n;
-      _simTidy(key);
-      const now = _sim.edits.v[key] && _sim.edits.v[key][kind] != null ? _sim.edits.v[key][kind] : orig;
-      t.value = String(now);                        // never leave rejected text on screen
-    } else if (kind === 'pin') {
-      const v = _simVessel(key); if (!v) return;
-      const e = _simEdit(key);
-      if (String(t.value) === String(v.bargeId || '')) delete e.pin; else e.pin = t.value;
-      _simTidy(key);
-    } else if (kind === 'brob-v' || kind === 'brob-m') {
-      const b = _sim.snap.barges.find(x => String(x.id) === String(bid)); if (!b) return;
-      const n = num(t.value), o = _sim.snap.opening[b.id], f = kind === 'brob-v' ? 'v' : 'm', be = _sim.edits.b[b.id] || (_sim.edits.b[b.id] = {});
-      if (n == null || Math.round(n) === Math.round(o[f])) delete be[f]; else be[f] = n;
-      if (!Object.keys(be).length) delete _sim.edits.b[b.id];
-      t.value = String(_sim.edits.b[b.id] && _sim.edits.b[b.id][f] != null ? _sim.edits.b[b.id][f] : Math.round(o[f]));
-    } else return;
-    _simEdited();
-  });
-  root.addEventListener('click', function(ev) {
-    const t = ev.target.closest && ev.target.closest('[data-sim]'); if (!t || t.tagName === 'INPUT' || t.tagName === 'SELECT') return;
-    const kind = t.dataset.sim, key = t.dataset.key, bid = t.dataset.bid;
-    if (kind === 'refresh') { _simRetake(); _simRender(); return; }
-    if (kind === 'reset') { _sim.edits = _simEmptyEdits(); _simRetake(); _simRender(); return; }
-    if (!_sim || !_sim.snap) return;
-    if (kind === 'shift') { const v = _simVessel(key); if (!v) return; const e = _simEdit(key); e.shiftHrs = (e.shiftHrs || 0) + (parseFloat(t.dataset.h) || 0); }
-    else if (kind === 'eta-reset') { const e = _simEdit(key); delete e.etaExact; delete e.shiftHrs; _simTidy(key); }
-    else if (kind === 'cancel') { if (!_simVessel(key)) return; _simEdit(key).cancel = true; }
-    else if (kind === 'restore') { const e = _simEdit(key); delete e.cancel; _simTidy(key); }
-    else if (kind === 'vreset') { delete _sim.edits.v[key]; }
-    else if (kind === 'brob-reset') { delete _sim.edits.b[bid]; }
-    else if (kind === 'blk-del') { _sim.edits.blocks = _sim.edits.blocks.filter(x => x.id !== t.dataset.id); }
-    else if (kind === 'blk-add') {
-      const b = _sim.snap.barges.find(x => String(x.id) === String(bid)); if (!b) return;
-      const f = _simParseDtl((document.getElementById('sim-blk-from-' + bid) || {}).value), to = _simParseDtl((document.getElementById('sim-blk-to-' + bid) || {}).value);
-      if (!f || !to || to <= f) { showToast('Pick a start and a later end for the out-of-service time.', 'warning'); return; }
-      _sim.edits.blocks.push({ id: 'sim-' + (++_sim.seq), bargeId: b.id, bargeName: b.name, start: f.toISOString(), end: to.toISOString(), reason: 'What-if: out of service' });
-    }
-    else if (kind === 'suggest') { _simRunSuggest(); return; }
-    else if (kind === 'suggest-cancel') { _sim.searchSeq++; _sim.suggest = null; _simRender(); return; }
-    else if (kind === 'suggest-try') { _simTrySuggestion(); return; }
-    else if (kind === 'apply') { _simApplyPins(); return; }
-    else return;
-    _simEdited();
-  });
-}
-
-async function _simRunSuggest() {
-  if (!_sim || !_sim.snap) return;
-  const seq = ++_sim.searchSeq;
-  _sim.suggest = { running: true };
-  _simRender();
-  let r;
-  try {
-    r = await _simSearch(_simInputs(_sim.snap, _sim.edits), { cancelled: () => _sim.searchSeq !== seq, onProgress: (d, t) => { const el = document.getElementById('sim-progress'); if (el) el.textContent = Math.round(100 * d / t) + '%'; } });
-  } catch (e) { if (_sim.searchSeq === seq) { _sim.suggest = null; _simRender(); showToast('Could not search: ' + ((e && e.message) || e), 'error'); } return; }
-  if (_sim.searchSeq !== seq || r.status === 'cancelled') return;
-  _sim.suggest = { result: r };
-  _simRender();
-}
-function _simTrySuggestion() {
-  const sg = _sim && _sim.suggest, r = sg && sg.result;
-  if (!r || r.status !== 'found') return;
-  r.best.picks.forEach(p => {
-    const v = _simVessel(p.key); if (!v) return;
-    const e = _simEdit(p.key);
-    if (String(p.bargeId) === String(v.bargeId || '')) delete e.pin; else e.pin = p.bargeId;
-    _simTidy(p.key);
-  });
-  _sim.suggest = { result: r, tried: true };
-  _sim.searchSeq++;
-  _simRender();
-}
-// The one way out of the sandbox: set the barge dropdowns on the real nomination cards.
-function _simApplyPins() {
-  if (!_sim || !_sim.snap || !_simOnlyPins(_sim.edits)) return;
-  if (_simLiveChanged()) { showToast('The live nominations changed since this copy was taken — refresh first.', 'warning'); _simRender(); return; }
-  const todo = [];
-  Object.keys(_sim.edits.v).forEach(k => {
-    const v = _simVessel(k), e = _sim.edits.v[k];
-    if (v && e.pin !== undefined) todo.push({ v, pin: e.pin });
-  });
-  if (!todo.length) return;
-  const nm = id => { const b = _sim.snap.barges.find(x => String(x.id) === String(id)); return b ? b.name : 'Auto'; };
-  const lines = todo.map(t => '• ' + t.v.name + ': ' + (t.pin === '' ? 'Auto' : nm(t.pin))).join('\n');
-  if (!confirm('Set these barge choices on your real nominations and regenerate the schedule?\n\n' + lines + '\n\nEach one stays pinned to that barge until you set it back to Auto on its nomination card.')) return;
-  const sels = [];
-  const cards = Array.from(document.querySelectorAll('.vcard[id^="vessel-"]'));
-  for (const t of todo) {
-    // By nomination id: card numbers are re-dealt whenever a colleague's save rebuilds the cards.
-    const card = t.v.nomUid ? cards.find(c => (c.dataset.nomUid || '') === t.v.nomUid) : cards.find(c => c.id === 'vessel-' + t.v.id && !c.dataset.nomUid);
-    const sel = card ? document.getElementById('v' + card.id.replace('vessel-', '') + '-barge') : null;
-    if (!card || !sel) { showToast('A nomination changed while you were deciding — nothing was applied. Refresh and try again.', 'warning'); return; }
-    sels.push([sel, t.pin]);
-  }
-  sels.forEach(([sel, pin]) => { sel.value = pin; if (sel.value !== pin) sel.value = ''; sel.dispatchEvent(new Event('change', { bubbles: true })); });
-  _sim.edits = _simEmptyEdits(); _simRetake();
-  calculate();
-  showPage('schedule');
 }
 
 
@@ -17296,8 +17084,7 @@ function rlCompleteLoading(id) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
   if (!rec || rec.deletedAt) { showToast('That loading is no longer in the list.', 'warning'); return; }
   if (rec.completed) { showToast('That loading is already marked Completed.', 'warning'); _refreshLoadingConsumers(); return; }
-  markLoadingRecordDone(id); // saves, re-renders the forecast (via _refreshLoadingConsumers)
-  showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed. Now record the reload (' + Number(rec.qty || 0).toLocaleString() + ' MT ' + (rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') + ') in the barge\'s ROB so the stock shows.', 'success', 8000);
+  completeLoadingPrompt(id, { fromForecast: true }); // asks for the BL quantity, then completes (saves, re-renders the forecast)
 }
 function _rlEventListHtml(fc) {
   var rows = fc.events.filter(function(e) { return e.kind !== 'now'; }).map(function(e) {
@@ -24855,6 +24642,26 @@ async function init() {
 </div>
 
 <!-- ═══ RELOAD QUANTITY MODAL ═══ -->
+<!-- Loading completed: the quantity actually loaded (per BL) — deducted from the deal -->
+<div id="bl-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9650;align-items:center;justify-content:center" onclick="if(event.target===this)closeBlModal()">
+  <div style="background:var(--surface);border-radius:16px;width:min(460px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+    <div style="background:linear-gradient(135deg,var(--ink-solid),var(--pg-loading));color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:15px;font-weight:700;font-family:DM Sans,sans-serif" id="bl-title">Mark loading Completed</div>
+        <div style="font-size:11px;opacity:.65;margin-top:2px" id="bl-sub"></div>
+      </div>
+      <button onclick="closeBlModal()" aria-label="Close" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <div style="padding:20px">
+      <div class="field"><label for="bl-qty">Quantity loaded per BL (MT)</label><input type="number" id="bl-qty" min="0" step="1" inputmode="decimal" oninput="_blPreview()" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
+      <div id="bl-deal" style="font-size:11.5px;color:var(--sub);margin:8px 0 16px;line-height:1.5"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="closeBlModal()">Cancel</button>
+        <button class="btn btn-primary" id="bl-confirm-btn" onclick="blConfirm()">Mark Completed</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div id="reload-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9650;align-items:center;justify-content:center" onclick="if(event.target===this)closeReloadModal()">
   <div style="background:var(--surface);border-radius:16px;width:min(480px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
     <div style="background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">

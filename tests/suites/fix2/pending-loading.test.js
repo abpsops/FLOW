@@ -78,11 +78,11 @@ const forecast = p => p.evaluate(async () => {
     check('P1 the event is flagged: ended, not marked Completed, +4,350 MT VLSFO counted, with a Mark Completed button', f.pending.length === 1 && /ended, not marked Completed/.test(f.pending[0].text) && /\+4,350 MT VLSFO counted/.test(f.pending[0].text) && f.pending[0].btn, f.pending);
     check('P1 no VLSFO reload is recommended any more (ERA S needs 500 of 4,774)', !f.recs.some(r => r[0] === 'VLSFO'), f.recs);
     // Mark Completed from the forecast
-    await A.page.evaluate(async () => { renderReloadPlanner && 0; rlCompleteLoading('ld_pending'); await _waitForSaveIdle(); });
+    await A.page.evaluate(async () => { renderReloadPlanner && 0; rlCompleteLoading('ld_pending'); blConfirm(); await _waitForSaveIdle(); });
     const rec = U.row(db).payload.state.loadingRecords.find(r => r.id === 'ld_pending');
     const g = await forecast(A.page);
     check('P1 Mark Completed: the loading is Completed in the cloud, drops out of the forecast (stock back to 424 until the reload is recorded), the VLSFO reload is recommended again', rec && rec.completed === true && !!rec.completedAt && g.pending.length === 0 && g.firstV === null && g.recs.some(r => r[0] === 'VLSFO'), { rec: rec && [rec.completed, !!rec.completedAt], g });
-    check('P1 …and the toast says to record the reload', (await A.page.evaluate(() => window.__toasts)).some(t => /marked Completed/.test(t) && /record the reload/.test(t) && /4,350 MT VLSFO/.test(t)), await A.page.evaluate(() => window.__toasts));
+    check('P1 …and the toast says to record the reload (BL 4,350 MT VLSFO)', (await A.page.evaluate(() => window.__toasts)).some(t => /marked Completed/.test(t) && /record the reload/.test(t) && /BL 4,350 MT VLSFO/.test(t)), await A.page.evaluate(() => window.__toasts));
   });
 
   /* P2 — what is NOT counted: completed, deleted, another barge; capacity cap; LSMGO */
@@ -166,13 +166,13 @@ const forecast = p => p.evaluate(async () => {
     });
     check('P6 the "not marked Completed" notice with its Mark Completed button is visible on the card without expanding Projected events', /ended .* but is not marked Completed: \+4,350 MT VLSFO is counted/.test(vis.note || '') && vis.btnShown, vis);
     const g = await A.page.evaluate(async () => {
-      window.__toasts = []; rlCompleteLoading('ld_pending'); await _waitForSaveIdle();
+      window.__toasts = []; rlCompleteLoading('ld_pending'); blConfirm(); await _waitForSaveIdle();
       const rec = _loadingRecords.find(r => r.id === 'ld_pending'); const at = rec.completedAt, up = rec.updatedAt;
       await new Promise(r => setTimeout(r, 20));
       rlCompleteLoading('ld_pending'); await _waitForSaveIdle();
       return { toasts: window.__toasts, same: rec.completedAt === at && rec.updatedAt === up, note: !!document.querySelector('.rl-card[data-barge-id="2"] .rl-pending-note') };
     });
-    check('P6 a second Mark Completed does not re-save or re-toast the success; the notice is gone', g.same && g.toasts.filter(t => /marked Completed\. Now record/.test(t)).length === g.toasts.filter(t => /already marked Completed/.test(t)).length && g.toasts.some(t => /already marked Completed/.test(t)) && !g.note, g);
+    check('P6 a second Mark Completed does not re-save or re-toast the success; the notice is gone', g.same && g.toasts.filter(t => /marked Completed \(BL .*Now record/.test(t)).length === g.toasts.filter(t => /already marked Completed/.test(t)).length && g.toasts.some(t => /already marked Completed/.test(t)) && !g.note, g);
   });
 
   await browser.close();

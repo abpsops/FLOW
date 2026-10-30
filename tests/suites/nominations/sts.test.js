@@ -3,7 +3,7 @@
    • survives reload, two-device merge (tick AND untick), the trader save path, trash/restore
    • rides onto the planned schedule, the checklist row and the saved record
    • the WHOLE card / row / pill is filled green on: nomination card, Weekly Planned Supply
-     calendar, Voyage Schedule, Supply Timeline, Checklist, Saved Records (+ What-if Planner)
+     calendar, Voyage Schedule, Supply Timeline, Checklist, Saved Records
    • ticking after a schedule exists updates those screens at once (it does not affect planning)
    • planning is unchanged by the tick
    node suites/nominations/sts.test.js [appDir] */
@@ -213,13 +213,9 @@ async function scenario(browser, name, fn, opts) {
       document.querySelectorAll('[id$="-sts"]').forEach(b => { b.checked = !b.checked; });
       calculate();
       const b2 = plan();
-      // the What-if Planner shows the tag and plans the same
-      __week(); calculate(); _sim = null; showPage('simulator');
-      const tags = [...document.querySelectorAll('#sim-root .sim-tbl tbody tr')].map(tr => [tr.querySelector('td:nth-child(2) strong').textContent, !!tr.querySelector('.sts-tag')]);
-      return { same: a === b2, tags };
+      return { same: a === b2 };
     });
     check('T5 ticking / unticking every nomination leaves barge, start, ETC and quantities exactly as planned', r.same);
-    check('T5 the What-if Planner marks STS vessels', JSON.stringify(r.tags) === JSON.stringify([['CHILE PROSPERITY', true], ['MARAN VENUS', false], ['PACIFIC DAWN', true], ['ORIENT STAR', false]]) || r.tags.some(t => t[1]), r.tags);
   });
 
 
