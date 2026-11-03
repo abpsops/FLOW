@@ -77,8 +77,8 @@ const live = (app, id) => app.page.evaluate((id) => { _bargeConfig = getBarges()
       p.state.vessels[0].bargeId = '5';
       p.state.manualROB = { '5_final': { v: 3500, m: 0, atIds: ['x1'] } }; // set after x1 was already supplied
       p.records = [
-        { id: 'x1', vessel: 'Q', barge: 'Barge 10', vlsfoAct: 300, mgoAct: 0, supplyDate: '2026-10-10T08:00:00', supplied: true },
-        { id: 'x2', vessel: 'R', barge: '', vlsfoAct: 70, mgoAct: 0, supplyDate: '2026-10-10T09:00:00', supplied: true }];
+        { id: 'x1', vessel: 'Q', barge: 'Barge 10', vlsfoAct: 300, mgoAct: 0, supplyDate: U.thisMonthIso(120), supplied: true },
+        { id: 'x2', vessel: 'R', barge: '', vlsfoAct: 70, mgoAct: 0, supplyDate: U.thisMonthIso(60), supplied: true }]; // this month: a past month's supplies are archived on load
       const db2 = U.H.createDb({ workspace: p });
       const C = await U.open(browser, db2, 'user-operator');
       await U.helpers(C);

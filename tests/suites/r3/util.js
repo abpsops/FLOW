@@ -54,4 +54,13 @@ async function helpers(app) { await app.page.evaluate(PAGE_HELPERS); }
 function row(db) { return db.tables.abps_workspace.get('main'); }
 function writes(db, uid) { return db.log.filter(o => o.uid === uid && o.table === 'abps_workspace' && ['update', 'insert', 'upsert'].includes(o.action)); }
 
-module.exports = { H, APP, seedPayload, check, summary, realErrors, open, helpers, row, writes };
+// A moment in the current month as the app sees it (Asia/Dubai, UTC+4), `minsAgo` before
+// now but never before the month's first minute. Records seeded with a fixed month are
+// moved into Archives by autoArchivePastMonths() once that month is over, so suites
+// that need "this month's" supplies seed them with this instead of a hard-coded date.
+function thisMonthIso(minsAgo) {
+  const DUBAI = 4 * 3600000, now = Date.now(), d = new Date(now + DUBAI);
+  const monthStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - DUBAI;
+  return new Date(Math.max(monthStart + 60000, now - (minsAgo || 0) * 60000)).toISOString();
+}
+module.exports = { thisMonthIso, H, APP, seedPayload, check, summary, realErrors, open, helpers, row, writes };
