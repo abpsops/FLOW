@@ -3,8 +3,11 @@
      instead of src/ fails here, naming the src/ file and line to edit)
    • every JavaScript file in src/js parses on its own (each is whole statements)
    • the build tool: an edit in src/ reaches index.html at the right line; a stray file,
-     a missing / duplicated / cyclic / outside include and a file without a final newline
-     are refused; --where maps an index.html line to its src/ file and line
+     a missing / duplicated / cyclic / outside include, a malformed include line, a file
+     without a final newline, CRLF line endings, a byte-order mark and invalid UTF-8 are
+     refused with a clear message; editor / OS litter (.DS_Store, vim swap, ~) is ignored;
+     a byte difference in index.html fails the check; --where maps a line to src/
+   • .gitattributes keeps index.html, src/ and tools/ in LF on every checkout
    • the deploy ignore lists keep src/ and tools/ off the published site
    node suites/build/build.test.js            (APP_DIR = repository to check, default ../..) */
 const fs = require('fs');
@@ -52,6 +55,8 @@ if (!fs.existsSync(path.join(ROOT, 'tools', 'build.js'))) {
   check('B1 every src/js file parses on its own (' + n + ' files)', n > 30 && !bad.length, bad);
   const vi = fs.readFileSync(path.join(ROOT, '.vercelignore'), 'utf8').split('\n').map(s => s.trim());
   const jk = fs.readFileSync(path.join(ROOT, '_config.yml'), 'utf8');
+  const ga = fs.existsSync(path.join(ROOT, '.gitattributes')) ? fs.readFileSync(path.join(ROOT, '.gitattributes'), 'utf8') : '';
+  check('B1 .gitattributes keeps index.html, src/ and tools/ in LF line endings', /^index\.html text eol=lf$/m.test(ga) && /^src\/\*\* text eol=lf$/m.test(ga) && /^tools\/\*\* text eol=lf$/m.test(ga), ga);
   check('B1 src/ and tools/ are kept off the published site (Vercel and GitHub Pages)', vi.includes('src/') && vi.includes('tools/') && /-\s*src\/\s*$/m.test(jk) && /-\s*tools\/\s*$/m.test(jk), { vi, jk });
 }
 
@@ -103,7 +108,16 @@ try {
   refuse('a file included twice', () => fs.appendFileSync(tpl, '<!-- @include js/deals.js -->\n'), /js\/deals\.js is included twice/);
   refuse('an include cycle', () => fs.appendFileSync(path.join(TMP, 'src', 'html', 'topbar.html'), '<!-- @include html/topbar.html -->\n'), /included twice|include cycle/);
   refuse('an include outside src/', () => fs.appendFileSync(tpl, '<!-- @include ../index.html -->\n'), /include outside src\//);
+  refuse('a malformed include line (trailing space)', () => fs.appendFileSync(tpl, '<!-- @include js/nope.js --> \n'), /malformed include at src\/index\.html:\d+/);
+  refuse('CRLF line endings in a src/ file', () => { const f = path.join(TMP, 'src', 'index.html'); fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/\n/g, '\r\n')); }, /src\/index\.html has CRLF \(Windows\) line endings/);
+  refuse('a byte-order mark', () => { const f = path.join(TMP, 'src', 'js', 'deals.js'); fs.writeFileSync(f, Buffer.concat([Buffer.from([0xEF, 0xBB, 0xBF]), fs.readFileSync(f)])); }, /src\/js\/deals\.js starts with a byte-order mark/);
+  refuse('invalid UTF-8', () => { const f = path.join(TMP, 'src', 'js', 'deals.js'); fs.writeFileSync(f, Buffer.concat([Buffer.from([0xC3, 0x28, 0x0A]), fs.readFileSync(f)])); }, /src\/js\/deals\.js is not valid UTF-8/);
+  refuse('a byte difference in index.html (same text after decoding)', () => { const f = path.join(TMP, 'index.html'); const b = fs.readFileSync(f); const i = b.indexOf(Buffer.from('\u2014', 'utf8')); fs.writeFileSync(f, Buffer.concat([b.subarray(0, i), Buffer.from([0xFF]), b.subarray(i + 3)])); }, /index\.html differs from what src\/ builds/);
   refuse('a file without a final newline', () => fs.writeFileSync(path.join(TMP, 'src', 'js', 'shell.js'), fs.readFileSync(path.join(TMP, 'src', 'js', 'shell.js'), 'utf8').replace(/\n$/, '')), /src\/js\/shell\.js must end with a newline/);
+  fresh();
+  ['.DS_Store', path.join('js', '.deals.js.swp'), path.join('js', 'deals.js~')].forEach(f => fs.writeFileSync(path.join(TMP, 'src', f), 'x'));
+  const lit = run(TMP, ['--check']);
+  check('B2 editor / OS litter under src/ (.DS_Store, vim swap, ~ backup) is ignored', lit.code === 0, lit.out.trim());
   fresh();
   fs.writeFileSync(path.join(TMP, 'src', 'README.md'), '# notes\n');
   check('B2 src/README.md is documentation, not part of the page', run(TMP, ['--check']).code === 0);

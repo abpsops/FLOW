@@ -34,7 +34,9 @@ with relative paths) — do not nest them in a subfolder.
 4. Deploy. Every future push to this repo auto-redeploys.
 
 ## Notes
-- This is also the exact file set that should be mirrored into the
+- The app files above (`index.html`, `manifest.json`,
+  `service-worker.js`, `vercel.json`, the icons — not `src/` or `tools/`)
+  are the file set that should be mirrored into the
   Android project's `www/` folder (`flow-apk-project-fixed/flow-apk/www/`
   in `FLOW---ANDROID`) so the two never drift out of sync. That copy is
   NOT an offline fallback: the Android app loads the live deployed URL
@@ -90,6 +92,6 @@ MMSI \*" — at least one is wanted).
 - GitHub Actions (`.github/workflows/test.yml`) runs it on every push and
   pull request; a red X on a commit means a test failed (logs are attached to
   the run).
-- `tests/` and `.github/` are development-only (and `supabase/` is server code):
-  `.vercelignore` keeps them off the live site, and they should not be copied
-  into the Android `www/` folder.
+- `tests/`, `src/`, `tools/` and `.github/` are development-only (and `supabase/`
+  is server code): `.vercelignore` and `_config.yml` keep them off the live site,
+  and they should not be copied into the Android `www/` folder.
