@@ -17,6 +17,7 @@ const TIMEOUT_MS = (parseFloat(process.env.SUITE_TIMEOUT_MIN) || 15) * 60000;
 // name, script (relative to tests/), what it covers (shown by --list)
 const SUITES = [
   ['check-scripts', 'check-scripts.js', 'every inline <script> in index.html parses'],
+  ['build', 'suites/build/build.test.js', 'index.html is exactly what src/ builds; every src/js file parses; the build tool refuses mistakes'],
   ['smoke', 'harness/smoke.js', 'operator + trader open every page with no errors'],
   ['r1-basics', 'suites/r1/t1.js', 'agents XSS/tombstones, dark theme tokens, login form, real CSP'],
   ['r2-dashboard-email', 'suites/r2/r2.test.js', 'dashboard escaping/KPIs, role lookup, offline launch, email logs'],

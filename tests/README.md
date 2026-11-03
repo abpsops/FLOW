@@ -16,6 +16,7 @@ blocked and fails the test.
 | Suite | Checks |
 |---|---|
 | `check-scripts` | every inline `<script>` in index.html parses |
+| `build` | index.html is exactly what `src/` builds (an edit made in index.html instead of `src/` fails, naming the `src/` file and line); every `src/js` file parses on its own; the build tool refuses a stray file, a missing / duplicated / cyclic / outside include, a file without a final newline; `--where` maps lines; `src/` and `tools/` stay off the published site |
 | `smoke` | operator and trader open every page with no errors |
 | `r1-basics` | agents list escaping/deletion/copy, dark-theme colours, login form, the real `vercel.json` CSP |
 | `r2-dashboard-email` | dashboard escaping and KPIs, role lookup, offline launch, nomination email logs |

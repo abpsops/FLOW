@@ -1,0 +1,147 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: BARGE FLEET
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-bargefleet" data-section="planning">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Barge Fleet Configuration</div>
+      <div class="page-subtitle">Register barges, set ROB, pump rates and operational parameters</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary btn-sm" onclick="addBarge()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Register New Barge
+      </button>
+    </div>
+  </div>
+
+  <div class="card" style="border-top:2px solid var(--azure)" id="calc-params-card">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--ink);font-family:DM Sans,sans-serif">Calculation Parameters</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:1px">Hose-up time and travel buffer used in ETC and schedule generation</div>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-secondary btn-sm" id="calc-edit-btn" onclick="openCalcParamsEdit()" style="gap:5px">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          Edit Parameters
+        </button>
+      </div>
+    </div>
+
+    <!-- View mode -->
+    <div id="calc-view" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px">
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;min-width:160px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:3px">Hose-up / Setup Time</div>
+        <div style="font-size:18px;font-weight:700;color:var(--azure);font-family:DM Mono,monospace" id="calc-view-hose">6 hrs</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Added to every supply operation</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;min-width:160px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:3px">Travel Buffer</div>
+        <div style="font-size:18px;font-weight:700;color:var(--green);font-family:DM Mono,monospace" id="calc-view-travel">1 hr</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Barge travel between vessels</div>
+      </div>
+      <div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;min-width:160px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:3px">Overrun Contingency</div>
+        <div style="font-size:18px;font-weight:700;color:var(--amber);font-family:DM Mono,monospace" id="calc-view-contingency">1 hr</div>
+        <div style="font-size:10px;color:var(--sub);margin-top:2px">Free Windows &amp; availability margin after each ETC</div>
+      </div>
+      <div style="background:var(--bg);border:1px solid var(--border2);border-radius:8px;padding:10px 16px;flex:1;min-width:220px">
+        <div style="font-size:9px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:700;margin-bottom:6px">Formulas in use</div>
+        <div style="font-size:11px;color:var(--sub);line-height:1.9;font-family:DM Mono,monospace" id="calc-view-formulas">
+          ETC = Supply Start + 6h + (Qty ÷ TPH)<br>
+          Next Start ≥ ETC + 1h travel
+        </div>
+      </div>
+    </div>
+
+    <!-- Edit mode -->
+    <div id="calc-edit" style="display:none;margin-top:14px;border-top:1px solid var(--border2);padding-top:14px">
+      <div class="g4" style="margin-bottom:14px">
+        <div class="field">
+          <label for="calc-hose-input">Hose-up / Setup Time (hrs)</label>
+          <input type="number" id="calc-hose-input" value="6" min="0.5" max="24" step="0.5" style="font-family:DM Mono,monospace">
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">Time from barge arrival to supply start (hose connection, safety checks, paperwork)</div>
+        </div>
+        <div class="field">
+          <label for="calc-travel-input">Travel Buffer (hrs)</label>
+          <input type="number" id="calc-travel-input" value="1" min="0" max="12" step="0.5" style="font-family:DM Mono,monospace">
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">Sailing time between consecutive vessels</div>
+        </div>
+        <div class="field">
+          <label for="calc-contingency-input">Overrun Contingency (hrs)</label>
+          <input type="number" id="calc-contingency-input" value="1" min="0" max="24" step="0.5" style="font-family:DM Mono,monospace">
+          <div style="font-size:10px;color:var(--muted);margin-top:3px">Planning margin after each job's ETC — used by Free Windows and Check Availability, does not change scheduled ETCs</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary btn-sm" onclick="saveCalcParamsEdit()">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+          Save & Apply
+        </button>
+        <button class="btn btn-secondary btn-sm" onclick="closeCalcParamsEdit()">Cancel</button>
+        <div style="font-size:11px;color:var(--amber);margin-left:4px">⚠ Changes take effect on next schedule generation</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="barge-list" style="margin-top:4px"></div>
+  <button class="btn-add" onclick="addBarge()" style="margin-top:4px">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Register New Barge
+  </button>
+
+  <!-- Stock forecast & reload plan — rendered by renderReloadPlanner() -->
+  <div id="reload-planner-section">
+    <div class="sec-hdr" style="margin-top:1.5rem"><span class="sec-label">Stock forecast &amp; reload plan</span></div>
+    <div id="reload-planner-body"></div>
+  </div>
+
+  <!-- CI Templates -->
+  <div class="sec-hdr" style="margin-top:1.5rem"><span class="sec-label">Calling Instructions Reference Files</span></div>
+  <div id="ci-templates-section" class="card" style="border-top:2px solid var(--azure)">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--azure)" stroke-width="2" stroke-linecap="round"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:var(--ink)">Calling Instructions Reference Files</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">Upload KFK and FUJ templates once — auto-selected per vessel location</div>
+      </div>
+    </div>
+    <div class="g2">
+      <div style="background:var(--surface2);box-shadow:var(--sh-in-xs);border-radius:var(--radius-sm);padding:14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          KFK Template
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Used for: KFK Anchorage · KFK Berth</div>
+        <label style="display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:10px 14px;cursor:pointer;background:var(--surface);font-size:12px;color:var(--sub);transition:all .15s" id="ci-kfk-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          <span id="ci-kfk-name">Click to upload .docx or .txt reference</span>
+          <input type="file" id="ci-kfk-file" accept=".docx,.doc,.txt,.text" style="display:none" onchange="ciLoadTemplate('kfk',this)">
+        </label>
+        <div id="ci-kfk-status" style="font-size:11px;color:var(--muted);margin-top:6px">No KFK template loaded</div>
+      </div>
+      <div style="background:var(--surface2);box-shadow:var(--sh-in-xs);border-radius:var(--radius-sm);padding:14px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--azure);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          FUJ Template
+        </div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Used for: FUJ Anchorage · FUJ Berth</div>
+        <label style="display:flex;align-items:center;gap:8px;border:1.5px dashed var(--border);border-radius:var(--radius-sm);padding:10px 14px;cursor:pointer;background:var(--surface);font-size:12px;color:var(--sub);transition:all .15s" id="ci-fuj-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>
+          <span id="ci-fuj-name">Click to upload .docx or .txt reference</span>
+          <input type="file" id="ci-fuj-file" accept=".docx,.doc,.txt,.text" style="display:none" onchange="ciLoadTemplate('fuj',this)">
+        </label>
+        <div id="ci-fuj-status" style="font-size:11px;color:var(--muted);margin-top:6px">No FUJ template loaded</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generate button -->
+  <button class="btn-generate" onclick="calculate()">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+    Generate Bunker Schedule
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+  </button>
+</div>
+

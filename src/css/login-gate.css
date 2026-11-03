@@ -1,0 +1,278 @@
+#operator-gate {
+  position: fixed; inset: 0; z-index: 999999;
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+/* ── Claymorphism + minimalism: warm cream backdrop, soft puffy white-ish
+   card lifted off the page via large soft dual shadows, generous rounded
+   corners, no borders anywhere. The logo badge is the one deliberate
+   exception — it stays solid black regardless of theme, since the FLOW
+   mark is white and needs a dark surface to read on. ── */
+
+#og-wrap {
+  position: relative; width: min(380px, 100%); z-index: 2;
+}
+
+/* ── Logo badge — always black, on every theme, since the FLOW
+   wordmark itself is rendered in white and needs a dark surface
+   underneath it to actually be visible/legible on the light cream
+   login background. ── */
+#og-logo-area { text-align: center; margin-bottom: 32px; }
+#og-logo-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 18px 28px;
+  margin-bottom: 16px;
+  background: #0B1320;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(11,19,32,.35), 0 2px 6px rgba(11,19,32,.25);
+}
+#og-logo-badge img { height: 40px; width: auto; display: block; }
+#og-logo-tagline {
+  font-size: 10.5px; color: var(--muted);
+  letter-spacing: .22em; text-transform: uppercase; font-weight: 700;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Card — the main puffy clay slab ── */
+#og-card {
+  background: var(--surface);
+  border-radius: 26px;
+  padding: 32px 30px 28px;
+  box-shadow: var(--sh-lg);
+}
+
+/* ── Fields — recessed into the surface ── */
+.og-label {
+  display: block; font-size: 10.5px; font-weight: 700;
+  color: var(--muted); letter-spacing: .14em; text-transform: uppercase;
+  margin-bottom: 9px; font-family: 'DM Sans', sans-serif;
+}
+.og-input {
+  width: 100%; padding: 13px 16px;
+  border: none; border-radius: 16px;
+  font-size: 13.5px; outline: none; color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  background: var(--surface);
+  box-shadow: var(--sh-in-sm);
+  transition: box-shadow .18s;
+  box-sizing: border-box;
+}
+.og-input::placeholder { color: var(--muted); }
+.og-input:focus {
+  box-shadow: var(--sh-in-sm), 0 0 0 3px rgba(74,127,224,.18);
+}
+
+/* ── Eye toggle ── */
+#og-pw-toggle {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer;
+  color: var(--muted); padding: 3px;
+  display: flex; align-items: center; line-height: 1; transition: color .15s;
+}
+#og-pw-toggle:hover { color: var(--sub); }
+
+/* ── Error — soft recessed warm-tinted panel ── */
+#og-error {
+  display: none;
+  background: var(--red-lt); border: none;
+  color: var(--red); font-size: 11.5px; font-weight: 600;
+  padding: 11px 14px; border-radius: 16px; margin-bottom: 16px;
+  font-family: 'DM Sans', sans-serif;
+  box-shadow: var(--sh-in-xs);
+}
+
+/* ── Button — raised clay, dark ink so it reads as the primary action ── */
+#og-submit-btn {
+  width: 100%; padding: 14px;
+  background: var(--ink-solid); color: #F5F8FC; border: none; border-radius: 18px;
+  font-size: 13.5px; font-weight: 700; cursor: pointer;
+  font-family: 'DM Sans', sans-serif; letter-spacing: .03em;
+  transition: box-shadow .12s, transform .12s;
+  box-shadow: var(--sh-md);
+}
+#og-submit-btn:hover {
+  box-shadow: var(--sh-lg);
+  transform: translateY(-1px);
+}
+#og-submit-btn:active {
+  box-shadow: var(--sh-in-sm);
+  transform: translateY(1px);
+}
+
+/* ── Footer ── */
+#og-footer-hint {
+  text-align: center; margin-top: 18px; font-size: 10.5px;
+  color: var(--muted); font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Bottom label ── */
+#og-horizon-label {
+  position: absolute; bottom: 26px; left: 0; right: 0;
+  text-align: center; font-size: 9.5px; letter-spacing: .18em;
+  color: var(--muted); font-family: 'DM Mono', monospace;
+  text-transform: uppercase; pointer-events: none; z-index: 2;
+}
+
+@media (max-width: 480px) {
+  #og-card { padding: 26px 22px 24px; border-radius: 22px; }
+  #og-logo-badge { padding: 15px 22px; border-radius: 14px; }
+  #og-logo-badge img { height: 23px; }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MOBILE-FIRST RESPONSIVE LAYER (UI ONLY — no JS / IDs touched)
+   Additive overrides so FLOW feels like a native mobile app on
+   360 · 375 · 390 · 412 · 430px. Nothing above is removed; these
+   rules simply refine presentation at small viewports.
+═══════════════════════════════════════════════════════════ */
+
+/* Kill any horizontal scrolling app-wide on small screens */
+@media (max-width: 768px) {
+  html, body { max-width: 100%; overflow-x: hidden; }
+  .main { overflow-x: hidden; }
+
+  /* ── Sync banner: compact, single line, truncating status ── */
+  .sync-banner { padding: 0 10px; gap: 8px; }
+  .sync-msg { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sync-actions { gap: 4px; flex-shrink: 0; }
+  .sync-btn { padding: 3px 8px; }
+
+  /* ── Topbar becomes a compact multi-row bar: title row, action-buttons
+     row, then search row. Height is auto (not a guessed fixed px) so it
+     always fits its content — JS measures the real rendered height and
+     writes it to --header-h, so the page offset below is always exact
+     regardless of how many rows this ends up being. */
+  .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    align-content: center;
+    row-gap: 6px;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .topbar-section-label,
+  .topbar-page-sub { display: none; }
+  /* Re-show the page title on mobile — gives the bar a clear identity */
+  .topbar-page-title { display: block !important; font-size: 13px; }
+  #topbar-page-info { padding-left: 10px; }
+  #live-clock { display: none !important; }
+
+  /* Row 1: hamburger + logo + title (implicit, default order 0) */
+
+  /* Row 2: destructive/theme action buttons — sit above the search bar,
+     own full-width row so they can never get squeezed off / wrap
+     invisibly out of the header. */
+  .topbar > div:last-child {
+    order: 2;
+    flex: 1 1 100% !important;
+    gap: 6px !important;
+    justify-content: flex-end;
+  }
+  .topbar > div:last-child > button {
+    font-size: 0 !important;
+    gap: 0 !important;
+    width: 34px; height: 30px;
+    padding: 0 !important;
+    justify-content: center;
+    border-radius: 8px;
+  }
+  .topbar > div:last-child > button svg { margin: 0 !important; }
+  .hamburger, .theme-toggle-btn { width: 30px; height: 30px; }
+  .topbar-spacer { display: none; }
+
+  /* Row 3: search — its own full-width row, now underneath the buttons */
+  #global-search-wrap {
+    order: 3;
+    flex: 1 1 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  #global-search-input { font-size: 16px !important; padding: 8px 12px 8px 32px !important; }
+
+  /* ── Sidebar drawer: wider tap targets, natural mobile width ── */
+  .sidebar { width: min(84vw, 300px) !important; }
+  .sidebar-item { padding: 11px 16px; font-size: 13.5px; }
+  .sidebar-section-label { padding: 16px 16px 6px; }
+
+  /* ── Vessel/barge card header: name + Edit/Hide/Remove buttons were
+     overflowing a single flex row and getting clipped (e.g. "Remove"
+     truncating to "Remov"). Let the row wrap and shrink the name field. ── */
+  .vcard-hdr, .bcard-hdr { flex-wrap: wrap; row-gap: 8px; }
+  .vcard-hdr > div, .bcard-hdr > div { flex-wrap: wrap; row-gap: 6px; }
+  .vcard-hdr input[type="text"], .bcard-hdr input[type="text"] { width: 100px !important; min-width: 0; flex: 1 1 100px; }
+  .vcard-hdr .send-email-btn, .vcard-hdr .cancel-email-btn, .vcard-hdr .rm-btn,
+  .bcard-hdr .btn, .bcard-hdr .rm-btn { white-space: nowrap; }
+
+  /* ── VLSFO/LSMGO ROB summary cards: two cards side-by-side each holding
+     a 5-part row (Opening − Supplied = Current ROB) had no room on a
+     phone, so the last column ("Current ROB") got squeezed and clipped
+     to a single stray letter. Stack the cards and drop the operator
+     glyphs so all three numbers always fit. ── */
+  .rob-fuel-grid { grid-template-columns: 1fr !important; }
+  .rob-triplet { flex-wrap: nowrap !important; gap: 4px; }
+  .rob-triplet > div:nth-child(2), .rob-triplet > div:nth-child(4) { display: none; }
+  .rob-triplet > div:nth-child(1), .rob-triplet > div:nth-child(3), .rob-triplet > div:nth-child(5) { flex: 1 1 0; min-width: 0; }
+  .rob-triplet > div:nth-child(5) > div:nth-child(2) { font-size: 20px !important; }
+
+  /* ── Section header (label + action button, e.g. "Voyage Schedule" +
+     "Download as Image") stacks and the button goes full-width so it's
+     never left floating with dead space beside it. ── */
+  .sec-hdr { flex-direction: column; align-items: stretch; }
+  .sec-hdr > button { width: 100%; justify-content: center; }
+
+  /* ── Page padding tuned for small screens ── */
+  .page { padding: 14px 12px; }
+  .page-title { font-size: 16px; }
+  .page-header-row { gap: 10px; }
+  .page-actions { width: 100%; }
+
+  /* ── Tables: keep data intact, scroll horizontally with momentum ── */
+  .voy-wrap, .tbl-wrap { -webkit-overflow-scrolling: touch; }
+
+  /* ── Charts never escape their card ──
+     Chart.js writes an intrinsic width onto the <canvas>; a grid/flex track
+     with the default min-width:auto would grow to that width and blow the
+     card out sideways (the "pie chart way out from the card" bug). Clamp the
+     canvas and let the wrap clip so donuts/bars always fit. */
+  .chart-card, .chart-wrap, .chart-wrap-lg { min-width: 0; }
+  .chart-wrap, .chart-wrap-lg { overflow: hidden; }
+  .chart-card canvas { max-width: 100% !important; }
+  .dash-row-2col > :first-child,
+  .dash-row-2col > :last-child { flex-basis: 100%; }
+
+  /* ── Weekly calendar: 7 readable day columns that scroll horizontally
+     instead of crushing/overflowing the card (the "nomination way out"
+     bug). The outer wrapper keeps its rounded clip on the Y axis while
+     the day row scrolls on X. ── */
+  #week-calendar > div { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  #week-calendar > div > div:first-child { min-width: 620px; }
+  #week-calendar > div > div:last-child { min-width: 620px; } /* footer tracks the same width */
+
+  /* ── Modals: comfortable padding + 16px inputs (no iOS zoom-jump) ── */
+  [id$="-modal"] > div { padding: 1.25rem 1.15rem !important; border-radius: 16px; }
+  [id$="-modal"] input,
+  [id$="-modal"] textarea,
+  [id$="-modal"] select { font-size: 16px !important; }
+
+  /* ── Floating AI panel never exceeds the viewport ── */
+  #ab-float-panel { max-width: calc(100vw - 24px) !important; }
+}
+
+/* Two-up cards / stacked forms on phones */
+@media (max-width: 560px) {
+  .g2, .g3, .g4, .g5 { grid-template-columns: 1fr 1fr; }
+  .kpi-grid-2, .kpi-grid-3, .kpi-grid-4, .kpi-grid-5 { grid-template-columns: 1fr 1fr; }
+  .nsc-grid, .ap-grid { grid-template-columns: 1fr; }
+  .charts-2col, .charts-3col { grid-template-columns: 1fr; }
+  .tlm { grid-template-columns: 1fr 1fr 1fr; }
+}
+
+/* Narrowest phones (≤430px): single-column where 2-up would crowd */
+@media (max-width: 430px) {
+  .g2, .kpi-grid-2 { grid-template-columns: 1fr; }
+  .tlm { grid-template-columns: 1fr 1fr; }
+  .page { padding: 12px 10px; }
+  .btn { min-height: 38px; }
+}

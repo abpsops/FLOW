@@ -1,0 +1,45 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: DELIVERY LOG
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-deliverylog" data-section="system">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Delivery Log</div>
+      <div class="page-subtitle">Timely / Delayed deliveries and dispute log — by month</div>
+    </div>
+    <div class="page-actions">
+      <select id="dl-month-select" onchange="renderDeliveryLog()" style="font-size:12px;padding:8px 12px;border:none;box-shadow:var(--sh-in-xs);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;background:var(--surface);color:var(--ink);font-weight:600"></select>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:14px 18px;border-left:3px solid var(--green)">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Timely Deliveries</div>
+      <div id="dl-count-timely" style="font-size:24px;font-weight:700;color:var(--green)">0</div>
+    </div>
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:14px 18px;border-left:3px solid var(--amber)">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Delayed Deliveries</div>
+      <div id="dl-count-delayed" style="font-size:24px;font-weight:700;color:var(--amber)">0</div>
+    </div>
+    <div style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-sm);padding:14px 18px;border-left:3px solid var(--red)">
+      <div style="font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Disputes Logged</div>
+      <div id="dl-count-disputes" style="font-size:24px;font-weight:700;color:var(--red)">0</div>
+    </div>
+  </div>
+
+  <div style="background:var(--surface);box-shadow:var(--sh-sm);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">✓ Timely Deliveries — arrived within nominated laycan</div>
+    <div id="dl-list-timely"><div style="font-size:12px;color:var(--muted);padding:8px 0">No timely deliveries logged for this month.</div></div>
+  </div>
+
+  <div style="background:var(--surface);box-shadow:var(--sh-sm);border-radius:var(--radius);padding:1.25rem 1.5rem;margin-bottom:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">⏱ Delayed Deliveries — arrived outside nominated laycan</div>
+    <div id="dl-list-delayed"><div style="font-size:12px;color:var(--muted);padding:8px 0">No delayed deliveries logged for this month.</div></div>
+  </div>
+
+  <div style="background:var(--surface);box-shadow:var(--sh-sm);border-radius:var(--radius);padding:1.25rem 1.5rem">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">⚠ Dispute Log — deliveries marked ⚠ Dispute on the Checklist</div>
+    <div id="dl-list-disputes"><div style="font-size:12px;color:var(--muted);padding:8px 0">No disputes logged for this month.</div></div>
+  </div>
+</div>
+

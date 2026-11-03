@@ -1,0 +1,31 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: SUPPLY TIMELINE
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-timeline" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Supply Timeline</div>
+      <div class="page-subtitle">Operational supply timeline — active vessels only</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary btn-sm" onclick="calculate();showPage('timeline')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+
+  <!-- Loading Schedule — terminal occupancy from the Loading tab, so
+       barge supply can be planned around it. Purely additive; the
+       per-barge Gantt view below is untouched. -->
+  <div id="timeline-loading-strip"></div>
+
+  <!-- Legend -->
+  <div class="legend">
+    <div class="leg-i"><div class="ldot" style="background:var(--azure)"></div>Within Laycan</div>
+    <div class="leg-i"><div class="ldot" style="background:var(--amber)"></div>Delayed (outside laycan)</div>
+    <div class="leg-i"><div class="ldot" style="background:var(--red)"></div>ROB Alert</div>
+  </div>
+  <div class="tl" id="tl"></div>
+</div>
+

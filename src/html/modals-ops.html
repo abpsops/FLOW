@@ -1,0 +1,283 @@
+<!-- Bunker Message Modal -->
+<div id="bunker-msg-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9700;align-items:center;justify-content:center" onclick="if(event.target===this)closeBunkerMsgModal()">
+  <div style="background:var(--surface);border-radius:16px;padding:1.75rem;width:min(680px,97vw);max-height:94vh;overflow-y:auto;box-shadow:0 20px 60px rgba(13,27,42,.28);position:relative">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem;padding-bottom:12px;border-bottom:2px solid var(--border)">
+      <div>
+        <div style="font-family:DM Sans,sans-serif;font-size:18px;font-weight:600;color:var(--ink)"> Vessel Messages</div>
+        <div id="bm-vessel-name" style="font-size:14px;font-weight:700;color:var(--azure);margin-top:3px"></div>
+      </div>
+      <button onclick="closeBunkerMsgModal()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--pg-deliverylog);flex-shrink:0">&times;</button>
+    </div>
+
+    <!-- Tab switcher -->
+    <div style="display:flex;gap:8px;margin-bottom:16px">
+      <button id="bm-tab-schedule" onclick="bmSwitchTab('schedule')" style="padding:7px 16px;background:var(--azure);color:#fff;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">📋 Bunker Schedule</button>
+      <button id="bm-tab-eta" onclick="bmSwitchTab('eta')" style="padding:7px 16px;background:var(--surface);color:var(--sub);border:none;box-shadow:var(--sh-sm);border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">✉ ETA Nomination Mail</button>
+    </div>
+
+    <!-- ── TAB: Bunker Schedule Message ── -->
+    <div id="bm-panel-schedule">
+    <!-- Quantity summary -->
+    <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+      <div style="background:var(--azure-lt);border:1.5px solid var(--azure-bd);border-radius:8px;padding:8px 16px;font-size:12px">
+        <span style="font-weight:700;color:var(--fuel-v)">VLSFO:</span> <span id="bm-vlsfo-qty" style="font-weight:700;font-family:DM Mono,monospace;color:var(--ink)"></span>
+      </div>
+      <div style="background:var(--teal-lt);border:1.5px solid var(--fuel-m-bd);border-radius:8px;padding:8px 16px;font-size:12px">
+        <span style="font-weight:700;color:var(--fuel-m)">MGO:</span> <span id="bm-mgo-qty" style="font-weight:700;font-family:DM Mono,monospace;color:var(--ink)"></span>
+      </div>
+    </div>
+
+    <!-- Controls row -->
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Message Configuration</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Fuel Type</label>
+        <select id="bm-fuel-type" onchange="_bunkerMsgUpdatePreview()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;background:var(--surface)">
+          <option value="both">Both — VLSFO + LSMGO</option>
+          <option value="vlsfo">VLSFO Only</option>
+          <option value="mgo">LSMGO Only</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Supply Sequence</label>
+        <select id="bm-seq-type" onchange="_bunkerMsgToggleSeq()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;background:var(--surface)">
+          <option value="arrival">On Arrival</option>
+          <option value="after">After [Vessel] (auto-filled)</option>
+          <option value="timed">Timed Window (custom)</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:700;letter-spacing:.07em;text-transform:uppercase">Barge Name</label>
+        <input type="text" id="bm-barge-input" placeholder="e.g. FNSA 10" oninput="_bunkerMsgUpdatePreview()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none">
+      </div>
+    </div>
+
+    <div id="bm-time-window-row" style="display:none;align-items:center;gap:12px;margin-bottom:14px;background:var(--amber-lt);border:1.5px solid var(--amber-bd);border-radius:10px;padding:12px 16px">
+      <span style="font-size:20px;flex-shrink:0">⏰</span>
+      <div style="flex:1">
+        <label style="font-size:10px;font-weight:700;color:var(--amber);letter-spacing:.07em;text-transform:uppercase;display:block;margin-bottom:5px">Time Window <span style="font-weight:400;color:var(--sub)">(editable — e.g. 0900-1100 HRS / 25 Apr'26)</span></label>
+        <input type="text" id="bm-time-window" placeholder="e.g. 0900-1100 HRS / 25 Apr'26" oninput="_bunkerMsgUpdatePreview()" style="font-size:13px;padding:9px 12px;border:2px solid var(--amber-bd);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);font-weight:600;color:var(--ink)">
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;padding-top:12px;border-top:1px solid var(--border2)">
+      Message Preview <span style="font-weight:400;font-size:10px;color:var(--muted);letter-spacing:0;text-transform:none">— ready to send, copy and paste directly</span>
+    </div>
+    <pre id="bm-preview" style="font-family:DM Mono,monospace;font-size:12.5px;line-height:1.75;background:var(--surface);border:none;box-shadow:var(--sh-in-xs);border-radius:10px;padding:16px;white-space:pre-wrap;word-break:break-word;color:var(--ink);margin-bottom:16px;max-height:360px;overflow-y:auto;user-select:all"></pre>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border2)">
+      <button onclick="closeBunkerMsgModal()" style="padding:10px 18px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--pg-deliverylog)">Close</button>
+      <button id="bm-copy-btn" onclick="copyBunkerMsg()" style="padding:10px 28px;background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;box-shadow:0 4px 14px rgba(26,111,212,.3)">📋 Copy Message</button>
+    </div>
+    </div><!-- end bm-panel-schedule -->
+
+    <!-- ── TAB: ETA Nomination Mail ── -->
+    <div id="bm-panel-eta" style="display:none">
+      <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px">Nomination Details</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">Supply Date From</label>
+          <input type="text" id="eta-date-from" placeholder="e.g. 19th Jun'26" style="width:100%;padding:9px 12px;border:none;box-shadow:var(--sh-in-xs);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">Supply Date To</label>
+          <input type="text" id="eta-date-to" placeholder="e.g. 20th Jun'26" style="width:100%;padding:9px 12px;border:none;box-shadow:var(--sh-in-xs);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--fuel-v);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">VLSFO Quantity (MT)</label>
+          <input type="text" id="eta-vlsfo-qty" autocomplete="off" placeholder="500 or 500-600" style="width:100%;padding:9px 12px;border:1.5px solid var(--azure-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+        </div>
+        <div>
+          <label style="font-size:10px;font-weight:700;color:var(--fuel-m);text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:4px">LSMGO Quantity (MT)</label>
+          <input type="text" id="eta-mgo-qty" autocomplete="off" placeholder="100 or 100-150" style="width:100%;padding:9px 12px;border:1.5px solid var(--fuel-m-bd);border-radius:8px;font-size:13px;font-family:DM Mono,monospace;outline:none;box-sizing:border-box" oninput="etaMailUpdatePreview()">
+        </div>
+      </div>
+
+      <!-- Subject line preview -->
+      <div style="margin-bottom:12px;padding:10px 14px;background:var(--azure-lt);border:1.5px solid var(--azure-bd);border-radius:8px">
+        <div style="font-size:9px;font-weight:700;color:var(--azure);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px">Subject Line</div>
+        <div id="eta-subject-preview" style="font-size:12px;font-weight:700;font-family:DM Mono,monospace;color:var(--ink)"></div>
+        <button onclick="copyEtaSubject()" style="margin-top:6px;padding:4px 12px;background:var(--azure);color:#fff;border:none;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">Copy Subject</button>
+      </div>
+
+      <!-- Email body preview -->
+      <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px">Email Body Preview</div>
+      <div id="eta-mail-preview" style="background:#fff;border:none;box-shadow:var(--sh-sm);border-radius:10px;padding:18px 20px;font-family:Arial,sans-serif;font-size:13px;line-height:1.8;color:#000;max-height:420px;overflow-y:auto;margin-bottom:14px;user-select:all"></div>
+
+      <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border2)">
+        <button onclick="closeBunkerMsgModal()" style="padding:10px 18px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;font-size:13px;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--pg-deliverylog)">Close</button>
+        <button onclick="copyEtaMailBody()" style="padding:10px 28px;background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">📋 Copy Email Body</button>
+      </div>
+    </div><!-- end bm-panel-eta -->
+  </div>
+</div>
+
+<!-- ROB Editor Modal -->
+<!-- ═══ TYPED CONFIRMATION — bulk-destructive actions (see _typedConfirm) ═══ -->
+<div id="danger-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="danger-confirm-title" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:10050;align-items:center;justify-content:center" onclick="if(event.target===this)_dangerConfirmClose(false)">
+  <div style="background:var(--surface);border-radius:16px;padding:1.5rem;width:min(460px,94vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(13,27,42,.25)">
+    <div style="display:flex;align-items:flex-start;gap:12px;margin-bottom:14px">
+      <div class="danger-confirm-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div style="min-width:0">
+        <div id="danger-confirm-title" style="font-size:17px;font-weight:700;color:var(--ink)"></div>
+        <div id="danger-confirm-intro" style="font-size:12.5px;color:var(--sub);margin-top:3px;line-height:1.45"></div>
+      </div>
+    </div>
+    <div id="danger-confirm-lists" style="font-size:12.5px;line-height:1.5;color:var(--text)"></div>
+    <label for="danger-confirm-input" id="danger-confirm-label" style="display:block;font-size:12px;font-weight:600;color:var(--sub);margin:14px 0 6px"></label>
+    <input type="text" id="danger-confirm-input" autocomplete="off" autocapitalize="characters" spellcheck="false" oninput="_dangerConfirmSync()" style="width:100%;font-size:15px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;letter-spacing:.08em;outline:none;background:var(--surface);color:var(--ink)">
+    <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+      <button type="button" class="btn btn-secondary" id="danger-confirm-cancel" onclick="_dangerConfirmClose(false)">Cancel</button>
+      <button type="button" class="btn danger-confirm-go" id="danger-confirm-go" disabled onclick="_dangerConfirmClose(true)"></button>
+    </div>
+  </div>
+</div>
+
+<div id="rob-editor-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9600;align-items:center;justify-content:center" onclick="if(event.target===this)closeROBEditor()">
+  <div style="background:var(--surface);border-radius:16px;padding:1.75rem;width:min(580px,96vw);max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(13,27,42,.25)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:12px;border-bottom:2px solid var(--border)">
+      <div>
+        <div style="font-family:DM Sans,sans-serif;font-size:18px;font-weight:600;color:var(--ink)"> Manual ROB Editor</div>
+        <div id="rob-edit-barge-name" style="font-size:13px;font-weight:700;color:var(--azure);margin-top:3px"></div>
+        <div style="font-size:11px;color:var(--pg-deliverylog);margin-top:2px">Every change is logged with timestamp and reason for full audit trail.</div>
+      </div>
+      <button onclick="closeROBEditor()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:8px;width:34px;height:34px;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--pg-deliverylog)">&times;</button>
+    </div>
+
+    <!-- Current vs New -->
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px">Current Live ROB</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+      <div style="background:var(--azure-lt);border:1.5px solid var(--azure-bd);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--fuel-v);letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px">VLSFO</div>
+        <div id="rob-edit-vlsfo-cur" style="font-size:20px;font-weight:700;color:var(--azure);font-family:DM Mono,monospace"></div>
+      </div>
+      <div style="background:var(--teal-lt);border:1.5px solid var(--fuel-m-bd);border-radius:10px;padding:12px;text-align:center">
+        <div style="font-size:10px;font-weight:700;color:var(--fuel-m);letter-spacing:.07em;text-transform:uppercase;margin-bottom:4px">LSMGO</div>
+        <div id="rob-edit-mgo-cur" style="font-size:20px;font-weight:700;color:var(--teal);font-family:DM Mono,monospace"></div>
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">New ROB Values (MT)</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">New VLSFO ROB </label>
+        <input type="number" id="rob-edit-vlsfo" min="0" step="1" style="font-size:15px;padding:10px 12px;border:2px solid var(--fuel-v);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-v-lt);font-weight:600">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">New MGO ROB </label>
+        <input type="number" id="rob-edit-mgo" min="0" step="1" style="font-size:15px;padding:10px 12px;border:2px solid var(--fuel-m);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--fuel-m-lt);font-weight:600">
+      </div>
+    </div>
+
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">Audit Details</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Edited By <span style="font-weight:400;color:var(--muted)">(name/initials)</span></label>
+        <input type="text" id="rob-edit-user" placeholder="e.g. OPS-01" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;width:100%">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <label style="font-size:10px;color:var(--pg-deliverylog);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Reason / Comment <span style="font-weight:400;color:var(--muted)">(optional)</span></label>
+        <input type="text" id="rob-edit-reason" placeholder="e.g. Survey correction, replenishment" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;width:100%">
+      </div>
+    </div>
+
+    <!-- Audit Log -->
+    <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px;padding-top:12px;border-top:1px solid var(--border2)">Recent Manual Edits</div>
+    <div id="rob-audit-list" style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:16px;max-height:160px;overflow-y:auto;font-size:12px;color:var(--pg-deliverylog)"></div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;padding-top:12px;border-top:1px solid var(--border2)">
+      <button onclick="closeROBEditor()" style="padding:10px 20px;background:var(--surface);border:1.5px solid var(--border);border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--pg-deliverylog)">Cancel</button>
+      <button onclick="saveROBEdit()" style="padding:10px 28px;background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif;box-shadow:0 4px 14px rgba(26,111,212,.3)"> Save ROB Override</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ RELOAD QUANTITY MODAL ═══ -->
+<!-- Loading completed: the quantity actually loaded (per BL) — deducted from the deal -->
+<div id="bl-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9650;align-items:center;justify-content:center" onclick="if(event.target===this)closeBlModal()">
+  <div role="dialog" aria-modal="true" aria-labelledby="bl-title" style="background:var(--surface);border-radius:16px;width:min(460px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+    <div style="background:linear-gradient(135deg,var(--ink-solid),var(--pg-loading));color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:15px;font-weight:700;font-family:DM Sans,sans-serif" id="bl-title">Mark loading Completed</div>
+        <div style="font-size:11px;opacity:.65;margin-top:2px" id="bl-sub"></div>
+      </div>
+      <button onclick="closeBlModal()" aria-label="Close" id="bl-close-btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
+    </div>
+    <div style="padding:20px">
+      <div class="field"><label for="bl-qty">Quantity loaded per BL (MT)</label><input type="number" id="bl-qty" min="0" step="1" inputmode="decimal" oninput="_blPreview()" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
+      <div id="bl-deal" style="font-size:11.5px;color:var(--sub);margin:8px 0 16px;line-height:1.5"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button class="btn btn-secondary" onclick="closeBlModal()">Cancel</button>
+        <button class="btn btn-primary" id="bl-confirm-btn" onclick="blConfirm()">Mark Completed</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="reload-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9650;align-items:center;justify-content:center" onclick="if(event.target===this)closeReloadModal()">
+  <div style="background:var(--surface);border-radius:16px;width:min(480px,96vw);box-shadow:0 24px 64px rgba(0,0,0,.28);overflow:hidden">
+    <div style="background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:15px;font-weight:700;font-family:DM Sans,sans-serif">Add Reloaded Quantity</div>
+        <div style="font-size:11px;opacity:.65;margin-top:2px" id="reload-barge-sub">Barge refuel — adds to current ROB</div>
+      </div>
+      <button onclick="closeReloadModal()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">&times;</button>
+    </div>
+    <div style="padding:20px">
+      <!-- Current ROB display -->
+      <div style="background:var(--azure-lt);border:1.5px solid var(--azure-bd);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--fuel-v);margin-bottom:3px">Current VLSFO ROB</div>
+          <div style="font-size:20px;font-weight:700;font-family:DM Mono,monospace;color:var(--ink)" id="reload-cur-v">—</div>
+          <div style="font-size:10px;color:var(--muted)">MT</div>
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--fuel-m);margin-bottom:3px">Current MGO ROB</div>
+          <div style="font-size:20px;font-weight:700;font-family:DM Mono,monospace;color:var(--ink)" id="reload-cur-m">—</div>
+          <div style="font-size:10px;color:var(--muted)">MT</div>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px">
+        <div class="field">
+          <label>VLSFO Reloaded (MT)</label>
+          <input type="number" id="reload-vlsfo" value="0" min="0" step="50" oninput="updateReloadPreview()" style="font-family:DM Mono,monospace">
+        </div>
+        <div class="field">
+          <label>MGO Reloaded (MT)</label>
+          <input type="number" id="reload-mgo" value="0" min="0" step="50" oninput="updateReloadPreview()" style="font-family:DM Mono,monospace">
+        </div>
+      </div>
+
+      <!-- New ROB preview -->
+      <div id="reload-preview" style="display:none;background:var(--green-lt);border:1.5px solid var(--green-bd);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:3px">New VLSFO ROB</div>
+          <div style="font-size:20px;font-weight:700;font-family:DM Mono,monospace;color:var(--green)" id="reload-new-v">—</div>
+          <div style="font-size:10px;color:var(--muted)">MT after reload</div>
+        </div>
+        <div>
+          <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--green);margin-bottom:3px">New MGO ROB</div>
+          <div style="font-size:20px;font-weight:700;font-family:DM Mono,monospace;color:var(--green)" id="reload-new-m">��</div>
+          <div style="font-size:10px;color:var(--muted)">MT after reload</div>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:16px">
+        <label>Reload Location / Note (optional)</label>
+        <input type="text" id="reload-note" placeholder="e.g. Refuelled at Fujairah port, 12 Jun 2025">
+      </div>
+
+      <div style="display:flex;gap:8px;justify-content:flex-end">
+        <button onclick="closeReloadModal()" style="padding:10px 18px;background:var(--surface);border:none;box-shadow:var(--sh-sm);border-radius:8px;font-size:13px;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--sub)">Cancel</button>
+        <button onclick="saveReloadQty()" style="padding:10px 28px;background:var(--green);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:middle;margin-right:5px"><polyline points="20 6 9 17 4 12"/></svg>
+          Confirm Reload
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+

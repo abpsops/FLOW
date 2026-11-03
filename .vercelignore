@@ -1,5 +1,8 @@
 # Test code and CI config are not part of the website — never deploy them.
 tests/
+# Source files of index.html and the tool that builds it (index.html is what ships).
+src/
+tools/
 .github/
 node_modules/
 **/node_modules/

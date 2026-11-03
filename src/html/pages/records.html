@@ -1,0 +1,22 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: SAVED RECORDS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-records" data-section="reports">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Saved Supply Records</div>
+      <div class="page-subtitle">All completed supply operations — historical log</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="removeDuplicateSavedRecords()" title="Find records that are the same vessel, day, and quantities and keep only the earliest copy">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        Remove Duplicates
+      </button>
+      <!-- Clear All Records moved to the sidebar Data Management (typed confirmation) -->
+    </div>
+  </div>
+  <div id="saved-records-panel" style="background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);padding:1.25rem 1.5rem;box-shadow:var(--sh-sm)">
+    <div id="saved-records-list"></div>
+  </div>
+</div>
+

@@ -1,0 +1,29 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: ARCHIVES
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-archives" data-section="system">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Archives</div>
+      <div class="page-subtitle">Monthly archives — survive Full Reset</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="openMonthlyReport()">Archive Month</button>
+    </div>
+  </div>
+  <div class="card">
+    <div id="archive-panel" style="margin-bottom:8px"></div>
+    <div style="font-size:12px;color:var(--sub)">Use <strong>Archive Month</strong> in Monthly Report. Archives survive Full Reset.</div>
+  </div>
+
+  <!-- Archived Fiscal Years — separate from the monthly archives above.
+       These are frozen Bunker Quantity chart snapshots, protected from
+       Full Reset, Clear All Data, AND Wipe Cloud (the monthly archives
+       above are explicitly wiped by Clear All Data; these are not). -->
+  <div class="card" style="margin-top:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px">Archived Fiscal Years — Bunker Quantity Chart</div>
+    <div id="fy-archive-list"><div style="font-size:12px;color:var(--muted);padding:8px 0">No fiscal years archived yet. Use <strong>Archive Year</strong> on the Bunker Quantity chart in Reports &amp; Analytics.</div></div>
+    <div style="font-size:12px;color:var(--sub);margin-top:8px">Protected from Full Reset, Clear All Data, and Wipe Cloud — archiving a year never changes what the live chart shows.</div>
+  </div>
+</div>
+

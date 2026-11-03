@@ -6,7 +6,15 @@ with relative paths) — do not nest them in a subfolder.
 
 ## Files
 - `index.html` — the app itself (points at the production Supabase
-  project `siqntfkpdstikrqffmep`)
+  project `siqntfkpdstikrqffmep`). **Built from `src/` — do not edit it
+  directly**: change the file in `src/` and run `node tools/build.js`
+  (see [`src/README.md`](src/README.md)). Both are committed; the tests
+  fail if they ever differ.
+- `src/` — the source of index.html, one file per part of the app
+  (pages, modals, styles, and the JavaScript by area: sync, ROB,
+  planner, loadings, deals…). Not deployed.
+- `tools/build.js` — joins `src/` into index.html (plain Node, no
+  dependencies). Not deployed.
 - `manifest.json` — PWA metadata (name, icons, theme color)
 - `service-worker.js` — caches the app shell (network-first) and the
   exact-version-pinned CDN libraries (cache-first) so the app can open

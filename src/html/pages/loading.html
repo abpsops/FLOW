@@ -1,0 +1,111 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: LOADING OPERATIONS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-loading" data-section="planning">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Loading Operations</div>
+      <div class="page-subtitle">Terminal loading schedule — quantity, grade, and estimated duration</div>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="kpi-grid kpi-grid-5" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Scheduled Loadings</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-total">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">Upcoming (7 days)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-upcoming">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">Total VLSFO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-vlsfo">0</span>
+    </div>
+    <div class="kpi-card kpi-teal" style="padding:13px 16px">
+      <span class="kpi-label">Total LSMGO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-lsmgo">0</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">Avg Duration (hrs)</span>
+      <span class="kpi-value" style="font-size:20px" id="ld-kpi-avgdur">0</span>
+    </div>
+  </div>
+
+  <!-- Loading rate configuration — drives the duration estimate below -->
+  <div class="card" style="border-top:2px solid var(--teal);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Loading Rate Configuration</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Set the terminal's loading rate per grade. Estimated duration on every loading below is calculated from these rates — change them any time and the estimates update.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px">
+      <div class="field"><label for="ld-rate-vlsfo">VLSFO Rate (MT/hour)</label><input type="number" id="ld-rate-vlsfo" min="1" step="10" value="300" onchange="updateLoadingConfig()"></div>
+      <div class="field"><label for="ld-rate-lsmgo">LSMGO Rate (MT/hour)</label><input type="number" id="ld-rate-lsmgo" min="1" step="10" value="150" onchange="updateLoadingConfig()"></div>
+    </div>
+  </div>
+
+  <!-- Add loading form -->
+  <div class="card" id="loading-form-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Schedule a Loading</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
+      <div class="field"><label for="ld-barge">Barge</label>
+        <select id="ld-barge"></select>
+      </div>
+      <div class="field"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
+      <div class="field"><label for="ld-grade">Grade</label>
+        <select id="ld-grade" onchange="_recalcLoadingEstimate();_ldRefreshDealSelect(undefined, 'grade')">
+          <option value="VLSFO">VLSFO</option>
+          <option value="LSMGO">LSMGO</option>
+        </select>
+      </div>
+      <div class="field"><label for="ld-qty">Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate();_ldRefreshDealSelect()"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
+      <div class="field"><label for="ld-start-date">Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label for="ld-start-time">Start Time (24h)</label><input type="text" id="ld-start-time" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_validateTime24Input(this)"></div>
+      <div class="field"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
+    </div>
+    <!-- Start given only as a part of the day (AM / PM …): start = frame start, completion = frame end + duration (worst case). -->
+    <div class="field tf-row ld-tf-row" style="margin:-4px 0 12px">
+      <label class="tf-chk" title="The terminal gives only a part of the day for the start"><input type="checkbox" id="ld-start-win-chk" onchange="_ldToggleStartWin()">Time frame only (AM / PM…)</label>
+      <select class="tf-sel" id="ld-start-win" aria-label="Loading start time frame" onchange="_ldStartWinChanged()" hidden></select>
+      <span class="hint inf" id="ld-start-win-hint"></span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
+      <div class="field"><label for="ld-pump-duration-display">Pumping Duration</label><input type="text" id="ld-pump-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)" title="Quantity ÷ configured rate — actual product transfer time only"></div>
+      <div class="field"><label for="ld-duration-display">Total Operation Duration</label><input type="text" id="ld-duration-display" readonly value="—" style="background:var(--surface2);color:var(--sub)" title="Pre-Ops + Pumping + Post-Ops"></div>
+      <div class="field"><label for="ld-completion-display">Estimated Completion</label><input type="text" id="ld-completion-display" readonly value="—" style="background:var(--surface2);color:var(--sub)"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="field"><label for="ld-end-date-override">End Date <span style="font-weight:400;color:var(--muted)">— override if it won't match the estimate</span></label><input type="date" id="ld-end-date-override"></div>
+      <div class="field"><label for="ld-surveyor">Surveyor</label><input type="text" id="ld-surveyor" placeholder="e.g. SGS, Intertek, independent surveyor"></div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
+      <div class="field"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
+        <select id="ld-deal" onchange="this.dataset.manual=this.value?'1':'none'"><option value="">No deal</option></select>
+      </div>
+      <div class="field"><label for="ld-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
+    </div>
+
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="loading-submit-btn" onclick="submitLoadingForm()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        <span id="loading-submit-btn-label">Add Loading</span>
+      </button>
+      <button class="btn btn-secondary" id="loading-cancel-edit-btn" onclick="cancelLoadingEdit()" style="display:none">Cancel Edit</button>
+    </div>
+  </div>
+  <datalist id="ld-terminal-list"></datalist>
+
+  <!-- Loading records list -->
+  <div class="sec-hdr">
+    <span class="sec-label">Scheduled &amp; Recent Loadings</span>
+  </div>
+  <div id="loading-list"></div>
+</div>
+

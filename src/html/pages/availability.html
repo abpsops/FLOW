@@ -1,0 +1,86 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: AVAILABILITY CHECK
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-availability" data-section="planning">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Availability Check</div>
+      <div class="page-subtitle">Next Supply Availability — multi-barge checker with split recommendation</div>
+    </div>
+  </div>
+
+  <!-- NSC Unified Panel -->
+  <div class="card" id="nsc-unified-panel" style="border-top:2px solid var(--azure)">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Vessel Arrival Availability Check</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the vessel's expected arrival date/time and required quantities. The system will check all barges and recommend the best option — or suggest a split if needed.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
+      <div class="field">
+        <label for="nsc-vessel-name">Vessel Name</label>
+        <input type="text" id="nsc-vessel-name" placeholder="e.g. MV PACIFIC GLORY" style="text-transform:uppercase" oninput="clearTimeout(window._nscTrEl);window._nscTrEl=setTimeout(function(){renderVesselTrackRecordBanner('nsc-vessel-name','nsc-vessel-track-record')},400)">
+        <div id="nsc-vessel-track-record"></div>
+      </div>
+      <div class="field">
+        <label style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+          <span>Vessel Arrival (ETA)</span>
+          <span style="display:inline-flex;gap:2px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:2px">
+            <button type="button" id="nsc-mode-single" class="nsc-mode-btn active" onclick="setNscDateMode('single')" style="border:none;background:var(--azure);color:#fff;font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif">Single Date</button>
+            <button type="button" id="nsc-mode-range" class="nsc-mode-btn" onclick="setNscDateMode('range')" style="border:none;background:transparent;color:var(--sub);font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:4px;cursor:pointer;font-family:'DM Sans',sans-serif">Date Range</button>
+          </span>
+        </label>
+        <div class="input-cal">
+          <input type="text" id="nsc-vessel-eta" placeholder="Select arrival date &amp; time…" autocomplete="off" readonly style="cursor:pointer" onclick="openNscEtaPicker()">
+          <button type="button" class="cal-btn" onclick="openNscEtaPicker()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          </button>
+        </div>
+        <div id="nsc-range-hint" style="display:none;font-size:10.5px;color:var(--muted);margin-top:3px">Click the start date, then the end date to set your window.</div>
+      </div>
+      <div class="field"><label for="nsc-location">Location</label>
+        <select id="nsc-location">
+          <option value="">— Any Location —</option>
+          <option value="KFK">KFK Anchorage / Berth</option>
+          <option value="FUJ">FUJ Anchorage / Berth</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:12px;align-items:end">
+      <div class="field"><label for="nsc-req-v">VLSFO Required (MT)</label><input type="number" id="nsc-req-v" value="500" min="0" step="50"></div>
+      <div class="field"><label for="nsc-req-m">LSMGO Required (MT)</label><input type="number" id="nsc-req-m" value="0" min="0" step="50"></div>
+      <button class="btn btn-primary" onclick="checkNSCUnified()" style="padding:9px 24px;font-size:13px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        Check Availability
+      </button>
+    </div>
+    <div id="nsc-unified-result" class="nsc-result"></div>
+  </div>
+
+  <!-- Saved checks -->
+  <div id="nsc-checks-header" style="display:none;margin-top:1.25rem;margin-bottom:.75rem">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span class="sec-label" style="margin:0">Saved Availability Checks</span>
+      <button onclick="clearAllNSCChecks()" class="btn btn-danger btn-sm">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        Clear All
+      </button>
+    </div>
+  </div>
+  <div id="nsc-checks-list"></div>
+
+  <div class="sec-hdr" style="margin-top:1rem;margin-bottom:.5rem">
+    <span class="sec-label">Per-Barge ROB Detail</span>
+    <button onclick="togglePerBargeDetail()" id="per-barge-toggle-btn" class="btn btn-ghost btn-sm">Show Details</button>
+  </div>
+  <div id="nsc-per-barge" style="display:none"></div>
+
+  <!-- Reminders -->
+  <!-- Hidden reminder-panel — source element used by Alerts page via mirror -->
+  <div id="reminder-panel" style="display:none"></div>
+  <div style="margin-top:1rem;padding:14px 18px;background:var(--amber-lt);border:1px solid var(--amber-bd);border-radius:var(--radius);display:flex;align-items:center;gap:12px;font-size:12.5px;color:var(--amber)">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+    <div>
+      <strong>Schedule Reminders</strong> have moved to the <strong>Alerts &amp; Notices</strong> page for a unified view.
+      <button class="btn btn-secondary btn-sm" onclick="showPage('alerts')" style="margin-left:10px">Go to Alerts</button>
+    </div>
+  </div>
+</div>
+
