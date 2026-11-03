@@ -1,0 +1,66 @@
+<!-- ═════════��════════════════════════════════════════
+     PAGE: ALERTS & NOTICES
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-alerts" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Alerts &amp; Notices</div>
+      <div class="page-subtitle">PAQ status · Barge ROB alerts · Replenishment · Schedule reminders — all in one place</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="refreshAlertsPage()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
+        Refresh All
+      </button>
+    </div>
+  </div>
+
+  <!-- Section 1: PAQ Status -->
+  <div class="sec-hdr"><span class="sec-label">Pre-Arrival Questionnaire (PAQ) Status</span></div>
+  <div id="alerts-paq-panel" style="margin-bottom:1.25rem">
+    <div style="font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center">Generate schedule to see PAQ status.</div>
+  </div>
+
+  <!-- Section 2: Barge Replenishment Alerts -->
+  <div class="sec-hdr"><span class="sec-label">Barge Replenishment Alerts</span></div>
+  <div class="ap-grid" style="margin-bottom:1.25rem">
+    <div id="alerts-ap-v" class="apanel clear"><div class="apt"><div class="apdot"></div>VLSFO Refuel</div><div class="arow">Generate schedule to see alerts.</div></div>
+    <div id="alerts-ap-m" class="apanel clear"><div class="apt"><div class="apdot"></div>LSMGO Refuel</div><div class="arow">Generate schedule to see alerts.</div></div>
+  </div>
+
+  <!-- Section 3: Live ROB — Actual Operational Stock -->
+  <div class="sec-hdr">
+    <span class="sec-label">Live ROB — Actual Operational Stock</span>
+    <div style="display:flex;gap:6px">
+      <button onclick="renderLiveROBDashboard()" class="btn btn-ghost btn-sm">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
+        Refresh
+      </button>
+    </div>
+  </div>
+  <div id="live-rob-dashboard" style="margin-bottom:1.25rem">
+    <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px;background:var(--surface);border-radius:var(--radius);box-shadow:var(--sh-in-xs)">Live ROB will appear here after generating the schedule or adding a barge.</div>
+  </div>
+
+  <!-- Section 4: Schedule Reminders -->
+  <div class="sec-hdr"><span class="sec-label">Barge Schedule Reminders</span></div>
+  <div class="card" style="border-left:3px solid var(--amber)">
+    <div style="font-size:13px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Send Barge Schedule to Incoming Vessels</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Vessels arriving within 24–30 hours need the barge schedule sent to them.</div>
+    <div id="alerts-reminder-panel">
+      <div style="font-size:13px;color:var(--muted);text-align:center;padding:16px">Generate the schedule first to see reminders.</div>
+    </div>
+    <div style="margin-top:12px;border-top:1px solid var(--border2);padding-top:12px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--sub);cursor:pointer">
+        <input type="checkbox" id="alerts-reminder-auto" checked style="width:14px;height:14px;accent-color:var(--azure);cursor:pointer">
+        Auto-refresh reminders every 5 minutes
+      </label>
+      <button class="btn btn-ghost btn-sm" onclick="renderScheduleReminders();renderAlertsReminders()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.47"/></svg>
+        Refresh Now
+      </button>
+      <span id="reminder-last-check" style="font-size:11px;color:var(--muted);margin-left:auto"></span>
+    </div>
+  </div>
+</div>
+

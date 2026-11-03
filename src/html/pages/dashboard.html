@@ -1,0 +1,229 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: DASHBOARD
+═══════════════════════════════════════════════��══ -->
+<div class="page active" id="page-dashboard" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Operations Dashboard</div>
+      <div class="page-subtitle" id="dash-date-sub">Bunker Planning Overview</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="showPage('reports')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        Analytics
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="showPage('nominations')">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Nomination
+      </button>
+    </div>
+  </div>
+
+  <!-- Harbour Light hero banner — shown only under html[data-skin="harbour"]
+       (display:none otherwise, so Classic is unchanged). Text is filled by
+       _renderDashHero() via textContent from values refreshDashboard()
+       already computes. -->
+  <section id="dash-hero" class="dash-hero" aria-label="Today">
+    <svg class="dash-hero-waves" aria-hidden="true" viewBox="0 0 1200 220" preserveAspectRatio="none">
+      <path d="M0 120 C 200 80, 400 160, 600 120 S 1000 80, 1200 120 L1200 220 L0 220 Z" fill="#0F4C82"></path>
+      <path d="M0 160 C 220 125, 420 195, 640 160 S 1020 125, 1200 160 L1200 220 L0 220 Z" fill="#14599A"></path>
+      <g transform="translate(860,58)" fill="#FFFFFF" opacity="0.92"><path d="M0 52 L210 52 L190 78 L22 78 Z"></path><rect x="140" y="24" width="44" height="28" rx="3"></rect><rect x="152" y="8" width="10" height="16"></rect><rect x="30" y="38" width="96" height="14" rx="2"></rect></g>
+      <g transform="translate(640,96)" fill="#FFC9B9" opacity="0.9"><path d="M0 30 L120 30 L110 44 L10 44 Z"></path><rect x="84" y="16" width="22" height="14" rx="2"></rect></g>
+    </svg>
+    <div class="dash-hero-body">
+      <span class="dash-hero-date" id="dash-hero-date"></span>
+      <h1 class="dash-hero-title" id="dash-hero-title">Good morning.</h1>
+      <div class="dash-hero-actions">
+        <button type="button" class="dash-hero-btn primary" onclick="showPage('alerts')">Review delays</button>
+        <button type="button" class="dash-hero-btn" onclick="showPage('schedule')">Open schedule</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quick Actions — the common day-to-day tasks, one click from the landing page.
+       Each button is filled with the same accent its destination page's topbar
+       uses, so the color itself signals where the click will take you. -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="qa-btn" style="--qa-c:var(--pg-nominations)" onclick="showPage('nominations');setTimeout(function(){if(typeof addVessel==='function')addVessel();},60)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New Nomination
+    </button>
+    <button class="qa-btn" style="--qa-c:var(--pg-schedule)" onclick="calculate();showPage('schedule')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+      Generate Schedule
+    </button>
+    <button class="qa-btn" style="--qa-c:var(--pg-checklist)" onclick="showPage('checklist')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Supply Checklist
+    </button>
+    <button class="qa-btn" style="--qa-c:var(--pg-bargefleet)" onclick="showPage('bargefleet')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16l1.5 4h17L22 16"/><path d="M4 16V8l8-4 8 4v8"/></svg>
+      Barge Fleet
+    </button>
+    <button class="qa-btn" style="--qa-c:var(--pg-availability)" onclick="showPage('availability')">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Check Availability
+    </button>
+  </div>
+
+
+  <!-- Alert banners -->
+  <div id="dash-alerts"></div>
+
+  <!-- Action Queue — the actual work, actionable inline, not just a readout -->
+  <div id="dash-action-queue"></div>
+
+  <!-- Compact KPI strip — condensed context row, secondary to the queue above -->
+  <div class="kpi-strip">
+    <div class="kpi-chip kpi-chip-azure" role="button" tabindex="0" onclick="showPage('nominations')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-nominations">—</span><span class="kpi-chip-label">Nominations</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-teal" role="button" tabindex="0" onclick="showPage('bargefleet')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-barges">—</span><span class="kpi-chip-label">Active Barges</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-amber" role="button" tabindex="0" onclick="showPage('nominations')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-paq">—</span><span class="kpi-chip-label">PAQ Pending</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-fuelv" role="button" tabindex="0" onclick="showPage('schedule')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-vlsfo">—</span><span class="kpi-chip-label" id="kpi-vlsfo-sub">VLSFO</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-fuelm" role="button" tabindex="0" onclick="showPage('schedule')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-lsmgo">—</span><span class="kpi-chip-label">LSMGO</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-green" role="button" tabindex="0" onclick="showPage('schedule')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-deliveries">—</span><span class="kpi-chip-label">Deliveries</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-red" role="button" tabindex="0" onclick="showPage('schedule')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" id="kpi-delayed">—</span><span class="kpi-chip-label">Delayed</span></div>
+    </div>
+    <div class="kpi-chip kpi-chip-ink" role="button" tabindex="0" onclick="showPage('reports')">
+      <div class="kpi-chip-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></div>
+      <div class="kpi-chip-body"><span class="kpi-chip-value" style="font-size:13px;line-height:1.35" id="kpi-monthly">—</span><span class="kpi-chip-label" id="kpi-monthly-sub">VLSFO this month</span></div>
+    </div>
+  </div>
+
+  <!-- Fueling Status — live view of every scheduled vessel supply, bucketed
+       by whether it's still waiting to start, actively fueling right now,
+       or completed. Placed right after the KPI strip (the "at a glance"
+       zone) and before the detailed Weekly Calendar, since "is fueling
+       happening right now" is usually the first thing to check after
+       scanning alerts — derived entirely from _lastSched's own
+       bargeStart/etc times, no new data needed. -->
+  <div class="chart-card" style="margin-bottom:14px">
+    <div class="chart-title">Fueling Status</div>
+    <div class="chart-subtitle" style="margin-bottom:10px">Live view of vessel supply — waiting, in progress, completed</div>
+    <div id="dash-fueling-status" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px">
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px;grid-column:1/-1">Generate schedule to see fueling status.</div>
+    </div>
+  </div>
+
+  <!-- Dashboard 2-col: Weekly calendar + Barge fleet status -->
+  <div class="dash-row-2col" style="margin-bottom:14px">
+    <div class="chart-card" style="overflow:visible">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div class="chart-title" style="display:flex;align-items:center;gap:8px">Weekly Planned Supply
+            <span id="week-cal-wk" style="font-size:9px;font-weight:700;padding:2px 6px;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-family:'DM Mono',monospace;letter-spacing:.04em"></span>
+          </div>
+          <div class="chart-subtitle">7-day operations grid — vessels by ETA, quantity &amp; fuel grade</div>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span id="week-cal-label" style="font-size:11.5px;font-weight:700;color:var(--sub);font-family:'DM Mono',monospace;margin-right:4px"></span>
+          <button onclick="toggleFreeWindowsPanel()" class="week-nav-btn-today" id="free-windows-toggle-btn" title="Free/busy windows per barge, with estimated deliverable quantity per gap">Free Windows</button>
+          <button onclick="shiftWeekCal(-7)" class="week-nav-btn" title="Previous week">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+          </button>
+          <button onclick="shiftWeekCal(0)" class="week-nav-btn-today">Today</button>
+          <button onclick="shiftWeekCal(+7)" class="week-nav-btn" title="Next week">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="week-calendar" style="min-height:220px"></div>
+      <div id="free-windows-panel" style="display:none;margin-top:14px"></div>
+    </div>
+    <!-- Right column: Barge Fleet Status only as tall as its barges, Operational Activity
+         right under it taking the rest of the height beside the calendar. -->
+    <div class="dash-side-stack">
+      <div class="chart-card" style="flex:0 0 auto">
+        <div class="chart-title">Barge Fleet Status</div>
+        <div class="chart-subtitle" style="margin-bottom:10px">Live ROB &amp; availability</div>
+        <div id="dash-fleet-status">
+          <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">No barges configured.</div>
+        </div>
+      </div>
+      <div class="chart-card" style="display:flex;flex-direction:column;flex:1 1 auto">
+        <div class="chart-title" style="margin-bottom:10px">Operational Activity</div>
+        <!-- The feed fills whatever height is left under Barge Fleet Status (beside the taller
+             Weekly Planned Supply calendar) and scrolls inside it, instead of stopping at a
+             fixed height and leaving a blank gap. The absolute inner box keeps the feed's own
+             length from stretching the row; min-height covers the single-column (mobile) layout. -->
+        <div style="position:relative;flex:1;min-height:280px">
+          <div class="activity-feed" id="dash-activity-feed" style="position:absolute;inset:0;overflow-y:auto">
+            <div style="font-size:12px;color:var(--muted);text-align:center;padding:24px">Generate schedule to see activity.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fuel type distribution -->
+  <div class="chart-card">
+    <div class="chart-title">Fuel Type Distribution</div>
+      <div class="chart-subtitle">VLSFO vs LSMGO — this month's distributed vs planned (ROB-adjusted) quantities</div>
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;flex:1">
+        <div style="display:flex;flex-direction:column;min-width:0">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Distributed</div>
+          <div class="chart-wrap" style="flex:1"><canvas id="chart-fuel-dist-distributed"></canvas></div>
+        </div>
+        <div style="display:flex;flex-direction:column;min-width:0">
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Planned</div>
+          <div class="chart-wrap" style="flex:1"><canvas id="chart-fuel-dist-planned"></canvas></div>
+        </div>
+      </div>
+    </div>
+
+  <!-- Track Record Watchlist — the standing, passive version of Counterparty
+       Track Record Intelligence. The per-nomination banner only shows when
+       you're actively typing/viewing a specific vessel's name, which
+       means a vessel with a genuinely bad pattern stays invisible unless
+       you happen to go looking for it. This surfaces every vessel that's
+       actually built up enough history (2+ completed deliveries since
+       TRACK_RECORD_START_MONTH) right on the Dashboard, without needing anyone to type
+       anything — reuses the exact same computeVesselTrackRecord() logic,
+       just run across every vessel in the Delivery Log instead of one. -->
+  <div class="chart-card" style="margin-top:16px">
+    <div class="chart-title">Track Record Watchlist</div>
+    <div class="chart-subtitle" id="dash-track-record-subtitle" style="margin-bottom:10px">Vessels with 2+ completed deliveries — laycan compliance &amp; disputes</div>
+    <div id="dash-track-record-watchlist">
+      <div style="font-size:12px;color:var(--muted);text-align:center;padding:20px">No vessels have enough history yet — builds up automatically as vessels get repeat deliveries.</div>
+    </div>
+  </div>
+
+  <!-- Stock forecast & reload plan — traders only (operators have it on
+       Barge Fleet, which traders can't open). renderDashReloadPlanner(). -->
+  <div class="chart-card" id="dash-reload-planner" style="display:none;margin-top:16px">
+    <div class="chart-title">Stock forecast &amp; reload plan</div>
+    <div class="chart-subtitle" style="margin-bottom:10px">Projected barge stock against committed jobs</div>
+    <div id="dash-reload-planner-body"></div>
+  </div>
+
+  <!-- Monthly Quantity — current fiscal (= calendar) year. FY26 has Jan–Jul
+       seeded from historical records; everything else is computed live from
+       the same data the Monthly Report uses. Title/subtitle filled by
+       renderMonthlyQuantityChart(). -->
+  <div class="chart-card" style="margin-top:16px">
+    <div class="chart-title" id="dash-monthly-qty-title">Bunker Quantity</div>
+    <div class="chart-subtitle" id="dash-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="dash-monthly-qty-summary"></div>
+    <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-dashboard"></canvas></div>
+  </div>
+</div>
+

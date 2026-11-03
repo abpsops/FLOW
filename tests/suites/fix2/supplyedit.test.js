@@ -88,8 +88,9 @@ function seed(o) {
 }
 // A saved supply record as saveChecklistRecord builds it.
 function rec(o) {
-  return Object.assign({ id: o.id, checklistUid: o.uid || o.id, nomUid: null, savedAt: o.savedAt || '2026-10-01T00:00:00.000Z', vessel: o.vessel || 'ALPHA', area: 'FUJ A', areaCode: 'FUJ-A',
-    dateStr: '01 Oct 2026 10:00', supplyDate: '2026-10-01T06:00:00.000Z', vlsfoNom: o.v, mgoNom: 0, vlsfoAct: o.v, mgoAct: o.m || 0, bdnV: '', bdnM: '', barge: o.barge || 'Barge 1', notes: '', supplied: true });
+  return Object.assign({ id: o.id, checklistUid: o.uid || o.id, nomUid: null, savedAt: o.savedAt || U.thisMonthIso(300), vessel: o.vessel || 'ALPHA', area: 'FUJ A', areaCode: 'FUJ-A',
+    dateStr: '01 Oct 2026 10:00', supplyDate: U.thisMonthIso(360), // this month: a past month's supplies are archived on load
+    vlsfoNom: o.v, mgoNom: 0, vlsfoAct: o.v, mgoAct: o.m || 0, bdnV: '', bdnM: '', barge: o.barge || 'Barge 1', notes: '', supplied: true });
 }
 
 (async () => {
@@ -207,7 +208,7 @@ function rec(o) {
     const s = seed();
     s.state.barges[0].vrob = 2000;             // the same delivery saved twice, both baked
     s.state.bakedSupplyIds = { 1: ['u1_1', 'u1_2'] };
-    s.records = [rec({ id: 'u1_1', uid: 'u1', v: 1000, savedAt: '2026-10-01T00:00:00.000Z' }), rec({ id: 'u1_2', uid: 'u1', v: 1000, savedAt: '2026-10-01T01:00:00.000Z' })];
+    s.records = [rec({ id: 'u1_1', uid: 'u1', v: 1000, savedAt: U.thisMonthIso(320) }), rec({ id: 'u1_2', uid: 'u1', v: 1000, savedAt: U.thisMonthIso(310) })];
     const db = H.createDb({ workspace: s, realtime: false });
     const A = await openT(db, 'user-operator');
     check('S5 precondition: the delivery deducted twice, ROB 2000', same(await live(A.page), [2000, 800]), await live(A.page));
@@ -380,7 +381,7 @@ function rec(o) {
     const A = await openT(db, 'user-operator');
     await editRecord(A.page, 'r1', { 'er-vlsfo-act': '900' });
     check('S13 precondition: corrected to 900 → 3100', same(await live(A.page), [3100, 800]), await live(A.page));
-    await A.page.evaluate(async () => { archiveMonth(9, 2026); await _waitForSaveIdle(); });
+    await A.page.evaluate(async () => { const d = new Date(); archiveMonth(d.getMonth(), d.getFullYear()); await _waitForSaveIdle(); }); // the record's month (this month)
     const r = { n: U.row(db).payload.records.length, A: await live(A.page) };
     check('S13 the month archived (record out of Saved Records): ROB stays 3100 (here and on a fresh device)', r.n === 0 && same(r.A, [3100, 800]) && same(await fresh(openT, db), [3100, 800]), r);
   });

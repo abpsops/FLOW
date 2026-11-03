@@ -1,0 +1,65 @@
+<!-- ═══════════════════════════════════════════════════════════
+     CALLING INSTRUCTIONS MODAL + ENGINE
+════════════════════════════════════════════════════════════ -->
+<div id="ci-modal" style="display:none;position:fixed;inset:0;background:var(--overlay);backdrop-filter:blur(4px);z-index:9500;align-items:flex-start;justify-content:center;padding:24px;overflow-y:auto">
+  <div style="background:var(--surface);border-radius:18px;width:min(700px,100%);box-shadow:0 24px 80px rgba(0,0,0,.28);overflow:hidden;margin:auto">
+
+    <!-- Modal header -->
+    <div style="background:linear-gradient(135deg,var(--ink-solid),#1A3A5C);color:#fff;padding:16px 20px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:20px"></span>
+        <div>
+          <div style="font-size:15px;font-weight:700;font-family:DM Sans,sans-serif" id="ci-modal-title">Calling Instructions</div>
+          <div style="font-size:11px;opacity:.7;margin-top:2px">Template-locked — variable replacement only</div>
+        </div>
+      </div>
+      <button onclick="ciCloseModal()" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center"></button>
+    </div>
+
+    <!-- Modal body -->
+    <div style="padding:20px">
+
+      <!-- Template status banner -->
+      <div id="ci-modal-tpl-warn" style="background:var(--amber-lt);border:1.5px solid #F59E0B;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--amber);font-weight:600">
+         No template loaded for this location. Upload the relevant template above the vessel nominations.
+      </div>
+
+      <!-- Vessel data preview (auto-filled, read-only) -->
+      <div style="background:var(--azure-lt);border:1.5px solid var(--azure-bd);border-radius:10px;padding:14px 16px;margin-bottom:16px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--azure);margin-bottom:10px">Vessel Data — Auto-Mapped from Nomination</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px">
+          <div><div style="font-size:9px;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Vessel</div><div id="ci-prev-vessel" style="font-size:13px;font-weight:700;color:var(--ink);font-family:DM Mono,monospace"></div></div>
+          <div><div style="font-size:9px;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Location</div><div id="ci-prev-location" style="font-size:13px;font-weight:700;color:var(--ink)"></div></div>
+          <div><div style="font-size:9px;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Laycan</div><div id="ci-prev-laycan" style="font-size:13px;font-weight:700;color:var(--ink);font-family:DM Mono,monospace"></div></div>
+          <div><div style="font-size:9px;color:var(--fuel-v);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">VLSFO Qty</div><div id="ci-prev-vlsfo" style="font-size:13px;font-weight:700;color:var(--fuel-v);font-family:DM Mono,monospace"></div></div>
+          <div><div style="font-size:9px;color:var(--fuel-m);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">LSMGO Qty</div><div id="ci-prev-lsmgo" style="font-size:13px;font-weight:700;color:var(--fuel-m);font-family:DM Mono,monospace"></div></div>
+          <div><div style="font-size:9px;color:var(--sub);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Fuel Type</div><div id="ci-prev-fueltype" style="font-size:13px;font-weight:700;color:var(--ink)"></div></div>
+        </div>
+      </div>
+
+      <!-- Generate button -->
+      <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+        <button onclick="ciOpenPreview()" id="ci-gen-btn" style="padding:11px 24px;background:linear-gradient(135deg,var(--ink-solid),var(--fuel-v));color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">
+           Generate Document
+        </button>
+        <button onclick="ciDownloadPDF()" id="ci-pdf-btn" style="display:none;padding:11px 20px;background:linear-gradient(135deg,var(--red),#E74C3C);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">
+          ⬇ Download .docx
+        </button>
+        <button onclick="ciCopyOutput()" id="ci-copy-btn2" style="display:none;padding:11px 16px;background:var(--surface);border:none;box-shadow:var(--sh-sm);border-radius:10px;font-size:12px;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--ink);font-weight:600">
+           Copy Text
+        </button>
+        <div id="ci-modal-error" style="display:none;font-size:12px;color:var(--red);font-weight:600;padding:8px 12px;background:var(--red-lt);border-radius:6px"></div>
+      </div>
+
+      <!-- Output preview -->
+      <div id="ci-output-wrap" style="display:none">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--sub);margin-bottom:8px">Generated Document — Preview</div>
+        <div style="border:none;border-radius:10px;overflow:hidden;box-shadow:var(--sh-sm)">
+          <div style="background:var(--surface2);border-bottom:1px solid var(--border2);padding:8px 14px;font-size:11px;color:var(--muted);font-family:DM Mono,monospace">Calling Instructions — <span id="ci-out-vessel-label"></span></div>
+          <pre id="ci-output-text" style="margin:0;padding:16px;font-family:DM Mono,monospace;font-size:12px;line-height:1.9;color:var(--ink);white-space:pre-wrap;max-height:420px;overflow-y:auto;background:#fff"></pre>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

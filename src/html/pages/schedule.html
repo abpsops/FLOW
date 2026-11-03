@@ -1,0 +1,81 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: SCHEDULE PLANNER
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-schedule" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Schedule Planner</div>
+      <div class="page-subtitle">Barge-vessel assignment · ROB impact · Conflict detection</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="printScheduleOnly()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="downloadExcel()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Excel
+      </button>
+    </div>
+  </div>
+
+  <!-- Schedule KPIs -->
+  <div class="kpi-grid kpi-grid-4" style="margin-bottom:1.25rem" id="sched-kpi">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Total Operations</span>
+      <span class="kpi-value" style="font-size:20px" id="sched-kpi-ops">—</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">At Risk / Delayed</span>
+      <span class="kpi-value" style="font-size:20px" id="sched-kpi-delayed">—</span>
+    </div>
+    <div class="kpi-card kpi-fuelv" style="padding:13px 16px">
+      <span class="kpi-label">VLSFO Scheduled</span>
+      <span class="kpi-value" style="font-size:20px" id="sched-kpi-vlsfo">—</span>
+    </div>
+    <div class="kpi-card kpi-fuelm" style="padding:13px 16px">
+      <span class="kpi-label">LSMGO Scheduled</span>
+      <span class="kpi-value" style="font-size:20px" id="sched-kpi-lsmgo">—</span>
+    </div>
+  </div>
+
+  <!-- Replenishment Alerts — hidden on Schedule Planner (already shown on Alerts & Notices page).
+       Elements kept in DOM (not deleted) because buildAP()/mirrorAlertPanel() still write into
+       #ap-v/#ap-m here and mirror that content over to #alerts-ap-v/#alerts-ap-m on the Alerts page. -->
+  <div class="sec-hdr" style="display:none"><span class="sec-label">Barge Replenishment Alerts</span></div>
+  <div class="ap-grid" style="display:none">
+    <div id="ap-v" class="apanel clear"><div class="apt"><div class="apdot"></div>VLSFO Refuel</div><div class="arow">No alerts.</div></div>
+    <div id="ap-m" class="apanel clear"><div class="apt"><div class="apdot"></div>MGO Refuel</div><div class="arow">No alerts.</div></div>
+  </div>
+
+  <!-- Barge ROB Summary -->
+  <div class="sec-hdr"><span class="sec-label">Barge ROB Summary — Live Sync</span><span style="font-size:11px;color:var(--muted)">Always mirrors Live ROB</span></div>
+  <div id="barge-rob-summary" style="margin-bottom:1.25rem">
+    <div style="font-size:12px;color:var(--muted);text-align:center;padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius)">Generate the schedule to see Barge ROB Summary.</div>
+  </div>
+
+  <!-- Per-barge Excel downloads — only shown when there's more than one
+       barge (populated by generateSchedule()/clearAll() etc.); each button
+       exports that specific barge's schedule via downloadExcelForBarge(). -->
+  <span id="per-barge-dl-btns" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1.25rem"></span>
+
+  <!-- Sum cards -->
+  <div class="sum-grid" id="sum-cards"></div>
+
+  <!-- Voyage barge tabs + table -->
+  <div class="sec-hdr">
+    <span class="sec-label">Voyage Schedule — Active Vessels Only</span>
+    <button onclick="downloadVoyageSchedulePNG()" id="voy-download-btn" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Download as Image
+    </button>
+    <button onclick="emailVoyageToBarge()" id="voy-email-btn" class="btn btn-ghost btn-sm" style="display:flex;align-items:center;gap:6px" title="The ticked rows of this barge's tab as the delivery schedule e-mail to its captain">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+      Email to Barge
+    </button>
+  </div>
+  <div id="voy-barge-tabs-card">
+    <div id="voy-barge-tabs"></div>
+  </div>
+</div>
+

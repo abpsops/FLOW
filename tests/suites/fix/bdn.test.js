@@ -13,10 +13,14 @@ function check(name, cond, info) {
   console.log((cond ? 'PASS ' : 'FAIL ') + name + (cond || info === undefined ? '' : '  -> ' + JSON.stringify(info).slice(0, 700)));
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// This month's dates (a past month's supplies are archived on load).
+const T1 = U.thisMonthIso(180), T2 = U.thisMonthIso(120), T1S = U.thisMonthIso(150);
+const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const dubai = iso => { const d = new Date(new Date(iso).getTime() + 4 * 3600000), p = n => String(n).padStart(2, '0'); return `${p(d.getUTCDate())} ${MO[d.getUTCMonth()]} ${d.getUTCFullYear()}  ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; };
 
-const REC = { id: 'cl1_1700000000000', checklistUid: 'cl1', nomUid: 'n1', savedAt: '2026-10-07T09:20:58.000Z', vessel: 'CMA CGM VITORIA', area: 'FUJ A', areaCode: 'FUJ-A', dateStr: '07 Oct 2026  05:57', supplyDate: '2026-10-07T01:57:00.000Z', vlsfoNom: 700, mgoNom: 0, vlsfoAct: 697.614, mgoAct: 0, bdnV: 'BDN-1001', bdnM: '', barge: 'FNSA 10', notes: 'None', supplied: true };
-const REC2 = { id: 'cl2_1700000000001', checklistUid: 'cl2', savedAt: '2026-10-09T13:56:14.000Z', vessel: 'MT DAISY', dateStr: '—', supplyDate: '2026-10-09T08:00:00.000Z', vlsfoNom: 0, mgoNom: 450, vlsfoAct: 0, mgoAct: 449.416, barge: 'FNSA 10', notes: 'None', supplied: true };
-const CL = { uid: 'cl1', nomUid: 'n1', vessel: 'CMA CGM VITORIA', state: 'completed', lockedAt: '2026-10-07T09:20:58.000Z', supplied: true, nomV: 700, nomM: null, actV: 697.614, actM: 0, bdnV: 'BDN-1001', bdnM: '' };
+const REC = { id: 'cl1_1700000000000', checklistUid: 'cl1', nomUid: 'n1', savedAt: T1S, vessel: 'CMA CGM VITORIA', area: 'FUJ A', areaCode: 'FUJ-A', dateStr: dubai(T1), supplyDate: T1, vlsfoNom: 700, mgoNom: 0, vlsfoAct: 697.614, mgoAct: 0, bdnV: 'BDN-1001', bdnM: '', barge: 'FNSA 10', notes: 'None', supplied: true };
+const REC2 = { id: 'cl2_1700000000001', checklistUid: 'cl2', savedAt: U.thisMonthIso(90), vessel: 'MT DAISY', dateStr: '—', supplyDate: T2, vlsfoNom: 0, mgoNom: 450, vlsfoAct: 0, mgoAct: 449.416, barge: 'FNSA 10', notes: 'None', supplied: true };
+const CL = { uid: 'cl1', nomUid: 'n1', vessel: 'CMA CGM VITORIA', state: 'completed', lockedAt: T1S, supplied: true, nomV: 700, nomM: null, actV: 697.614, actM: 0, bdnV: 'BDN-1001', bdnM: '' };
 
 (async () => {
   const browser = await H.launch();

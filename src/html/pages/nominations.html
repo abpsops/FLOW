@@ -1,0 +1,106 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: VESSEL NOMINATIONS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-nominations" data-section="operations">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Vessel Nominations</div>
+      <div class="page-subtitle">Central nomination register — intake, assignment, PAQ tracking</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="downloadExcel()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="addNewVesselNomination()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Add Nomination
+      </button>
+      <button class="btn btn-primary btn-sm" onclick="calculate();showPage('schedule')" style="background:var(--teal);border-color:var(--teal)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        Generate Schedule
+      </button>
+    </div>
+  </div>
+
+  <!-- KPI strip -->
+  <div class="kpi-grid kpi-grid-5" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Active Nominations</span>
+      <span class="kpi-value" style="font-size:20px" id="nom-kpi-total">0</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">Pending Assignment</span>
+      <span class="kpi-value" style="font-size:20px" id="nom-kpi-pending">0</span>
+    </div>
+    <div class="kpi-card kpi-red" style="padding:13px 16px">
+      <span class="kpi-label">PAQ Outstanding</span>
+      <span class="kpi-value" style="font-size:20px" id="nom-kpi-paq">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">Total VLSFO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="nom-kpi-vlsfo">0</span>
+    </div>
+    <div class="kpi-card kpi-teal" style="padding:13px 16px">
+      <span class="kpi-label">Total LSMGO (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="nom-kpi-lsmgo">0</span>
+    </div>
+  </div>
+
+  <!-- Import nomination: paste an email / WhatsApp text or a screenshot → review → add.
+       Operators and traders both use it (traders create nominations). -->
+  <details class="nimp" id="nimp">
+    <summary>
+      <span class="nimp-ico" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 12h6M9 16h4"/></svg></span>
+      <span>Import nomination</span>
+      <span class="nimp-sub">Paste an email, WhatsApp text or a screenshot</span>
+      <svg class="nimp-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+    </summary>
+    <div class="nimp-body">
+      <div class="nimp-zone" id="nimp-zone" tabindex="0" role="group" aria-label="Nomination paste and drop area. Paste or type text, or paste, drop or choose an image. Press Enter to choose an image.">
+        <label for="nimp-text" class="nimp-sub" style="display:block;margin-bottom:5px">Nomination text — or paste / drop a screenshot here</label>
+        <textarea id="nimp-text" spellcheck="false" placeholder="e.g.&#10;MV OCEAN PRIDE  IMO 9321483  MMSI 636012345&#10;ETA 14/10/2026 0600LT  Fujairah anch&#10;VLSFO 500-600 MT / LSMGO 50 MT&#10;Agent: GAC"></textarea>
+        <div class="nimp-img" id="nimp-img" hidden>
+          <img id="nimp-thumb" alt="Screenshot to read">
+          <span id="nimp-img-name"></span>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="niClearImage()">Remove image</button>
+        </div>
+        <div class="nimp-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="nimp-read" onclick="niRead()">Read</button>
+          <button type="button" class="btn btn-secondary btn-sm" onclick="document.getElementById('nimp-file').click()">Choose image…</button>
+          <input type="file" id="nimp-file" accept="image/*" hidden onchange="niPickFile(this)">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="niReset()">Clear</button>
+          <span class="nimp-status" id="nimp-status" role="status" aria-live="polite"></span>
+        </div>
+        <div class="nimp-note"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Read on this device — the text and images are never sent anywhere.</div>
+      </div>
+      <div class="nimp-res" id="nimp-results"></div>
+    </div>
+  </details>
+
+  <!-- Agent Directory autocomplete source — populated/refreshed by _refreshAgentDatalist().
+       Vessel nomination "Agent" fields reference this via list="agent-directory-list", giving
+       a type-to-search dropdown of known agents while still allowing free-text entry for
+       agents not yet in the directory. -->
+  <datalist id="agent-directory-list"></datalist>
+
+  <!-- Nominations table (vessels render here) -->
+  <div id="vc"></div>
+  <button class="btn-add" onclick="addNewVesselNomination()">
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="display:inline;vertical-align:middle;margin-right:4px"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    Add Vessel Nomination
+  </button>
+
+  <!-- PAQ Status Section (also mirrored on Alerts page) -->
+  <div class="sec-hdr" style="margin-top:1.5rem">
+    <span class="sec-label">Pre-Arrival Questionnaire Status</span>
+    <button class="btn btn-secondary btn-sm" onclick="showPage('alerts')">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      View All Alerts
+    </button>
+  </div>
+  <div id="paq-panel" style="margin-bottom:1.25rem">
+    <div style="font-size:12px;color:var(--muted);padding:16px;background:var(--surface);box-shadow:var(--sh-in-xs);border-radius:var(--radius);text-align:center">Generate schedule to see PAQ status.</div>
+  </div>
+</div>
+

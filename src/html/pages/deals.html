@@ -1,0 +1,61 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: LOADING DEALS — bulk purchases and what each loading lifted from them
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-deals" data-section="reports">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Loading Deals</div>
+      <div class="page-subtitle">Bulk purchases — each loading is deducted from its deal by the quantity on the BL; what is left to lift is shown per deal</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-primary btn-sm" id="deal-new-btn" onclick="dealToggleForm()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New Deal
+      </button>
+    </div>
+  </div>
+
+  <div class="kpi-grid kpi-grid-4" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-ink" style="padding:13px 16px">
+      <span class="kpi-label">Open Deals</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-open">0</span>
+    </div>
+    <div class="kpi-card kpi-azure" style="padding:13px 16px">
+      <span class="kpi-label">VLSFO left to lift (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-v">0</span>
+    </div>
+    <div class="kpi-card kpi-teal" style="padding:13px 16px">
+      <span class="kpi-label">LSMGO left to lift (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-m">0</span>
+    </div>
+    <div class="kpi-card kpi-amber" style="padding:13px 16px">
+      <span class="kpi-label">Committed to scheduled loadings (MT)</span>
+      <span class="kpi-value" style="font-size:20px" id="deal-kpi-committed">0</span>
+    </div>
+  </div>
+
+  <div class="card" id="deal-form-card" style="display:none;border-top:2px solid var(--azure);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif" id="deal-form-title">New Deal</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">The bulk quantity bought. Every loading scheduled against it is deducted — by the quantity on the BL once it is marked Completed.</div>
+    <div class="dl-g4">
+      <div class="field"><label for="dl-supplier">Supplier</label><input type="text" id="dl-supplier" placeholder="e.g. Vitol, ADNOC…"></div>
+      <div class="field"><label for="dl-terminal">Terminal <span style="font-weight:400;color:var(--muted)">— where it is lifted</span></label><input type="text" id="dl-terminal" placeholder="e.g. VOPAK TERMINAL" list="ld-terminal-list"></div>
+      <div class="field"><label for="dl-grade">Grade</label>
+        <select id="dl-grade"><option value="VLSFO">VLSFO</option><option value="LSMGO">LSMGO</option></select>
+      </div>
+      <div class="field"><label for="dl-qty">Quantity bought (MT)</label><input type="number" id="dl-qty" min="0" step="100" placeholder="e.g. 40000"></div>
+    </div>
+    <div class="dl-g3">
+      <div class="field"><label for="dl-date">Deal date</label><input type="date" id="dl-date"></div>
+      <div class="field"><label for="dl-ref">Reference <span style="font-weight:400;color:var(--muted)">— contract / deal no.</span></label><input type="text" id="dl-ref" placeholder="e.g. CTR-2026-014"></div>
+      <div class="field"><label for="dl-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="dl-notes" placeholder="Spec, pricing basis, remarks…"></div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" id="deal-submit-btn" onclick="dealSubmit()"><span id="deal-submit-label">Add Deal</span></button>
+      <button class="btn btn-secondary" onclick="dealCancelEdit()">Cancel</button>
+    </div>
+  </div>
+
+  <div id="deal-list"></div>
+</div>
+

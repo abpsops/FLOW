@@ -1,0 +1,115 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: REPORTS & ANALYTICS
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-reports" data-section="reports">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Reports &amp; Analytics</div>
+      <div class="page-subtitle">Supply performance, fuel volumes, barge utilisation — from saved records</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" onclick="downloadAnalyticsReport()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Analytics
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="openMonthlyReport()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Monthly Report
+      </button>
+    </div>
+  </div>
+
+  <!-- Report KPIs -->
+  <div class="kpi-grid kpi-grid-4" style="margin-bottom:1.25rem">
+    <div class="kpi-card kpi-azure">
+      <span class="kpi-label">Total VLSFO Delivered</span>
+      <span class="kpi-value" id="rep-total-vlsfo">0</span>
+      <div class="kpi-sub">MT — all saved records</div>
+    </div>
+    <div class="kpi-card kpi-teal">
+      <span class="kpi-label">Total LSMGO Delivered</span>
+      <span class="kpi-value" id="rep-total-lsmgo">0</span>
+      <div class="kpi-sub">MT — all saved records</div>
+    </div>
+    <div class="kpi-card kpi-green">
+      <span class="kpi-label">Supply Operations</span>
+      <span class="kpi-value" id="rep-ops-count">0</span>
+      <div class="kpi-sub">Completed deliveries</div>
+    </div>
+    <div class="kpi-card kpi-ink">
+      <span class="kpi-label">Avg per Delivery</span>
+      <span class="kpi-value" id="rep-avg-vol" style="font-size:16px">0</span>
+      <div class="kpi-sub" style="display:flex;gap:10px;margin-top:4px">
+        <span style="color:var(--fuel-v)">VLSFO: <strong id="rep-avg-vlsfo">0 MT</strong></span>
+        <span style="color:var(--fuel-m)">MGO: <strong id="rep-avg-mgo">0 MT</strong></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Charts row 1 -->
+  <div class="charts-2col">
+    <div class="chart-card">
+      <div class="chart-title">This Month's Supply Volume</div>
+      <div class="chart-subtitle">VLSFO &amp; LSMGO — MT delivered this month, from saved records</div>
+      <div class="chart-wrap-lg"><canvas id="chart-monthly-trend"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Barge Performance</div>
+      <div class="chart-subtitle">VLSFO &amp; LSMGO supplied per barge this month — MT from saved records</div>
+      <div class="chart-wrap-lg"><canvas id="chart-fuel-mix"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Charts row 2 -->
+  <div class="charts-2col">
+    <div class="chart-card">
+      <div class="chart-title">Top Vessels by Volume</div>
+      <div class="chart-subtitle">Total VLSFO + LSMGO per vessel this month — stacked, ranked from saved records</div>
+      <div class="chart-wrap-lg"><canvas id="chart-vessel-vol"></canvas></div>
+    </div>
+    <div class="chart-card">
+      <div class="chart-title">Top Ports by Vessel Count</div>
+      <div class="chart-subtitle">Vessels called per port this month (FUJ, KFK, OMAN) — from saved records</div>
+      <div class="chart-wrap-lg"><canvas id="chart-supply-freq"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Bunker Quantity — bar chart version of the Dashboard's line chart,
+       same underlying data (FY26: seeded Jan–Jul, live Aug onward). A fiscal year
+       can be archived (frozen snapshot, protected from Full Reset / Clear
+       All Data / Wipe Cloud) and viewed later from the dropdown — archiving
+       never switches the chart away from live data on its own. -->
+  <div class="chart-card" style="margin-bottom:24px">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:2px">
+      <div class="chart-title" style="margin-bottom:0">Bunker Quantity</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <select id="rep-monthly-qty-year-select" onchange="_onFYChartSelectorChange()" style="font-size:11px;padding:5px 8px;border-radius:6px;border:1px solid var(--border);background:var(--surface);color:var(--ink)">
+          <option value="__live__">Live</option>
+        </select>
+        <button id="rep-monthly-qty-undo-btn" class="btn btn-ghost btn-sm" style="display:none" onclick="_undoCurrentlyViewedFYArchive()" title="Remove this archive and return to live data">Undo Archive</button>
+        <button class="btn btn-ghost btn-sm" onclick="confirmArchiveFiscalYear()" title="Freeze the current chart data under a fiscal-year label — protected from Full Reset, Clear All Data, and Wipe Cloud">Archive Year</button>
+      </div>
+    </div>
+    <div class="chart-subtitle" id="rep-monthly-qty-subtitle" style="margin-bottom:10px">Monthly FO / MGO supplied</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:14px" id="rep-monthly-qty-summary"></div>
+    <div class="chart-wrap-lg"><canvas id="chart-monthly-qty-analytics"></canvas></div>
+  </div>
+
+  <!-- Records table preview -->
+  <div class="sec-hdr">
+    <span class="sec-label">Recent Saved Records</span>
+    <span style="font-size:11px;color:var(--sub);margin-left:8px">— same data as Monthly Report</span>
+  </div>
+  <div class="tbl-wrap">
+    <table class="data-tbl" id="rep-records-tbl">
+      <thead><tr>
+        <th>#</th><th>Vessel</th><th>Barge</th><th>Date</th>
+        <th>VLSFO (MT)</th><th>LSMGO (MT)</th><th>Location</th><th>Status</th><th>Action</th>
+      </tr></thead>
+      <tbody id="rep-records-body">
+        <tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">No saved records yet. Complete supply operations in the Checklist to build reports.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+

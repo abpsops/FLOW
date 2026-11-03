@@ -54,4 +54,15 @@ async function helpers(app) { await app.page.evaluate(PAGE_HELPERS); }
 function row(db) { return db.tables.abps_workspace.get('main'); }
 function writes(db, uid) { return db.log.filter(o => o.uid === uid && o.table === 'abps_workspace' && ['update', 'insert', 'upsert'].includes(o.action)); }
 
-module.exports = { H, APP, seedPayload, check, summary, realErrors, open, helpers, row, writes };
+// A moment in the current month as the app sees it (Asia/Dubai, UTC+4), `minsAgo` (0–1440)
+// before now. Records seeded with a fixed month are moved into Archives by
+// autoArchivePastMonths() once that month is over, so suites that need "this month's"
+// supplies seed them with this instead of a hard-coded date. In a month's first day
+// the moments are kept inside the month, still in the same order (more minutes ago =
+// earlier), at most 24 min after its start.
+function thisMonthIso(minsAgo) {
+  const DUBAI = 4 * 3600000, now = Date.now(), d = new Date(now + DUBAI), m = minsAgo || 0;
+  const monthStart = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1) - DUBAI;
+  return new Date(Math.max(monthStart + (1440 - m) * 1000, now - m * 60000)).toISOString();
+}
+module.exports = { thisMonthIso, H, APP, seedPayload, check, summary, realErrors, open, helpers, row, writes };

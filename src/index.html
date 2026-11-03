@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>FLOW — Bunker Planning System</title>
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0F1E30">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<link rel="icon" href="./icon-192.png">
+<script>
+/* Apply saved theme immediately, before first paint, to avoid a flash of
+   the wrong theme. Falls back to the visitor's OS preference the very
+   first time they open FLOW on a device. */
+(function(){
+  try{
+    var saved = localStorage.getItem('flow-theme');
+    var theme = saved || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.setAttribute('data-theme', theme);
+  }catch(e){ document.documentElement.setAttribute('data-theme','light'); }
+  /* Skin: 'harbour' (default, the "Harbour Light" look — light only) or
+     'classic' (the original look, with its own light/dark toggle). A stored
+     legacy value 'premium' counts as harbour. Harbour forces
+     data-theme="light" for this page view only — the visitor's saved
+     'flow-theme' is left untouched and comes back on switching to Classic. */
+  try{
+    var skin = localStorage.getItem('flow-skin') === 'classic' ? 'classic' : 'harbour';
+    document.documentElement.setAttribute('data-skin', skin);
+    if (skin === 'harbour') document.documentElement.setAttribute('data-theme', 'light');
+  }catch(e){
+    document.documentElement.setAttribute('data-skin','harbour');
+    document.documentElement.setAttribute('data-theme','light');
+  }
+})();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=DM+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" crossorigin="anonymous"></script>
+<!-- Exact version + SRI: a floating @2 tag would run whatever jsdelivr serves next with full access to the session. -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.3/dist/umd/supabase.js" integrity="sha384-BWcjm9OdFth9TbhCxZPdm+gAOUMAzQy9nmTs12ioXdCcbVnJaPMn+fMUoQCLt60R" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.css" crossorigin="anonymous">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/flatpickr/4.6.13/flatpickr.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js" crossorigin="anonymous"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js" crossorigin="anonymous"></script>
+<!-- No @capacitor/* CDN plugin scripts: they need a `capacitorExports` global
+     that only Capacitor's own bundler provides, so they threw in every browser.
+     Inside the native app Capacitor injects window.Capacitor.Plugins.Filesystem
+     / .Share itself, which is all the export code uses. -->
+<script>
+<!-- @include js/esc.js -->
+</script>
+<style>
+<!-- @include css/app.css -->
+</style>
+<style id="skin-harbour">
+<!-- @include css/skin-harbour.css -->
+</style>
+</head>
+<!-- ═══════════════════════════════════════════════════════
+     BODY — SYNC BANNER + TOPBAR + SIDEBAR + PAGES
+═══════════════════════════════════════════════════════ -->
+<body>
+
+<script>
+/* ── Keeps --header-h locked to the header's real rendered height ──
+   On mobile the topbar wraps into multiple rows (title / search /
+   action buttons), so its height is variable and can't be hard-coded.
+   Without this, --header-h fell back to a fixed single-row estimate,
+   which was shorter than the real header — causing the button row and
+   the sidebar's top items (e.g. Dashboard) to sit underneath/behind
+   the header instead of below it. This measures the real height and
+   keeps it accurate as content, viewport, or orientation changes. */
+(function(){
+  function syncHeaderHeight(){
+    var header = document.getElementById('app-header');
+    if (!header) return;
+    var h = header.offsetHeight;
+    if (h > 0) document.documentElement.style.setProperty('--header-h', h + 'px');
+  }
+  window.addEventListener('load', syncHeaderHeight);
+  window.addEventListener('resize', syncHeaderHeight);
+  window.addEventListener('orientationchange', function(){ setTimeout(syncHeaderHeight, 50); setTimeout(syncHeaderHeight, 300); });
+  setTimeout(syncHeaderHeight, 0);
+  setTimeout(syncHeaderHeight, 300);
+  setTimeout(syncHeaderHeight, 1000);
+  // This script runs before #app-header is parsed, so attach the observer
+  // once the DOM exists — otherwise it silently never attached.
+  function observeHeader(){
+    var headerEl = document.getElementById('app-header');
+    if (headerEl && window.ResizeObserver) {
+      new ResizeObserver(syncHeaderHeight).observe(headerEl);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', observeHeader);
+  else observeHeader();
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════
+     TOAST NOTIFICATIONS — confirms actions actually happened
+     (save, mark received, generate schedule, etc.) instead of
+     leaving the operator guessing whether a click did anything.
+     ═══════════════════════════════════════════════════════ -->
+<div id="toast-stack" style="position:fixed;bottom:20px;right:20px;z-index:99999;display:flex;flex-direction:column-reverse;gap:8px;pointer-events:none;max-width:340px"></div>
+
+<!-- ═══════════════════════════════════════════════════════
+     OPERATOR ACCESS GATE — shared team login
+     Sits above everything (including the welcome screen) and
+     blocks all app initialisation until the correct shared
+     email + password is entered. Once unlocked on a device,
+     access is remembered there until Log Out is used.
+═══════════════════════════════════════════════════════ -->
+<!-- ═══════════════════ LOGIN GATE ═══════════════════ -->
+<style>
+<!-- @include css/login-gate.css -->
+</style>
+
+<!-- @include html/welcome.html -->
+
+<!-- @include html/login-gate.html -->
+<!-- @include html/topbar.html -->
+<!-- @include html/sidebar.html -->
+<!-- ═══════════════════ MAIN PAGES ═══════════════════ -->
+<main class="main">
+
+<!-- @include html/pages/dashboard.html -->
+<!-- @include html/pages/nominations.html -->
+<!-- @include html/pages/schedule.html -->
+<!-- @include html/pages/loading.html -->
+<!-- @include html/pages/timeline.html -->
+<!-- @include html/pages/bargefleet.html -->
+<!-- @include html/pages/availability.html -->
+<!-- @include html/pages/deals.html -->
+<!-- @include html/pages/reports.html -->
+<!-- @include html/pages/commandcenter.html -->
+<!-- @include html/pages/checklist.html -->
+<!-- @include html/pages/records.html -->
+<!-- @include html/pages/bargetracking.html -->
+<!-- @include html/pages/deliverylog.html -->
+<!-- @include html/pages/archives.html -->
+<!-- @include html/pages/trash.html -->
+<!-- @include html/pages/alerts.html -->
+<!-- @include html/pages/agents.html -->
+<script>
+<!-- @include js/agents.js -->
+</script>
+
+</main>
+</div><!-- /.layout -->
+
+<!-- ══════════════════════════════════════════════════
+     HIDDEN OUTPUT SECTION (backward compat)
+══════════════════════════════════════════════════ -->
+<div id="output" class="out-sec vis" style="display:none"></div>
+<div id="tl-section" class="out-sec vis" style="display:none"></div>
+<div id="nsc-section" class="out-sec vis" style="display:none"></div>
+<div id="checklist-section" style="display:none"></div>
+<div id="saved-records-section" style="display:none"></div>
+<div id="vessel-nominations" style="display:none"></div>
+<div id="barge-config" style="display:none"></div>
+<div id="print-only-container" style="display:none;position:fixed;inset:0;z-index:99999;background:var(--surface);padding:0"></div>
+
+<!-- @include html/modal-edit-record.html -->
+<script>
+<!-- @include js/router.js -->
+<!-- @include js/search.js -->
+<!-- @include js/dashboard.js -->
+<!-- @include js/reports.js -->
+<!-- @include js/shell.js -->
+</script>
+
+<script>
+<!-- @include js/auth.js -->
+</script>
+
+<script>
+<!-- @include js/roles-alerts.js -->
+</script>
+
+<style>
+@keyframes ogShake { 0%,100%{transform:translateX(0)} 20%{transform:translateX(-8px)} 40%{transform:translateX(8px)} 60%{transform:translateX(-5px)} 80%{transform:translateX(5px)} }
+</style>
+
+<script>
+<!-- @include js/nomination-email.js -->
+</script>
+
+<script>
+<!-- @include js/sync-core.js -->
+<!-- @include js/sync-merge.js -->
+<!-- @include js/sync-apply.js -->
+<!-- @include js/sync-save.js -->
+<!-- @include js/sync-load.js -->
+<!-- @include js/loadings.js -->
+<!-- @include js/deals.js -->
+<!-- @include js/barge-tracking.js -->
+<!-- @include js/state.js -->
+<!-- @include js/live-rob.js -->
+<!-- @include js/supply-tracker.js -->
+<!-- @include js/core.js -->
+<!-- @include js/bunker-quantity.js -->
+<!-- @include js/nomination-cards.js -->
+<!-- @include js/vessel-ids-card.js -->
+<!-- @include js/import-parser.js -->
+<!-- @include js/import-nomination.js -->
+<!-- @include js/planner.js -->
+<!-- @include js/command-center.js -->
+<!-- @include js/barge-timeline.js -->
+<!-- @include js/reload-planner.js -->
+<!-- @include js/barge-blocks.js -->
+<!-- @include js/availability-check.js -->
+<!-- @include js/split-supply.js -->
+<!-- @include js/nomination-actions.js -->
+<!-- @include js/checklist.js -->
+<!-- @include js/records.js -->
+<!-- @include js/archives.js -->
+<!-- @include js/duplicates.js -->
+<!-- @include js/reports-export.js -->
+<!-- @include js/calendar.js -->
+<!-- @include js/resets.js -->
+<!-- @include js/calc-params.js -->
+</script>
+<!-- @include html/modals-ops.html -->
+<!-- @include html/modal-calling-instructions.html -->
+<script>
+<!-- @include js/calling-instructions.js -->
+</script>
+
+
+
+
+
+<!-- @include html/modal-email.html -->
+<script>
+<!-- @include js/email-generator.js -->
+</script>
+
+
+<!-- @include html/modal-monthly-report.html -->
+<style>
+<!-- @include css/vessel-ids.css -->
+</style>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('./service-worker.js').catch(function(err) {
+      console.warn('Service worker registration failed:', err);
+    });
+  });
+}
+</script>
+
+</body>
+</html>
+

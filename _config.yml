@@ -2,6 +2,8 @@
 # and dependencies off the published site (Vercel uses .vercelignore).
 exclude:
   - tests/
+  - src/
+  - tools/
   - .github/
   - node_modules/
   - README.md

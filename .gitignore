@@ -1,2 +1,7 @@
 tests/node_modules/
 tests/.out/
+# editor / OS litter (the build ignores it too)
+.DS_Store
+*.swp
+*.swo
+*~

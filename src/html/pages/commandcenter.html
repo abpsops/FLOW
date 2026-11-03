@@ -1,0 +1,75 @@
+<!-- ══════════════════════════════════════════════════
+     PAGE: COMMAND CENTER — live wallboard for a TV/office screen
+══════════════════════════════════════════════════ -->
+<div class="page" id="page-commandcenter" data-section="system">
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Command Center</div>
+      <div class="page-subtitle">Live wallboard — barge ROB, vessel schedule, active alerts. Cast this to a TV or run it fullscreen.</div>
+    </div>
+    <div class="page-actions">
+      <button class="btn btn-secondary btn-sm" id="cc-cast-btn" onclick="_ccCastToTV()" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 16.1A5 5 0 0 1 5.9 20"/><path d="M2 12.05A9 9 0 0 1 9.95 20"/><line x1="2" y1="20" x2="2.01" y2="20"/><rect x="2" y="3" width="20" height="14" rx="2"/></svg>
+        Cast to TV
+      </button>
+      <button class="btn btn-secondary btn-sm" onclick="_ccEnterScreenMode()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        Screen Mode
+      </button>
+    </div>
+  </div>
+
+  <style>
+    /* In true Fullscreen ("Screen Mode"), the wallboard should fill the
+       whole screen — not stay pinned to its normal 16:9 card size, which
+       left a large dead black area below it on phones with a different
+       aspect ratio. Also center the (still fixed 1280×720) canvas inside
+       whatever space is actually available. */
+    #cc-wallboard:fullscreen, #cc-wallboard:-webkit-full-screen {
+      width: 100vw; height: 100vh; aspect-ratio: unset; max-width: none;
+      border-radius: 0; border: none; box-shadow: none;
+      display: flex; align-items: center; justify-content: center;
+    }
+  </style>
+  <div id="cc-wallboard-outer" style="max-width:1040px;margin:0 auto">
+  <div id="cc-wallboard" style="width:100%;aspect-ratio:16/9;background:#000000;overflow:hidden;border:1px solid #3A3A3A;border-radius:8px;position:relative;box-shadow:0 0 0 1px #000, 0 8px 30px rgba(0,0,0,.55), inset 0 0 40px rgba(0,0,0,.4)">
+   <!-- Fixed 1280×720 logical canvas, scaled to fit #cc-wallboard via _ccFitCanvas().
+        Compact terminal sizing (close to the original), but the fixed
+        canvas + scale means it never collapses/overflows on a narrow
+        screen and stays sharp if cast bigger on a TV — real DOM text
+        scaling, not a raster image. -->
+   <div id="cc-canvas" style="position:absolute;top:0;left:0;width:1280px;height:720px;transform-origin:top left;background:#000000;font-family:'Courier New',Courier,monospace;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased">
+
+    <div style="flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:10px 18px;background:#0A0A0A;border-bottom:1px solid #F0A500">
+      <div style="display:flex;align-items:center;gap:14px">
+        <span style="font-size:17px;font-weight:700;color:#F0A500;letter-spacing:.04em">FLOW</span>
+        <span style="font-size:13.5px;color:#FFFFFF;letter-spacing:.08em">BUNKER OPS TERMINAL</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:20px">
+        <span id="cc-date" style="font-size:13.5px;color:#FFFFFF"></span>
+        <span id="cc-clock" style="font-size:16px;font-weight:700;color:#3ECF6E;font-variant-numeric:tabular-nums">00:00:00</span>
+        <span id="cc-live-dot" style="font-size:11px;color:#3ECF6E;border:1px solid #3ECF6E;padding:2px 7px">● LIVE</span>
+      </div>
+    </div>
+
+    <!-- "Up Next" spotlight — real ops rooms fixate on what's happening
+         right now/next, not the full table, so this gets its own
+         large, unmissable strip instead of just being row 1 of the
+         Schedule panel. -->
+    <div id="cc-upnext" style="flex-shrink:0;padding:9px 18px;background:#0A0A0A;border-bottom:1px solid #2A2A2A"></div>
+
+    <div style="flex:1;min-height:0;display:grid;grid-template-columns:220px 1fr 190px 220px;overflow:hidden">
+      <div id="cc-rob-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
+      <div id="cc-schedule-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
+      <div id="cc-alerts-panel" style="border-right:1px solid #2A2A2A;padding:10px 12px;overflow-y:auto"></div>
+      <div id="cc-activity-panel" style="padding:10px 12px;overflow-y:auto"></div>
+    </div>
+
+    <div style="flex-shrink:0;border-top:1px solid #F0A500;background:#0A0A0A;padding:5px 0;overflow:hidden;white-space:nowrap">
+      <div id="cc-ticker" style="display:inline-block;font-size:12px;color:#4FD1E8;padding-left:100%"></div>
+    </div>
+   </div>
+  </div>
+  </div>
+</div>
+

@@ -1,0 +1,51 @@
+/* ── Vessel identifiers (IMO / MMSI) on the nomination card — see VESSEL IDENTIFIERS ── */
+.vhdr-l{display:flex;align-items:center;gap:6px 8px;flex-wrap:wrap;min-width:0}
+.vid-badge{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.02em;padding:1px 8px;border-radius:999px;border:1px solid;white-space:nowrap;line-height:1.6}
+.vid-badge:empty{display:none}
+.vid-badge.ok{color:var(--green);background:var(--green-lt);border-color:var(--green-bd)}
+.vid-badge.miss{color:var(--amber);background:var(--amber-lt);border-color:var(--amber-bd)}
+.vid-field{min-width:0;container:vid / inline-size}
+.vid-req{color:var(--red);font-weight:700}
+.vid-field > label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.vid-sub{font-weight:400;color:var(--muted)}
+.vid-pair{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,9fr);gap:6px;min-width:0}
+.vid-box{position:relative;min-width:0}
+.vid-mini{position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;letter-spacing:.05em;color:var(--muted);pointer-events:none;font-family:'DM Mono',monospace;line-height:1}
+.vcard .vid-pair .vid-box input.vid-in{padding-left:32px;padding-right:6px;font-variant-numeric:tabular-nums;min-width:0;text-overflow:ellipsis}
+.vcard .vid-pair .vid-box-mmsi input.vid-in{padding-left:39px}
+/* Desktop: the IMO / MMSI pair gets a wider column so 9 digits always fit. */
+@media (min-width:901px){ .vcard .g4.vrow-ids{grid-template-columns:minmax(0,1fr) minmax(0,1.5fr) minmax(0,1fr) minmax(0,.8fr)} }
+.vcard .vid-pair .vid-box input.vid-in.vid-ok{border-color:var(--green-bd)}
+.vcard .vid-pair .vid-box input.vid-in.vid-miss{border-color:var(--amber-bd);background-color:var(--amber-lt)}
+.vcard .vid-pair .vid-box input.vid-in.vid-bad{border-color:var(--red);background-color:var(--red-lt);box-shadow:0 0 0 3px rgba(192,57,43,.1)}
+.vid-msg{display:flex;flex-direction:column;gap:2px;font-size:10.5px;line-height:1.4;min-width:0;overflow-wrap:anywhere}
+.vid-msg .vid-er{color:var(--red);font-weight:600}
+.vid-msg .vid-warn{color:var(--amber);font-weight:600}
+.vid-msg .vid-hint{color:var(--muted)}
+.vid-msg .vid-note{color:var(--azure);font-weight:600}
+.vid-look{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:10.5px;color:var(--muted);min-width:0}
+.vid-look[hidden]{display:none}
+.vid-look a{color:var(--azure);font-weight:600;text-decoration:none;white-space:nowrap}
+.vid-look a::after{content:' \2197';font-size:9px}
+.vid-look a:hover{text-decoration:underline}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in{padding-left:37px;padding-right:10px}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box-mmsi input.vid-in{padding-left:44px}
+html[data-skin="harbour"] .vid-mini{left:12px;font-family:'IBM Plex Mono',monospace;color:#8696AB}
+html[data-skin="harbour"] .vid-badge{border:0;padding:3px 10px;font-size:11px}
+html[data-skin="harbour"] .vid-badge.ok{color:#1B7F5B;background:#E2F5EC}
+html[data-skin="harbour"] .vid-badge.miss{color:#9A5B00;background:#FDF0DA}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-ok{border-color:#9FD8BF}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-miss{border-color:#E7C077;background-color:#FFF8EA}
+html[data-skin="harbour"] .vcard .vid-pair .vid-box input.vid-in.vid-bad{border-color:#C0392B;background-color:#FDF1EF;box-shadow:none}
+html[data-skin="harbour"] .vid-msg,html[data-skin="harbour"] .vid-look{font-size:11.5px}
+/* A narrow column (laptop widths, the 2-column tablet layout): the two boxes stack so 9 digits always fit. */
+@container vid (max-width: 259px){ .vid-pair{grid-template-columns:minmax(0,1fr)} }
+/* …and the label keeps to one line (the hint under the boxes says "at least one" too). */
+@container vid (max-width: 239px){ .vid-sub{display:none} }
+/* Phones: the vessel name and the IMO / MMSI pair get a full row each. */
+@media (max-width:560px){ .vcard .g4 > .vname-field, .vcard .g4 > .vid-field{grid-column:1 / -1} }
+/* Import review: an invalid IMO / MMSI cell (never blocks Add) */
+.nimp-tbl :is(input,select).nimp-idbad{border-color:var(--red);background:var(--red-lt)}
+html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-idbad{border-color:var(--red);background-color:var(--red-lt)}
+.nimp-flag .idbad{background:var(--red-lt);color:var(--red);border-color:var(--red-bd)}
+.nimp-flag .idmiss{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}

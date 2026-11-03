@@ -1,0 +1,6 @@
+# index.html is built byte-for-byte from src/ (tools/build.js): keep both, and
+# the build tool, in LF on every checkout (Git for Windows would otherwise turn
+# them into CRLF and the build would refuse them).
+index.html text eol=lf
+src/** text eol=lf
+tools/** text eol=lf
