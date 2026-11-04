@@ -447,7 +447,7 @@ function addVessel(def = {}) {
     </div>
   </div>
   <div class="g4 mb10 vrow-ids">
-    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400);_vidRender(${id});_vidSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
+    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
     <div class="field vid-field" role="group" aria-labelledby="v${id}-ids-lbl">
       <label id="v${id}-ids-lbl" for="v${id}-imo" title="At least one of the two is required">IMO Number / MMSI <span class="vid-req" aria-hidden="true">*</span><span class="vid-sub"> — at least one</span></label>
       <div class="vid-pair">
@@ -571,7 +571,7 @@ function addVessel(def = {}) {
   // Show the track record immediately for a restored/existing nomination
   // too, not just when someone types a new name — a card can load with a
   // vessel name already filled in from saved state.
-  if (name) renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record');
+  if (name) { renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record'); if (typeof _trSyncAlertsSoon === 'function') _trSyncAlertsSoon(); }
   // Fix #3: if this card is being restored from saved state and its
   // nomination already has emailSent=true in the (already-loaded) local
   // log cache, lock the button immediately so it never flashes as

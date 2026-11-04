@@ -161,6 +161,8 @@ function calculate() {
   if (!barges.length) { alert('Add at least one barge.'); _calculating = false; return; }
   // Nominations without a valid IMO / MMSI: one summary warning, never a block.
   try { _vidWarnSchedule(); } catch (e) { console.warn('ABPS: IMO/MMSI check failed', e); }
+  // Vessels that came outside laycan before: one summary warning, never a block.
+  try { _trWarnSchedule(); } catch (e) { console.warn('ABPS: track record check failed', e); }
 
   // Warn (don't block) on near-duplicate vessel names — likely typos that would otherwise
   // silently create two separate checklist entries for what is probably the same vessel.

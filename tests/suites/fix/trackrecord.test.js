@@ -41,15 +41,14 @@ function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + Str
     renderTrackRecordWatchlist();
     const rows = [...document.querySelectorAll('#dash-track-record-watchlist details.tr-watch-row')];
     return rows.map(r => ({ name: r.querySelector('summary span').textContent, text: r.querySelector('summary').textContent, details: r.querySelectorAll('div > div').length, bg: r.style.background }))
-      .concat([{ how: /How this is worked out/.test(document.getElementById('dash-track-record-watchlist').textContent) }]);
+      .concat([{ how: /How this works/.test(document.getElementById('dash-track-record-watchlist').textContent) }]);
   });
   const by = n => w.find(r => r.name === n) || {};
-  check(w.filter(r => r.name && /ELANDRA/i.test(r.name)).length === 1, 'ELANDRA SEA listed once ' + JSON.stringify(w.map(r => r.name)));
-  check(/no disputes/.test(by('ELANDRA SEA').text) && /Within laycan on all 2/.test(by('ELANDRA SEA').text) && /green/.test(by('ELANDRA SEA').bg), 'ELANDRA SEA: 2 within laycan, no disputes, green ' + JSON.stringify(by('ELANDRA SEA')));
-  check(/\b1\b dispute(?!s)/.test(by('COMPASS').text) && /amber/.test(by('COMPASS').bg), 'COMPASS: only the real claim counts (1 dispute) ' + JSON.stringify(by('COMPASS')));
-  check(/Outside laycan in 1 of 2/.test(by('GREEN SANVI').text) && /no disputes/.test(by('GREEN SANVI').text), 'GREEN SANVI: 1 of 2 late, "ok" is not a dispute ' + JSON.stringify(by('GREEN SANVI')));
-  check(by('COMPASS').details === 2, 'COMPASS expands to its 2 deliveries');
-  check(w[w.length - 1].how, 'watchlist explains how it is worked out');
+  check(!w.some(r => r.name && /ELANDRA/i.test(r.name)), 'ELANDRA SEA (all within laycan, no dispute, not nominated) is not on the watchlist ' + JSON.stringify(w.map(r => r.name)));
+  check(/(?:^|\D)1 dispute(?!s)/.test(by('COMPASS').text.replace('COMPASS', ' ')) && /amber/.test(by('COMPASS').bg), 'COMPASS: only the real claim counts (1 dispute) ' + JSON.stringify(by('COMPASS')));
+  check(/After laycan ×1/.test(by('GREEN SANVI').text) && !/dispute/.test(by('GREEN SANVI').text), 'GREEN SANVI: came after laycan once, "ok" is not a dispute ' + JSON.stringify(by('GREEN SANVI')));
+  check(by('COMPASS').details >= 1, 'COMPASS expands to its flagged supply');
+  check(w[w.length - 1].how, 'watchlist explains how it works');
 
   // ── 4. Delivery Log page counts real disputes only ──
   const dlCount = await p.evaluate(() => { showPage('deliverylog'); renderDeliveryLog(); return { n: document.getElementById('dl-count-disputes').textContent, list: document.getElementById('dl-list-disputes').textContent }; });

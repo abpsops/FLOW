@@ -152,6 +152,7 @@ function _applyPayload(payload, replaceUnions) {
   if (typeof _fwRefreshIfOpen === 'function') _fwRefreshIfOpen(); // a colleague's blocks / schedule show up
   if (typeof _rlRefreshIfShown === 'function') _rlRefreshIfShown(); // …and their loadings / ROB in the reload plan
   if (typeof _refreshLoadingViews === 'function') _refreshLoadingViews(); // the Loading list, its Deal pick and the Deals page
+  if (typeof _trAfterApply === 'function') _trAfterApply(); // track-record banners on the cards, the bell, the watchlist
   _restoreFocus(focus);
 }
 // After a pull / merge: the Loading list and the Deals page show the colleague's
