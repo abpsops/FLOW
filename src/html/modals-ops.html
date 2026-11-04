@@ -206,7 +206,10 @@
       <button onclick="closeBlModal()" aria-label="Close" id="bl-close-btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
     </div>
     <div style="padding:20px">
+      <div class="bl-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label for="bl-date">BL date</label><input type="date" id="bl-date" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
       <div class="field"><label for="bl-qty">Quantity loaded per BL (MT)</label><input type="number" id="bl-qty" min="0" step="1" inputmode="decimal" oninput="_blPreview()" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
+      </div>
       <div id="bl-deal" style="font-size:11.5px;color:var(--sub);margin:8px 0 16px;line-height:1.5"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn btn-secondary" onclick="closeBlModal()">Cancel</button>

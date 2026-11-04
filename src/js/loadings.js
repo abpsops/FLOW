@@ -369,12 +369,13 @@ function deleteLoadingRecord(id) {
 // record itself isn't deleted; it stays visible (greyed, tagged Done)
 // in the Loading page's own list, with an Undo option in case it was
 // marked by mistake.
-function markLoadingRecordDone(id, blQty) {
+function markLoadingRecordDone(id, blQty, blDate) {
   const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
   if (!rec) return;
   rec.completed = true;
   rec.completedAt = Date.now();
   if (blQty != null && blQty !== '' && !isNaN(Number(blQty))) { rec.blQty = Number(blQty); rec.blAt = Date.now(); }
+  if (blDate && /^\d{4}-\d{2}-\d{2}$/.test(blDate)) rec.blDate = blDate; // the BL's own date (YYYY-MM-DD)
   rec.updatedAt = Date.now(); // so the merge knows this is the newer copy
   saveLoadingRecords();
   if (_loadingEditingId === id) cancelLoadingEdit();
