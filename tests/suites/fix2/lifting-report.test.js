@@ -121,6 +121,13 @@ function seed(extraLoadings) {
     check('L3 another device gets the BL date and quantity and shows them on the deal card', b.blDate === '2026-11-03' && b.blQty === 4350 && /03 Nov 2026/.test(b.row), b);
   });
 
+  await scenario('L4 decimals', async (openT) => {
+    const db = H.createDb({ workspace: seed([ld('l_d', 4500, -80, -70, { completed: true, completedAt: NOW - 69 * 3600000, blQty: 4412.5, blDate: '2026-11-03' })]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const c = await A.page.evaluate(() => { showPage('deals'); const card = document.querySelector('.deal-card[data-deal-id="deal_1"]'); return { nums: [...card.querySelectorAll('.deal-num-v')].map(e => e.textContent), rows: [...card.querySelectorAll('.deal-tbl tbody tr')].map(tr => [...tr.children].map(td => td.textContent.replace(/\s+/g, ' ').trim())) }; });
+    check('L4 a BL figure with decimals shows exactly on the card (4,412.5; left after 36,275.5) and in the totals (lifted 8,724.5)', c.rows.some(r => r[4] === '4,412.5' && r[5] === '36,275.5') && c.nums.includes('8,724.5') && c.nums.includes('36,275.5'), c);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

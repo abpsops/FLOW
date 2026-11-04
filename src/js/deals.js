@@ -16,7 +16,8 @@ function _dealDateStr(ymd) {
   const d = new Date(String(ymd) + 'T00:00:00');
   return isNaN(d.getTime()) ? String(ymd) : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 }
-function _mtStr(x) { return Math.round(Number(x) || 0).toLocaleString(); }
+// Tonnes as on the BL: up to 3 decimals, never rounded away (4,412.5 stays 4,412.5).
+function _mtStr(x) { return (Math.round((Number(x) || 0) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
 // What a completed loading lifted: the BL quantity, or the planned quantity until a BL figure is entered.
 function _loadingLifted(r) { return r.blQty != null && r.blQty !== '' && !isNaN(Number(r.blQty)) ? Number(r.blQty) : (Number(r.qty) || 0); }
 // A lifting's BL date: the date entered (YYYY-MM-DD), else the day it was marked
