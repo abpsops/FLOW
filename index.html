@@ -9185,12 +9185,13 @@ function deleteLoadingRecord(id) {
 // record itself isn't deleted; it stays visible (greyed, tagged Done)
 // in the Loading page's own list, with an Undo option in case it was
 // marked by mistake.
-function markLoadingRecordDone(id, blQty) {
+function markLoadingRecordDone(id, blQty, blDate) {
   const rec = (_loadingRecords || []).find(function(r) { return r.id === id; });
   if (!rec) return;
   rec.completed = true;
   rec.completedAt = Date.now();
   if (blQty != null && blQty !== '' && !isNaN(Number(blQty))) { rec.blQty = Number(blQty); rec.blAt = Date.now(); }
+  if (blDate && /^\d{4}-\d{2}-\d{2}$/.test(blDate)) rec.blDate = blDate; // the BL's own date (YYYY-MM-DD)
   rec.updatedAt = Date.now(); // so the merge knows this is the newer copy
   saveLoadingRecords();
   if (_loadingEditingId === id) cancelLoadingEdit();
@@ -9248,6 +9249,25 @@ function _dealDateStr(ymd) {
 function _mtStr(x) { return Math.round(Number(x) || 0).toLocaleString(); }
 // What a completed loading lifted: the BL quantity, or the planned quantity until a BL figure is entered.
 function _loadingLifted(r) { return r.blQty != null && r.blQty !== '' && !isNaN(Number(r.blQty)) ? Number(r.blQty) : (Number(r.qty) || 0); }
+// A lifting's BL date: the date entered (YYYY-MM-DD), else the day it was marked
+// Completed (older records), else the loading's end. {ymd, entered}.
+function _loadingBlDate(r) {
+  if (r && /^\d{4}-\d{2}-\d{2}$/.test(String(r.blDate || ''))) return { ymd: r.blDate, entered: true };
+  const t = new Date(r && (r.completedAt || r.endAt || r.startAt) || '');
+  return { ymd: isNaN(t.getTime()) ? '' : _localDateInputStr(t), entered: false };
+}
+// The deal's liftings in BL-date order with the quantity left after each, and its scheduled loadings.
+function _dealLiftingRows(d) {
+  const st = _dealStats(d);
+  let left = st.bought;
+  const lifted = st.loadings.filter(function(r) { return r.completed; }).map(function(r) {
+    const bd = _loadingBlDate(r);
+    return { rec: r, blDate: bd.ymd, blDateEntered: bd.entered, qty: _loadingLifted(r), blEntered: r.blQty != null && r.blQty !== '' && !isNaN(Number(r.blQty)) };
+  }).sort(function(a, b) { return String(a.blDate).localeCompare(String(b.blDate)) || ((a.rec.completedAt || 0) - (b.rec.completedAt || 0)); });
+  lifted.forEach(function(x) { left -= x.qty; x.leftAfter = left; });
+  const scheduled = st.loadings.filter(function(r) { return !r.completed; });
+  return { st: st, lifted: lifted, scheduled: scheduled };
+}
 function _dealLoadings(dealId) {
   return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.dealId === dealId; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
@@ -9343,11 +9363,18 @@ function _openBlModal(rec, mode, opts) {
   if (!m) { if (mode === 'complete') markLoadingRecordDone(rec.id); return; }
   _blModal = { id: rec.id, mode: mode, opts: opts, returnFocus: document.activeElement };
   const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
-  document.getElementById('bl-title').textContent = mode === 'complete' ? 'Mark loading Completed' : 'Quantity loaded per BL';
+  document.getElementById('bl-title').textContent = mode === 'complete' ? 'Mark loading Completed' : 'BL date and quantity';
   document.getElementById('bl-sub').textContent = (rec.terminal || 'Terminal') + ' · ' + (_resolveRecordBargeName(rec) || 'barge') + ' · planned ' + _mtStr(rec.qty) + ' MT ' + grade + ' · ' + fmt24(new Date(rec.startAt));
   document.getElementById('bl-confirm-btn').textContent = mode === 'complete' ? 'Mark Completed' : 'Save';
   const q = document.getElementById('bl-qty');
   q.value = rec.blQty != null && rec.blQty !== '' ? rec.blQty : (Number(rec.qty) || '');
+  // BL date: as entered before, else the loading's end day (today if it ends later).
+  const bd = document.getElementById('bl-date');
+  if (bd) {
+    let v = /^\d{4}-\d{2}-\d{2}$/.test(String(rec.blDate || '')) ? rec.blDate : '';
+    if (!v) { const end = new Date(rec.endAt), now = new Date(); v = _localDateInputStr(!isNaN(end.getTime()) && end < now ? end : now); }
+    bd.value = v;
+  }
   _blPreview();
   m.style.display = 'flex';
   setTimeout(function() { try { q.focus(); q.select(); } catch (e) {} }, 30);
@@ -9399,6 +9426,8 @@ function blConfirm() {
   if (!_blModal) return;
   const q = parseFloat(document.getElementById('bl-qty').value);
   if (isNaN(q) || q < 0) { alert('Enter the quantity loaded per BL (0 or more).'); return; }
+  const bdEl = document.getElementById('bl-date'), blDate = bdEl ? String(bdEl.value || '') : '';
+  if (bdEl && !/^\d{4}-\d{2}-\d{2}$/.test(blDate)) { alert('Enter the BL date.'); return; }
   const m = _blModal;
   closeBlModal();
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === m.id; });
@@ -9406,13 +9435,13 @@ function blConfirm() {
   const grade = rec.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
   if (m.mode === 'complete') {
     if (rec.completed) { showToast('That loading is already marked Completed' + (rec.blQty != null ? ' (BL ' + _mtStr(rec.blQty) + ' MT)' : '') + '.', 'warning'); _refreshLoadingConsumers(); return; }
-    markLoadingRecordDone(rec.id, q); // saves, re-renders the list, forecast and deals
+    markLoadingRecordDone(rec.id, q, blDate); // saves, re-renders the list, forecast and deals
     const d = rec.dealId ? _dealById(rec.dealId) : null;
     const dealTxt = d ? ' Deal ' + (d.supplier || '') + ': ' + _mtStr(_dealStats(d).remaining) + ' MT left to lift.' : '';
     if (m.opts && m.opts.fromForecast) showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed (BL ' + _mtStr(q) + ' MT ' + grade + ').' + dealTxt + ' Now record the reload in the barge\'s ROB so the stock shows.', 'success', 8000);
     else showToast('Loading at ' + (rec.terminal || 'the terminal') + ' marked Completed — BL ' + _mtStr(q) + ' MT ' + grade + '.' + dealTxt, 'success', 6000);
   } else {
-    rec.blQty = q; rec.blAt = Date.now(); _touchLoading(rec);
+    rec.blQty = q; rec.blAt = Date.now(); if (blDate) rec.blDate = blDate; _touchLoading(rec);
     saveLoadingRecords();
     renderLoadingList();
     _refreshLoadingConsumers();
@@ -9546,13 +9575,18 @@ function _dealCardHtml(d, operator) {
   if (st.remaining <= 0) warn = '<div class="deal-warn bad">Exhausted — the whole deal has been lifted' + (st.remaining < 0 ? ' (' + _mtStr(-st.remaining) + ' MT over the quantity bought)' : '') + '.</div>';
   else if (st.available < 0) warn = '<div class="deal-warn">Scheduled loadings exceed what is left by <b>' + esc(_mtStr(-st.available)) + ' MT</b> — a loading will come up short, or a new deal is needed.</div>';
   const ldMap = _bargeColorMap();
-  const rows = st.loadings.map(function(r) {
+  const lr = _dealLiftingRows(d);
+  const liftById = {}; lr.lifted.forEach(function(x) { liftById[x.rec.id] = x; });
+  // Liftings in BL-date order (with what is left after each), then the scheduled ones.
+  const rows = lr.lifted.map(function(x) { return x.rec; }).concat(lr.scheduled).map(function(r) {
+    const lx = liftById[r.id];
     const when = r.completed ? fmt24(new Date(r.completedAt || r.endAt)) : fmt24(new Date(r.startAt));
     const act = operator ? '<td class="deal-act">' +
-      (r.completed ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button> ' : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark Completed — asks for the BL quantity">Done</button> ') +
+      (r.completed ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="BL date and quantity">BL</button> ' : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark Completed — asks for the BL quantity">Done</button> ') +
       '<button class="btn btn-secondary btn-sm" onclick="dealUnlinkLoading(\'' + escJs(r.id) + '\')" title="Unlink from this deal">×</button></td>' : '';
-    return '<tr class="' + (r.completed ? 'done' : '') + '"><td>' + esc(when) + '</td><td>' + _bargePill(_resolveRecordBargeName(r), ldMap) + '</td><td>' + esc(r.terminal || '—') + '</td>' +
+    return '<tr class="' + (r.completed ? 'done' : '') + '"><td>' + (lx ? esc(_dealDateStr(lx.blDate)) + (lx.blDateEntered ? '' : ' <span title="No BL date entered — the day it was marked Completed" style="color:var(--amber)">*</span>') : esc(when)) + '</td><td>' + _bargePill(_resolveRecordBargeName(r), ldMap) + '</td><td>' + esc(r.terminal || '—') + '</td>' +
       '<td class="n">' + esc(_mtStr(r.qty)) + '</td><td class="n">' + (r.completed ? '<b>' + esc(_mtStr(_loadingLifted(r))) + '</b>' + (r.blQty == null ? ' <span title="No BL figure entered — the planned quantity is used" style="color:var(--amber)">*</span>' : '') : '—') + '</td>' +
+      '<td class="n">' + (lx ? esc(_mtStr(lx.leftAfter)) : '—') + '</td>' +
       '<td>' + (r.completed ? '<span class="ld-chip" style="background:var(--green-lt);color:var(--green)">LIFTED</span>' : '<span class="ld-chip" style="background:var(--amber-lt);color:var(--amber)">SCHEDULED</span>') + '</td>' + act + '</tr>';
   });
   const linked = {}; (_loadingRecords || []).forEach(function(r) { if (r && r.dealId) linked[r.id] = 1; });
@@ -9579,11 +9613,167 @@ function _dealCardHtml(d, operator) {
       '<div class="deal-num"><div class="deal-num-l">Free to plan</div><div class="deal-num-v ' + (st.available < 0 ? 'bad' : '') + '">' + esc(_mtStr(st.available)) + '</div><div class="deal-num-d">left − scheduled</div></div>' +
     '</div>' +
     '<div class="deal-bar" title="' + esc(Math.round(liftedPct) + '% lifted, ' + Math.round(commPct) + '% scheduled') + '"><i class="lifted' + (grade === 'LSMGO' ? ' m' : '') + '" style="width:' + liftedPct.toFixed(1) + '%"></i><i class="committed" style="width:' + commPct.toFixed(1) + '%"></i></div>' +
-    (rows.length ? '<div class="deal-tbl-wrap"><table class="deal-tbl"><thead><tr><th>When</th><th>Barge</th><th>Terminal</th><th class="n">Planned MT</th><th class="n">Lifted MT (BL)</th><th>Status</th>' + (operator ? '<th class="deal-act"></th>' : '') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>'
+    (rows.length ? '<div class="deal-tbl-wrap"><table class="deal-tbl"><thead><tr><th>BL date / planned</th><th>Barge</th><th>Terminal</th><th class="n">Planned MT</th><th class="n">BL qty MT</th><th class="n">Left after MT</th><th>Status</th>' + (operator ? '<th class="deal-act"></th>' : '') + '</tr></thead><tbody>' + rows.join('') + '</tbody></table></div>'
       : '<div class="deal-meta">No loading lifts from this deal yet — schedule one on the Loading page (it links automatically) or link an existing one below.</div>') +
-    '<div class="deal-foot">' + linkSel + '<span style="flex:1"></span>' + actions + '</div>' +
+    '<div class="deal-foot">' + linkSel + '<span style="flex:1"></span>' +
+      '<button class="btn btn-secondary btn-sm deal-xls" onclick="dealExportLiftingExcel(\'' + escJs(d.id) + '\', this)" title="Lifting report: BL date, BL quantity and what is left after each lifting">⬇ Excel</button>' +
+      '<button class="btn btn-secondary btn-sm deal-pdf" onclick="dealExportLiftingPdf(\'' + escJs(d.id) + '\', this)" title="Lifting report as PDF">⬇ PDF</button>' +
+      actions + '</div>' +
   '</div>';
 }
+/* ── Lifting report (Excel / PDF): the deal, each lifting with its BL date,
+   BL quantity and what was left after it, then the loadings still scheduled. ── */
+function _dealReportData(id) {
+  const d = _dealById(id, true);
+  if (!d) return null;
+  const lr = _dealLiftingRows(d), st = lr.st;
+  const grade = d.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
+  const head = [
+    ['Supplier', d.supplier || ''], ['Reference', d.ref || '—'], ['Grade', grade], ['Terminal', d.terminal || '—'],
+    ['Deal date', d.date ? _dealDateStr(d.date) : '—'], ['Status', d.status === 'closed' ? 'Closed' : 'Open'],
+  ];
+  const sums = [['Bought', st.bought], ['Lifted (per BL)', st.lifted], ['Left to lift', st.remaining], ['Scheduled', st.committed], ['Free to plan', st.available]];
+  const lifted = lr.lifted.map(function(x, i) {
+    const r = x.rec;
+    return { n: i + 1, blDate: _dealDateStr(x.blDate) + (x.blDateEntered ? '' : ' *'), barge: _resolveRecordBargeName(r) || '', terminal: r.terminal || '',
+      planned: Number(r.qty) || 0, bl: x.qty, blMark: x.blEntered ? '' : ' *', left: x.leftAfter };
+  });
+  const scheduled = lr.scheduled.map(function(r) {
+    return { when: fmt24(new Date(r.startAt)), barge: _resolveRecordBargeName(r) || '', terminal: r.terminal || '', planned: Number(r.qty) || 0 };
+  });
+  const anyStar = lr.lifted.some(function(x) { return !x.blDateEntered || !x.blEntered; });
+  const safe = String((d.supplier || 'Deal') + (d.ref ? ' ' + d.ref : '') + (d.date ? ' ' + d.date : '')).replace(/[^\w.\- ]+/g, '_').trim();
+  return { d: d, grade: grade, head: head, sums: sums, lifted: lifted, scheduled: scheduled, anyStar: anyStar, file: 'FLOW_Lifting_Report_' + safe.replace(/\s+/g, '_'), generated: fmt24(new Date()) };
+}
+async function _dealExportBusy(btn, fn) {
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
+  await new Promise(function(r) { setTimeout(r, 0); });
+  try { await fn(); }
+  catch (err) { alert('Could not create the lifting report: ' + ((err && err.message) || err)); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = label; } }
+}
+async function dealExportLiftingExcel(id, btn) {
+  const R = _dealReportData(id);
+  if (!R) { showToast('That deal is no longer in the list.', 'warning'); return; }
+  await _dealExportBusy(btn, async function() {
+    const ExcelJS = await _loadExcelJS();
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet('Lifting report');
+    ws.columns = [{ width: 6 }, { width: 16 }, { width: 14 }, { width: 24 }, { width: 14 }, { width: 14 }, { width: 16 }];
+    const thin = { style: 'thin', color: { argb: 'FFD8E0E8' } }, border = { top: thin, bottom: thin, left: thin, right: thin };
+    const title = function(r, text, font) { ws.mergeCells('A' + r + ':G' + r); const c = ws.getCell('A' + r); c.value = text; c.font = font; };
+    title(1, 'Lifting report — ' + (R.d.supplier || 'Deal') + ' · ' + R.grade, { bold: true, size: 14, color: { argb: 'FF0D1B2A' } });
+    title(2, 'Generated ' + R.generated, { size: 9, color: { argb: 'FF8A9BAC' } });
+    let r = 4;
+    R.head.forEach(function(h) { ws.getCell('A' + r).value = h[0]; ws.mergeCells('A' + r + ':B' + r); ws.getCell('A' + r).font = { bold: true, color: { argb: 'FF4A6278' } }; ws.getCell('C' + r).value = h[1]; ws.mergeCells('C' + r + ':D' + r); r++; });
+    r = 4;
+    R.sums.forEach(function(sm) { ws.getCell('E' + r).value = sm[0] + ' (MT)'; ws.mergeCells('E' + r + ':F' + r); ws.getCell('E' + r).font = { bold: true, color: { argb: 'FF4A6278' } }; const c = ws.getCell('G' + r); c.value = Math.round(sm[1] * 1000) / 1000; c.numFmt = '#,##0.###'; c.font = { bold: sm[0] === 'Left to lift' }; r++; });
+    r = Math.max(r, 4 + R.head.length) + 1;
+    const header = function(cells) {
+      const row = ws.getRow(r);
+      cells.forEach(function(h, i) { const c = row.getCell(i + 1); c.value = h; c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF0D1B2A' } }; c.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; c.border = border; });
+      row.height = 24; r++;
+    };
+    title(r, 'Liftings (in BL-date order)', { bold: true, size: 11, color: { argb: 'FF0D1B2A' } }); r++;
+    header(['#', 'BL date', 'Barge', 'Terminal', 'Planned (MT)', 'BL qty (MT)', 'Left after (MT)']);
+    if (!R.lifted.length) { title(r, 'No lifting yet.', { italic: true, color: { argb: 'FF8A9BAC' } }); r++; }
+    R.lifted.forEach(function(x) {
+      const row = ws.getRow(r++);
+      [x.n, x.blDate, x.barge, x.terminal, x.planned, x.bl, x.left].forEach(function(v, i) {
+        const c = row.getCell(i + 1); c.value = v; c.border = border;
+        if (i >= 4) { c.numFmt = '#,##0.###'; c.alignment = { horizontal: 'right' }; }
+        if (i === 5 && x.blMark) c.note = 'No BL quantity entered — the planned quantity is used';
+        if (i === 6) c.font = { bold: true };
+      });
+    });
+    if (R.lifted.length) {
+      const row = ws.getRow(r++);
+      row.getCell(4).value = 'Total lifted'; row.getCell(4).font = { bold: true };
+      const t = row.getCell(6); t.value = Math.round(R.lifted.reduce(function(a, x) { return a + x.bl; }, 0) * 1000) / 1000; t.numFmt = '#,##0.###'; t.font = { bold: true };
+      const lft = row.getCell(7); lft.value = R.lifted[R.lifted.length - 1].left; lft.numFmt = '#,##0.###'; lft.font = { bold: true };
+    }
+    r++;
+    title(r, 'Scheduled loadings (not yet completed)', { bold: true, size: 11, color: { argb: 'FF0D1B2A' } }); r++;
+    header(['#', 'Planned start', 'Barge', 'Terminal', 'Planned (MT)', '', '']);
+    if (!R.scheduled.length) { title(r, 'None.', { italic: true, color: { argb: 'FF8A9BAC' } }); r++; }
+    R.scheduled.forEach(function(x, i) {
+      const row = ws.getRow(r++);
+      [i + 1, x.when, x.barge, x.terminal, x.planned].forEach(function(v, j) { const c = row.getCell(j + 1); c.value = v; c.border = border; if (j === 4) { c.numFmt = '#,##0.###'; c.alignment = { horizontal: 'right' }; } });
+    });
+    if (R.anyStar) { r++; title(r, '* No BL date / BL quantity entered for that lifting — the day it was marked Completed / the planned quantity is used.', { size: 9, color: { argb: 'FFB8790F' } }); }
+    const buf = await wb.xlsx.writeBuffer();
+    await _flowSaveOrShareBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), R.file + '.xlsx');
+  });
+}
+async function dealExportLiftingPdf(id, btn) {
+  const R = _dealReportData(id);
+  if (!R) { showToast('That deal is no longer in the list.', 'warning'); return; }
+  await _dealExportBusy(btn, async function() {
+    const jsPDF = await _loadJsPDF();
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 14;
+    let y = M;
+    const fmt = function(n) { return (Math.round((Number(n) || 0) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }); };
+    const ink = function(c) { pdf.setTextColor(c[0], c[1], c[2]); };
+    const room = function(h) { if (y + h > H - M) { pdf.addPage(); y = M; return true; } return false; };
+    pdf.setFont('helvetica', 'bold'); pdf.setFontSize(15); ink([13, 27, 42]);
+    pdf.text('Lifting report — ' + (R.d.supplier || 'Deal') + ' · ' + R.grade, M, y + 5); y += 9;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8.5); ink([138, 155, 172]);
+    pdf.text('Generated ' + R.generated, M, y + 3); y += 8;
+    // deal + totals, two columns
+    pdf.setFontSize(9.5);
+    const half = (W - 2 * M) / 2, rowsN = Math.max(R.head.length, R.sums.length);
+    for (let i = 0; i < rowsN; i++) {
+      const h = R.head[i], s = R.sums[i];
+      if (h) { pdf.setFont('helvetica', 'bold'); ink([74, 98, 120]); pdf.text(h[0], M, y + 4); pdf.setFont('helvetica', 'normal'); ink([13, 27, 42]); pdf.text(String(h[1]), M + 28, y + 4, { maxWidth: half - 30 }); }
+      if (s) { pdf.setFont('helvetica', 'bold'); ink([74, 98, 120]); pdf.text(s[0] + ' (MT)', M + half, y + 4); pdf.setFont('helvetica', s[0] === 'Left to lift' ? 'bold' : 'normal'); ink([13, 27, 42]); pdf.text(fmt(s[1]), W - M, y + 4, { align: 'right' }); }
+      y += 5.5;
+    }
+    y += 4;
+    const table = function(caption, cols, rows, emptyText, totals) {
+      room(20);
+      pdf.setFont('helvetica', 'bold'); pdf.setFontSize(11); ink([13, 27, 42]); pdf.text(caption, M, y + 4); y += 7;
+      const drawHead = function() {
+        pdf.setFillColor(13, 27, 42); pdf.rect(M, y, W - 2 * M, 7, 'F');
+        pdf.setFontSize(8.5); pdf.setFont('helvetica', 'bold'); ink([255, 255, 255]);
+        let x = M; cols.forEach(function(c) { pdf.text(c.t, c.r ? x + c.w - 1.5 : x + 1.5, y + 4.8, { align: c.r ? 'right' : 'left' }); x += c.w; });
+        y += 7;
+      };
+      drawHead();
+      if (!rows.length) { pdf.setFont('helvetica', 'italic'); pdf.setFontSize(9); ink([138, 155, 172]); pdf.text(emptyText, M + 1.5, y + 5); y += 8; return; }
+      rows.forEach(function(row, ri) {
+        if (room(7)) drawHead();
+        if (ri % 2) { pdf.setFillColor(242, 245, 249); pdf.rect(M, y, W - 2 * M, 6.5, 'F'); }
+        pdf.setFont('helvetica', 'normal'); pdf.setFontSize(9); ink([13, 27, 42]);
+        let x = M;
+        cols.forEach(function(c, ci) { if (c.b) pdf.setFont('helvetica', 'bold'); pdf.text(String(row[ci]), c.r ? x + c.w - 1.5 : x + 1.5, y + 4.5, { align: c.r ? 'right' : 'left', maxWidth: c.w - 3 }); if (c.b) pdf.setFont('helvetica', 'normal'); x += c.w; });
+        y += 6.5;
+      });
+      if (totals) {
+        room(8); pdf.setDrawColor(13, 27, 42); pdf.line(M, y, W - M, y);
+        pdf.setFont('helvetica', 'bold'); pdf.setFontSize(9); ink([13, 27, 42]);
+        let x = M; cols.forEach(function(c, ci) { if (totals[ci] !== '') pdf.text(String(totals[ci]), c.r ? x + c.w - 1.5 : x + 1.5, y + 4.8, { align: c.r ? 'right' : 'left' }); x += c.w; });
+        y += 8;
+      }
+      y += 4;
+    };
+    const tw = W - 2 * M;
+    table('Liftings (in BL-date order)',
+      [{ t: '#', w: tw * 0.06 }, { t: 'BL date', w: tw * 0.16 }, { t: 'Barge', w: tw * 0.13 }, { t: 'Terminal', w: tw * 0.23 }, { t: 'Planned MT', w: tw * 0.13, r: 1 }, { t: 'BL qty MT', w: tw * 0.14, r: 1 }, { t: 'Left after MT', w: tw * 0.15, r: 1, b: 1 }],
+      R.lifted.map(function(x) { return [x.n, x.blDate, x.barge, x.terminal, fmt(x.planned), fmt(x.bl) + x.blMark, fmt(x.left)]; }),
+      'No lifting yet.',
+      R.lifted.length ? ['', '', '', 'Total lifted', '', fmt(R.lifted.reduce(function(a, x) { return a + x.bl; }, 0)), fmt(R.lifted[R.lifted.length - 1].left)] : null);
+    table('Scheduled loadings (not yet completed)',
+      [{ t: '#', w: tw * 0.06 }, { t: 'Planned start', w: tw * 0.24 }, { t: 'Barge', w: tw * 0.15 }, { t: 'Terminal', w: tw * 0.35 }, { t: 'Planned MT', w: tw * 0.2, r: 1 }],
+      R.scheduled.map(function(x, i) { return [i + 1, x.when, x.barge, x.terminal, fmt(x.planned)]; }), 'None.');
+    if (R.anyStar) { room(8); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); ink([184, 121, 15]); pdf.text('* No BL date / BL quantity entered for that lifting — the day it was marked Completed / the planned quantity is used.', M, y + 3, { maxWidth: tw }); }
+    const pages = pdf.internal.getNumberOfPages();
+    for (let i = 1; i <= pages; i++) { pdf.setPage(i); pdf.setFont('helvetica', 'normal'); pdf.setFontSize(8); ink([138, 155, 172]); pdf.text('FLOW · Loading Deals · page ' + i + ' of ' + pages, W / 2, H - 6, { align: 'center' }); }
+    await _flowSaveOrShareBlob(pdf.output('blob'), R.file + '.pdf');
+  });
+}
+
 function renderDeals() {
   const host = document.getElementById('deal-list');
   if (!host) return;
@@ -9655,7 +9845,7 @@ function renderLoadingList() {
         + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
         + '<div style="flex:1;min-width:160px">'
           + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + esc(r.terminal || '—') + '</div>'
-          + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.completed && r.blQty != null ? ' planned · <b>BL ' + Number(r.blQty).toLocaleString() + ' MT</b>' : '') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+          + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.completed && r.blQty != null ? ' planned · <b>BL ' + Number(r.blQty).toLocaleString() + ' MT</b>' + (r.blDate ? ' · BL date ' + esc(_dealDateStr(r.blDate)) : '') : '') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
           + (r.dealId ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Deal: ' + (_dealById(r.dealId) ? esc(_dealLabel(_dealById(r.dealId))) : 'removed — link it again on the Loading Deals page') + '</div>' : '')
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + esc(r.surveyor) + '</div>' : '')
         + '</div>'
@@ -25067,7 +25257,10 @@ async function init() {
       <button onclick="closeBlModal()" aria-label="Close" id="bl-close-btn" style="background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.2);color:#fff;width:32px;height:32px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center">×</button>
     </div>
     <div style="padding:20px">
+      <div class="bl-row" style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field"><label for="bl-date">BL date</label><input type="date" id="bl-date" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
       <div class="field"><label for="bl-qty">Quantity loaded per BL (MT)</label><input type="number" id="bl-qty" min="0" step="1" inputmode="decimal" oninput="_blPreview()" onkeydown="if(event.key==='Enter'){event.preventDefault();blConfirm();}"></div>
+      </div>
       <div id="bl-deal" style="font-size:11.5px;color:var(--sub);margin:8px 0 16px;line-height:1.5"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end">
         <button class="btn btn-secondary" onclick="closeBlModal()">Cancel</button>
