@@ -249,15 +249,28 @@ const { check } = U;
       const db = U.H.createDb();
       const B = await U.open(browser, db, 'user-operator2');
       await U.helpers(B);
+      // Diagnostics: this step has (rarely, ~1 in 100 runs) lost B's page to a
+      // navigation mid-pull. Record what the page did, so a failure names the cause.
+      const trail = [];
+      B.page.on('framenavigated', f => { if (f === B.page.mainFrame()) trail.push('navigated ' + f.url()); });
+      B.page.on('request', r => { if (r.isNavigationRequest()) trail.push('navigation request ' + r.url().slice(0, 120)); });
+      B.page.on('crash', () => trail.push('page crashed'));
+      B.page.on('console', m => { if (/^T6TRAIL /.test(m.text())) trail.push(m.text().slice(7, 400)); });
+      await B.page.evaluate(() => {
+        ['_buildReload', '_buildOffer', 'operatorLogout', 'wipeSupabaseWorkspace', 'nuclearClear'].forEach(n => { const o = window[n]; if (typeof o === 'function') window[n] = function() { console.log('T6TRAIL called ' + n + ' ' + (new Error().stack || '').split('\n').slice(2, 6).join(' | ')); return o.apply(this, arguments); }; });
+        window.addEventListener('beforeunload', () => console.log('T6TRAIL beforeunload ' + (new Error().stack || '').split('\n').slice(1, 6).join(' | ')));
+        document.addEventListener('visibilitychange', () => console.log('T6TRAIL visibility ' + document.visibilityState));
+      });
+      const t6Evaluate = async (fn) => { try { return await B.page.evaluate(fn); } catch (e) { console.log('T6 diagnostics: ' + JSON.stringify(trail)); throw e; } };
       let fail = true;
       db.intercept = (op) => (fail && op.uid === 'user-operator2' && ['insert', 'update', 'upsert'].includes(op.action)) ? { data: null, error: { message: 'Failed to fetch' } } : null;
-      const okB = await B.page.evaluate(async () => { addVessel({ name: 'FROM-B', nomUid: 'nb' }); return saveSharedState(); });
+      const okB = await t6Evaluate(async () => { addVessel({ name: 'FROM-B', nomUid: 'nb' }); return saveSharedState(); });
       check(okB === false, 'B\'s first save failed');
       const A = await U.open(browser, db, 'user-operator');
       await U.helpers(A);
       await A.page.evaluate(async () => { addVessel({ name: 'FROM-A', nomUid: 'na' }); return saveSharedState(); });
       fail = false;
-      await B.page.evaluate(() => _pollOnce(true));
+      await t6Evaluate(() => _pollOnce(true));
       await B.page.waitForTimeout(500);
       const names = U.row(db).payload.state.vessels.map(v => v.name).sort();
       check(JSON.stringify(names) === '["FROM-A","FROM-B"]', 'both vessels in the cloud (' + names + ')');
