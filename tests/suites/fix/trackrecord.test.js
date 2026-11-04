@@ -34,7 +34,7 @@ function monthKey(t) { const d = new Date(t); return d.getFullYear() + '-' + Str
 
   // ── 2. one vessel however it is typed ──
   const keys = await p.evaluate(() => ['ELANDRA SEA', 'Elandra sea', '  MV Elandra   Sea ', 'M/V ELANDRA SEA', 'm.v. elandra sea.'].map(_trVesselKey));
-  check(new Set(keys).size === 1 && keys[0] === 'elandra sea', 'vessel key ignores case/spaces/MV prefix ' + JSON.stringify(keys));
+  check(new Set(keys).size === 1 && keys[0] === 'elandrasea', 'vessel key ignores case/spaces/punctuation/MV prefix ' + JSON.stringify(keys));
 
   // ── 3. watchlist: deduped, only real disputes, expandable details ──
   const w = await p.evaluate(() => {

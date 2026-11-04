@@ -21069,12 +21069,13 @@ function _dlTombstonesFor(log) {
    older supplies only know late vs within. */
 const TR_WATCH_MONTHS = 2;
 
-// One key per vessel however its name was typed: case, extra spaces and a
-// ship-type prefix (MV, M/V, M.V., MT, M/T, M.T.) are ignored
-// ("MT DAISY" = "Daisy", "M/V Elandra Sea" = "ELANDRA SEA").
+// One key per vessel however its name was typed: case, spaces, punctuation
+// and a ship-type prefix (MV, M/V, M.V., MT, M/T, M.T.) are ignored
+// ("MT DAISY" = "Daisy", "M.V.STAR NINA" = "Star Nina", "SEA-VALIANT" =
+// "SEA VALIANT", "ST. JOHN'S" = "ST JOHNS"). A nomination's IMO also matches.
 function _trVesselKey(name) {
-  return String(name || '').toLowerCase().replace(/[\s ]+/g, ' ').trim()
-    .replace(/^m\s*[.\/]?\s*[vt]\.?\s+/, '').replace(/[.,;:]+$/, '').trim();
+  return String(name || '').toLowerCase().replace(/[\s\u00a0]+/g, ' ').trim()
+    .replace(/^m\s*[.\/]?\s*[vt]\b\.?\s*/, '').replace(/[^a-z0-9]+/g, '');
 }
 function _trEntryTime(e) {
   const t = new Date(e && (e.supplyDate || e.loggedAt) || '').getTime();
@@ -21088,34 +21089,58 @@ function _trWatchFrom(now) {
   return from;
 }
 
-/* Everything the Delivery Log says about one vessel (all months), newest
-   first. null when it has never been supplied. Each delivery: entry, late,
-   early, dispute (the ⚠ Dispute entry or null), flagged. */
-function computeVesselTrackRecord(vesselName) {
-  const name = _trVesselKey(vesselName);
-  if (!name) return null;
-  const deliveries = [];
+/* The Delivery Log indexed by vessel — built once and reused until the end
+   of the current task (a render pass, a bell refresh), so many cards and the
+   watchlist cost one scan of the log, not one each. */
+let _trIndexCache = null;
+function _trIndex() {
+  if (_trIndexCache) return _trIndexCache;
+  const byKey = new Map(), byImo = new Map();
+  const add = function(map, k, d) { if (!k) return; if (!map.has(k)) map.set(k, []); map.get(k).push(d); };
   Object.keys(_deliveryLog || {}).sort().forEach(function(monthKey) {
     const month = _deliveryLog[monthKey] || {};
     const disputeByUid = {}, disputesNoUid = [];
     _dlLive(month.disputes).forEach(function(e) {
-      if (_trVesselKey(e.vessel) !== name || !_dlIsDispute(e)) return;
+      if (!_trVesselKey(e.vessel) || !_dlIsDispute(e)) return;
       if (e.checklistUid) disputeByUid[e.checklistUid] = e; else disputesNoUid.push(e);
     });
     [['timely', false], ['delayed', true]].forEach(function(b) {
       _dlLive(month[b[0]]).forEach(function(e) {
-        if (_trVesselKey(e.vessel) !== name) return;
+        const key = _trVesselKey(e.vessel);
+        if (!key) return;
         const late = b[1], early = !late && !!e.isEarly;
         const dispute = (e.checklistUid && disputeByUid[e.checklistUid]) || null;
         if (dispute) delete disputeByUid[e.checklistUid];
-        deliveries.push({ entry: e, late: late, early: early, dispute: dispute,
-          flagged: late || early || !!e.flagUnready || !!e.flagInconsistentDispute || !!dispute });
+        const d = { entry: e, key: key, late: late, early: early, dispute: dispute,
+          flagged: late || early || !!e.flagUnready || !!e.flagInconsistentDispute || !!dispute };
+        add(byKey, key, d);
+        add(byImo, String(e.imo || '').trim(), d);
       });
     });
     // A dispute whose supply is not in the log any more still counts.
     Object.keys(disputeByUid).map(function(k) { return disputeByUid[k]; }).concat(disputesNoUid).forEach(function(e) {
-      deliveries.push({ entry: e, late: false, early: false, dispute: e, flagged: true, orphanDispute: true });
+      const key = _trVesselKey(e.vessel);
+      const d = { entry: e, key: key, late: false, early: false, dispute: e, flagged: true, orphanDispute: true };
+      add(byKey, key, d);
+      add(byImo, String(e.imo || '').trim(), d);
     });
+  });
+  _trIndexCache = { byKey: byKey, byImo: byImo };
+  Promise.resolve().then(function() { _trIndexCache = null; });
+  return _trIndexCache;
+}
+
+/* Everything the Delivery Log says about one vessel (all months), newest
+   first — by name, and by IMO when one is given. null when it has never
+   been supplied. Each delivery: entry, key, late, early, dispute (the
+   ⚠ Dispute entry or null), flagged. */
+function computeVesselTrackRecord(vesselName, imo) {
+  const name = _trVesselKey(vesselName);
+  const im = String(imo || '').trim();
+  if (!name && !im) return null;
+  const idx = _trIndex(), seen = new Set(), deliveries = [];
+  (idx.byKey.get(name) || []).concat(im ? (idx.byImo.get(im) || []) : []).forEach(function(d) {
+    if (!seen.has(d)) { seen.add(d); deliveries.push(d); }
   });
   if (!deliveries.length) return null;
   deliveries.sort(function(a, b) { return _trEntryTime(b.entry) - _trEntryTime(a.entry); });
@@ -21154,7 +21179,8 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
   const nameEl = document.getElementById(nameInputId);
   const bannerEl = document.getElementById(bannerElId);
   if (!nameEl || !bannerEl) return;
-  const tr = computeVesselTrackRecord(nameEl.value);
+  const imoEl = /^v\d+-name$/.test(nameInputId) ? document.getElementById(nameInputId.replace(/-name$/, '-imo')) : null;
+  const tr = computeVesselTrackRecord(nameEl.value, imoEl ? imoEl.value : '');
   if (!tr || (!tr.flagged && tr.total < 2)) { bannerEl.innerHTML = ''; return; }
   const rows = [];
   if (tr.late || tr.early) {
@@ -21162,7 +21188,9 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
     if (tr.late) parts.push('<strong>after</strong> its laycan <strong>' + tr.late + '×</strong>');
     if (tr.early) parts.push('<strong>before</strong> its laycan <strong>' + tr.early + '×</strong>');
     rows.push('⚠ Came ' + parts.join(' and ') + ' in ' + tr.total + ' suppl' + (tr.total > 1 ? 'ies' : 'y') + ' — last ' + esc(_trDay(tr.lastLaycanFlag.entry)) + '.');
-  } else {
+  } else if (tr.total === 1) {
+    rows.push('Within laycan on its only supply.');
+  } else if (tr.total > 1) {
     rows.push('Within laycan on all <strong>' + tr.total + '</strong> supplies.');
   }
   if (tr.disputes.length) rows.push('<strong>' + tr.disputes.length + '</strong> dispute' + (tr.disputes.length > 1 ? 's' : '') + ' recorded — see Delivery Log.');
@@ -21179,7 +21207,7 @@ function renderVesselTrackRecordBanner(nameInputId, bannerElId) {
   '</div>';
 }
 
-/* Upcoming nominations (cards not yet supplied, not long past) of a vessel
+/* Open nominations (cards not yet supplied, however overdue) of a vessel
    with an out-of-laycan supply at any time — one per nomination. They feed
    the alerts bell, the Generate Schedule warning and the watchlist's
    "Nominated again" marker. */
@@ -21191,16 +21219,13 @@ function _trRenominated(now) {
     const g = function(f) { const el = document.getElementById('v' + cid + '-' + f); return el ? String(el.value || '') : ''; };
     const name = g('name').trim().replace(/\s+/g, ' ');
     if (!name) return;
-    const tr = computeVesselTrackRecord(name);
+    const tr = computeVesselTrackRecord(name, g('imo').trim());
     if (!tr || !(tr.late || tr.early)) return;
     const nomUid = card.dataset.nomUid || '';
     const eta = g('eta') ? parseDT(g('eta')) : null;
-    let lc = null;
-    try { lc = g('lc') ? parseLaycan(g('lc')) : null; } catch (e) { lc = null; }
-    const last = Math.max(eta instanceof Date && !isNaN(eta.getTime()) ? eta.getTime() : 0, lc && lc.to instanceof Date && !isNaN(lc.to.getTime()) ? lc.to.getTime() : 0);
-    if (last && last < now - 2 * 86400000) return; // long past — not an upcoming nomination
+    // Every open nomination counts, however overdue — only a supplied one is skipped.
     try { if (typeof _isScheduleItemCompleted === 'function' && _isScheduleItemCompleted({ nomUid: nomUid || null, name: name, eta: eta })) return; } catch (e) {}
-    out.push({ cid: cid, nomUid: nomUid, name: name, key: _trVesselKey(name), tr: tr,
+    out.push({ cid: cid, nomUid: nomUid, name: name, key: tr.deliveries[0].key || _trVesselKey(name), tr: tr,
       eta: eta instanceof Date && !isNaN(eta.getTime()) ? eta : null, lcText: g('lc').trim() });
   });
   return out;
@@ -21248,6 +21273,7 @@ function _trSyncAlertsSoon() {
 }
 // After a pull / merge / first load: banners, bell and watchlist follow the Delivery Log.
 function _trAfterApply() {
+  _trIndexCache = null; // a pulled / merged Delivery Log
   try { _trRefreshCardBanners(); } catch (e) {}
   _trSyncAlertsSoon();
 }
@@ -21328,7 +21354,7 @@ function renderTrackRecordWatchlist() {
     if (inc) parts.push('<strong>⚠ Inconsistent claim ×' + inc + '</strong>');
     if (dis) parts.push('<strong>' + dis + '</strong> dispute' + (dis > 1 ? 's' : ''));
     if (!recent.length) parts.push('nothing in the last ' + TR_WATCH_MONTHS + ' months');
-    const history = 'All supplies: ' + tr.total + (tr.late || tr.early ? ' — ' + esc(_trLaycanSummary(tr)) : ' — all within laycan');
+    const history = !tr.total ? 'No supply on record' : 'All supplies: ' + tr.total + (tr.late || tr.early ? ' — ' + esc(_trLaycanSummary(tr)) : tr.total === 1 ? ' — within laycan' : ' — all within laycan');
     const shown = recent.length ? recent : tr.deliveries.filter(function(d) { return d.flagged; });
     const lines = shown.map(function(d) {
       const e = d.entry;
@@ -21367,9 +21393,21 @@ function renderTrackRecordWatchlist() {
   '</div>';
 }
 
+// The nomination card's laycan status and IMO right now (a card corrected after
+// Generate must not be logged with the old schedule's late / early). null when
+// the card is gone (the values stamped from the schedule are used then).
+function _trLiveLaycan(rec) {
+  if (!rec || !rec.nomUid || typeof getVessels !== 'function') return null;
+  let v = null;
+  try { v = getVessels(true).find(function(x) { return x.nomUid === rec.nomUid; }); } catch (e) { return null; }
+  return v ? { isDelayed: !!v.isDelayed, isEarly: !!(v.isEarly || v.held), imo: String(v.imo || '').trim() } : null;
+}
+
 // Called from saveChecklistRecord() at the exact moment a supply is saved —
 // this is the single, automatic entry point for the whole Delivery Log.
 function _logDelivery(rec, supplyRec) {
+  const live = _trLiveLaycan(rec);
+  if (live) { rec.isDelayed = live.isDelayed; rec.isEarly = live.isEarly; }
   const key = _dlMonthKey(supplyRec.supplyDate || rec.supplyDate);
   const month = _dlEnsureMonth(key);
   const base = {
@@ -21395,6 +21433,7 @@ function _logDelivery(rec, supplyRec) {
   // Came BEFORE the laycan opened (held to it included): kept on the entry
   // so the track record can flag it (only stored when true).
   if (!rec.isDelayed && rec.isEarly) base.isEarly = true;
+  if (live && live.imo) base.imo = live.imo; // lets a re-nomination match by IMO too
   const bucket = rec.isDelayed ? month.delayed : month.timely;
   const already = bucket.some(function(e) { return e && !e.deleted && e.checklistUid === rec.uid; });
   if (!already) bucket.push(base);
@@ -21446,6 +21485,9 @@ function _dlIsDispute(e) {
 
 function _saveDeliveryLog() {
   try { localStorage.setItem('abps_delivery_log_v1', JSON.stringify(_deliveryLog)); } catch(e) {}
+  _trIndexCache = null; // the log changed: the next look-up rebuilds the index
+  // A supply saved / removed / flagged: card banners, the bell and the watchlist follow.
+  if (typeof _trAfterApply === 'function') { clearTimeout(_saveDeliveryLog._t); _saveDeliveryLog._t = setTimeout(_trAfterApply, 0); }
 }
 function _loadDeliveryLogLocal() {
   try {

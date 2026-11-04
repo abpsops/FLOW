@@ -8,6 +8,9 @@
      again", first), its card shows the banner, the bell lists it (click → card, new = toast) and
      Generate Schedule warns once (never blocks)
    • a clean vessel or one with no history raises nothing; a trader sees the bell entry too
+   • names match across punctuation (SEA-VALIANT, M.V.STAR NINA) and by IMO; overdue open
+     nominations count; a card corrected after Generate is logged as it is now; a saved supply
+     redraws the other cards' banners at once
    node suites/fix2/trackrecord-laycan.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -150,6 +153,47 @@ const nom = (nomUid, name, daysAhead) => { const eta = new Date(NOW + daysAhead 
     await sleep(900);
     const t = await T.page.evaluate(() => { _refreshGlobalAlertsBell(); return [...document.querySelectorAll('#global-alerts-list [data-alert-key]')].map(e => e.dataset.alertKey).filter(k => /^tr\|/.test(k)); });
     check('T5 a trader sees the bell entry for the returning vessel only (not for a vessel with no history)', t.length === 1 && t[0] === 'tr|n1', t);
+  });
+
+  /* T6 — review fixes: the card as it is at save, banners after a save, overdue, punctuation + IMO, wording */
+  await scenario('T6 review fixes', async (openT) => {
+    const dl = log([['delayed', ent('SEA-VALIANT', 30)], ['delayed', ent('M.V.STAR NINA', 25)], ['delayed', ent("ST. JOHN'S PRIDE", 20)], ['timely', ent('IMO SHIP', 18, { imo: '9074729' })], ['delayed', ent('OLD NAME', 15, { imo: '9321483' })], ['timely', ent('ONCE CLEAN', 4, { flagUnready: true })]]);
+    const vs = [nom('p1', 'SEA VALIANT', 2), nom('p2', 'STAR NINA', 3), nom('p3', 'ST JOHNS PRIDE', 4), Object.assign(nom('p4', 'NEW NAME', 5), { imo: '9321483' }), nom('p5', 'OVERDUE LATE', -5), nom('p6', 'ONCE CLEAN', 6)];
+    const dl2 = Object.assign({}, dl); const late5 = ent('OVERDUE LATE', 40); const k = monthKey(late5.supplyDate); dl2[k] = dl2[k] || { timely: [], delayed: [], disputes: [] }; dl2[k].delayed = (dl2[k].delayed || []).concat([late5]);
+    const db = H.createDb({ workspace: U.seedPayload({ deliveryLog: dl2, vessels: vs }), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await sleep(900);
+    const r = await A.page.evaluate(() => ({ again: _trRenominated().map(x => x.nomUid).sort(), banners: ['p1', 'p2', 'p3', 'p4', 'p6'].map(n => (document.getElementById('v' + __cardFor(n) + '-track-record') || {}).textContent.replace(/\s+/g, ' ')) }));
+    check('T6 "SEA-VALIANT" / "M.V.STAR NINA" / "ST. JOHN\'S PRIDE" match "SEA VALIANT" / "STAR NINA" / "ST JOHNS PRIDE"; a renamed vessel matches by IMO; an overdue open nomination still counts', JSON.stringify(r.again) === JSON.stringify(['p1', 'p2', 'p3', 'p4', 'p5']), r);
+    check('T6 one clean supply with an unready flag reads "Within laycan on its only supply" (not "all 1 supplies")', /Within laycan on its only supply/.test(r.banners[4]) && !/all 1 supplies/.test(r.banners.join('|')), r.banners);
+    // a card corrected after Generate is logged as it is now (within laycan: no flag)
+    const fix = await A.page.evaluate(async () => {
+      const MO = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'], p = n => String(n).padStart(2, '0');
+      const f = d => `${p(d.getDate())} ${MO[d.getMonth()]} ${d.getFullYear()}`;
+      addVessel({ name: 'STALE EARLY' }); const cards = document.querySelectorAll('.vcard[id^="vessel-"]'); const cid = cards[cards.length - 1].id.replace('vessel-', '');
+      const set = (fld, v) => { const el = document.getElementById('v' + cid + '-' + fld); el.value = v; };
+      const lc0 = new Date(Date.now() + 4 * 864e5), lc1 = new Date(Date.now() + 6 * 864e5), eta1 = new Date(Date.now() + 864e5), eta5 = new Date(Date.now() + 5 * 864e5);
+      set('lc', f(lc0) + ' - ' + f(lc1)); set('eta', f(eta1) + ' 08:00'); set('vlsfo', '300');
+      calculate(); renderChecklist(_lastSched || []);
+      const nomUid = cards[cards.length - 1].dataset.nomUid;
+      const rec = Object.values(_checklistRecords).find(x => x.nomUid === nomUid);
+      const stampedEarly = rec && rec.isEarly;
+      set('eta', f(eta5) + ' 08:00'); // corrected into the laycan, no Generate
+      _logDelivery(rec, { id: 'sup_stale', supplyDate: new Date().toISOString(), dateStr: 'today', vlsfoAct: 300, mgoAct: 0 });
+      const e = Object.values(_deliveryLog).flatMap(m => [].concat(m.timely || [], m.delayed || [])).find(x => x.checklistUid === rec.uid);
+      const inDelayed = Object.values(_deliveryLog).some(m => (m.delayed || []).some(x => x.checklistUid === rec.uid));
+      return { stampedEarly, isEarly: e && !!e.isEarly, inDelayed };
+    });
+    check('T6 a card corrected into its laycan after Generate is logged within laycan (no early / late flag from the old schedule)', fix.stampedEarly === true && fix.isEarly === false && fix.inDelayed === false, fix);
+    // a late supply saved: the other open card of the same vessel shows the banner without a reload
+    const twin = await A.page.evaluate(async () => {
+      addVessel({ name: 'TWIN STAR' }); const cards = document.querySelectorAll('.vcard[id^="vessel-"]'); const cid = cards[cards.length - 1].id.replace('vessel-', '');
+      const before = (document.getElementById('v' + cid + '-track-record') || {}).textContent || '';
+      _logDelivery({ uid: 'tw1', vessel: 'TWIN STAR', bargeLabel: 'Barge 1', isDelayed: true, notes: '' }, { id: 'sup_tw1', supplyDate: new Date().toISOString(), dateStr: 'today', vlsfoAct: 300, mgoAct: 0 });
+      await new Promise(r => setTimeout(r, 900));
+      return { before, after: ((document.getElementById('v' + cid + '-track-record') || {}).textContent || '').replace(/\s+/g, ' ') };
+    });
+    check('T6 a late supply saved: the open card of the same vessel shows the banner at once', twin.before === '' && /Came after its laycan 1×/.test(twin.after), twin);
   });
 
   await browser.close();
