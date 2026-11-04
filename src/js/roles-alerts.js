@@ -58,6 +58,11 @@ function computeGlobalAlerts() {
   if (typeof _vidAlerts === 'function') {
     try { _vidAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: IMO/MMSI alerts failed', e); }
   }
+  // A vessel that came outside its laycan before, nominated again — one per
+  // nomination ('tr|<nomUid>'), opens the card.
+  if (typeof _trAlerts === 'function') {
+    try { _trAlerts().forEach(function(a) { alerts.push(a); }); } catch (e) { console.warn('ABPS: track record alerts failed', e); }
+  }
   return alerts;
 }
 
@@ -89,6 +94,11 @@ function _refreshGlobalAlertsBell() {
           const color = a.severity === 'error' ? 'var(--red)' : 'var(--amber)';
           // Missing IMO / MMSI opens the nomination card.
           if (a.kind === 'ids' && a.cid != null) return `<div class="ga-item ga-open" role="button" tabindex="0" data-alert-key="${esc(a.key)}" onclick="_vidGoTo('${escJs(a.cid)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_vidGoTo('${escJs(a.cid)}')}" style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px;cursor:pointer">
+            <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
+            <div style="color:var(--sub);font-size:11px;margin-top:1px">${esc(a.sub)}</div>
+          </div>`;
+          // Track record: a flagged vessel nominated again opens its card.
+          if (a.kind === 'tr' && a.cid != null) return `<div class="ga-item ga-open" role="button" tabindex="0" data-alert-key="${esc(a.key)}" onclick="_trGoTo('${escJs(a.cid)}')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();_trGoTo('${escJs(a.cid)}')}" style="padding:7px 6px;border-top:1px solid var(--border);font-size:12px;cursor:pointer">
             <div style="font-weight:700;color:${color}">${esc(a.label)}</div>
             <div style="color:var(--sub);font-size:11px;margin-top:1px">${esc(a.sub)}</div>
           </div>`;

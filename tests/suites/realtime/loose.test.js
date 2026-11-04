@@ -67,7 +67,7 @@ async function fyProbe(app) {
         check(ph[0] === '01 Jan 2027' && ph[1] === '31 Jan 2027', 'date placeholders follow the year ' + JSON.stringify(ph));
         await app.page.evaluate(() => { const s = document.getElementById('rep-monthly-qty-year-select'); s.value = '__live__'; _onFYChartSelectorChange(); });
       }
-      check(/since Sep 2026/.test(r.dash.track), 'track record keeps its fixed start (Sep 2026) in ' + label);
+      check(/\(last 2 months\)/.test(r.dash.track) && !/Sep 2026/.test(r.dash.track), 'track record watchlist is the rolling last 2 months (no fixed start) in ' + label + ': ' + r.dash.track);
       // screenshots: dashboard chart + analytics chart
       for (const [pg, id] of [['dashboard', 'chart-monthly-qty-dashboard'], ['reports', 'chart-monthly-qty-analytics']]) {
         await app.page.evaluate(p => { showPage(p); if (p === 'dashboard') refreshDashboard(); else renderReportCharts(_savedSupplies); }, pg);

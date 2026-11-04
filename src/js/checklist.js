@@ -90,6 +90,7 @@ function injectChecklistFromSchedule(sched) {
         bargeLabel: item.bargeLabel || '',
         supplyDate: item.bargeStart || item.eta,
         isDelayed:  !!item.isDelayed,
+        isEarly:    !!(item.isEarly || item.held), // came before the laycan opened (held to it included)
         state:      'draft',
         lockedAt:   null
       };
@@ -105,7 +106,7 @@ function injectChecklistFromSchedule(sched) {
       _checklistRecords[uid].bargeLabel = item.bargeLabel || '';
       _checklistRecords[uid].supplyDate = item.bargeStart || item.eta;
       _checklistRecords[uid].isDelayed  = !!item.isDelayed;
-      _checklistRecords[uid].isEarly    = !!item.isEarly;
+      _checklistRecords[uid].isEarly    = !!(item.isEarly || item.held);
       _clStampRange(_checklistRecords[uid], item);
     }
     // If supplied/locked: DO NOT touch any field
