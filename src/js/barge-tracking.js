@@ -238,12 +238,15 @@ function _dismissTrackingReportAlerts() {
 // Keeps the Loading form's barge dropdown in sync with the configured
 // fleet, preserving whatever is currently selected where possible.
 function _populateLoadingBargeSelect() {
-  const sel = document.getElementById('ld-barge');
-  if (!sel) return;
   const fleet = _fleetNow();
-  const prev = sel.value;
-  sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
-  if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
+  ['ld-barge', 'ld-from-barge'].forEach(function(id) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
+    if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
+  });
+  if (typeof _ldKind === 'function' && _ldKind() === 'transfer') _ldSyncFromBarge();
 }
 
 // Loadings whose window hasn't fully passed, scoped to one barge — used to
@@ -252,7 +255,14 @@ function _populateLoadingBargeSelect() {
 function _loadingsForBargeName(name) {
   const now = new Date();
   return (_loadingRecords || []).filter(function(r) {
-    return !r.deletedAt && !r.completed && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+    return !r.deletedAt && !r.completed && r.kind !== 'transfer' && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+  });
+}
+// Barge transfers still ahead that involve this barge (discharging or receiving).
+function _transfersForBargeName(name) {
+  const now = new Date();
+  return (_loadingRecords || []).filter(function(r) {
+    return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && new Date(r.endAt) >= now && (r.barge === name || r.fromBarge === name);
   });
 }
 

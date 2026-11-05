@@ -46,13 +46,26 @@
   <!-- Add loading form -->
   <div class="card" id="loading-form-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
     <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Schedule a Loading</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
+    <div class="ld-kind-row" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:6px 0 10px">
+      <div class="field" style="min-width:220px"><label for="ld-kind">Type</label>
+        <select id="ld-kind" onchange="_ldKindChanged()">
+          <option value="loading">Terminal loading</option>
+          <option value="transfer">Barge transfer (barge to barge)</option>
+        </select>
+      </div>
+      <div class="field ld-xfer-only" id="ld-from-barge-field" style="min-width:220px;display:none"><label for="ld-from-barge">From barge <span style="font-weight:400;color:var(--muted)">— discharges</span></label>
+        <select id="ld-from-barge" onchange="_ldSyncFromBarge();_recalcLoadingEstimate()"></select>
+      </div>
+      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--purple);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
+    </div>
+    <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the giving barge's pump rate for that grade (Barge Fleet) + hose-up time; both barges are blocked for it in the schedule.</div>
+    <div class="ld-load-only" style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-      <div class="field"><label for="ld-barge">Barge</label>
-        <select id="ld-barge"></select>
+      <div class="field"><label for="ld-barge" id="ld-barge-label">Barge</label>
+        <select id="ld-barge" onchange="_recalcLoadingEstimate()"></select>
       </div>
-      <div class="field"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
+      <div class="field ld-load-only"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
       <div class="field"><label for="ld-grade">Grade</label>
         <select id="ld-grade" onchange="_recalcLoadingEstimate();_ldRefreshDealSelect(undefined, 'grade')">
           <option value="VLSFO">VLSFO</option>
@@ -63,10 +76,10 @@
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
-      <div class="field"><label for="ld-start-date">Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label for="ld-start-date" id="ld-start-date-label">Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
       <div class="field"><label for="ld-start-time">Start Time (24h)</label><input type="text" id="ld-start-time" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_validateTime24Input(this)"></div>
-      <div class="field"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
-      <div class="field"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field ld-load-only"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field ld-load-only"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
     </div>
     <!-- Start given only as a part of the day (AM / PM …): start = frame start, completion = frame end + duration (worst case). -->
     <div class="field tf-row ld-tf-row" style="margin:-4px 0 12px">
@@ -86,7 +99,7 @@
       <div class="field"><label for="ld-surveyor">Surveyor</label><input type="text" id="ld-surveyor" placeholder="e.g. SGS, Intertek, independent surveyor"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-      <div class="field"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
+      <div class="field ld-load-only"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
         <select id="ld-deal" onchange="this.dataset.manual=this.value?'1':'none'"><option value="">No deal</option></select>
       </div>
       <div class="field"><label for="ld-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>

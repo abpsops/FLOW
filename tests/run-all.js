@@ -61,6 +61,7 @@ const SUITES = [
   ['fix-tracker-samename', 'suites/fix2/tracker-samename.test.js', 'Remaining Supply Tracker: a second call of the same vessel (another nomination) is its own row'],
   ['fix-trackrecord-laycan', 'suites/fix2/trackrecord-laycan.test.js', 'Track Record: out-of-laycan (after / before) flagged from the first supply, rolling 2-month watchlist, history kept for re-nominations (card banner, bell, Generate Schedule)'],
   ['fix-lifting-report', 'suites/fix2/lifting-report.test.js', 'Loading Deals: BL date + quantity on each lifting, deal card in BL-date order with left after, lifting report as Excel and PDF'],
+  ['fix-barge-transfer', 'suites/fix2/barge-transfer.test.js', 'Barge transfer (barge to barge) on the Loading page: pump-rate window, purple on calendar / timelines, both barges busy, no stock / deal / BL'],
   ['fix-deals', 'suites/fix2/deals.test.js', 'Loading Deals: bulk purchases drawn down by loadings (BL quantity on completion), linked automatically, synced, closed/removed; What-if Planner gone'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];

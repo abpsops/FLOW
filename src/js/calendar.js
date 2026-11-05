@@ -189,6 +189,35 @@ function renderWeekCalendar(offsetDays) {
           }
 
           return dayEntries.map(function(entry) {
+            if (entry.kind === 'loading' && _isTransfer(entry.data)) {
+              // Barge-to-barge transfer — purple, so it never reads as a terminal loading.
+              const r = entry.data;
+              const start = new Date(r.startAt), end = new Date(r.endAt);
+              const fromN = r.fromBarge || '', toN = _resolveRecordBargeName(r);
+              const xWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
+              return `<div style="
+                background:var(--purple);
+                border:1px solid var(--purple-bd);
+                border-radius:4px;
+                padding:6px 7px;
+                overflow:hidden;
+                box-sizing:border-box;
+                cursor:pointer;
+                transition:filter .12s, transform .12s;
+              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(r.grade)} ${Number(r.qty).toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+                  <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${xWin || fmt(start)}</span>
+                  <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">TRANSFER</span>
+                </div>
+                <div class="cal-xfer-route" style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(fromN)} → ${esc(toN)}</div>
+                <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+                  <span style="color:#fff">${esc(r.grade)}&nbsp;${Number(r.qty).toLocaleString()}</span>
+                </div>
+                <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
+                  <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
+                </div>
+              </div>`;
+            }
             if (entry.kind === 'loading') {
               const r = entry.data;
               const isM = r.grade === 'LSMGO';
@@ -291,6 +320,7 @@ function renderWeekCalendar(offsetDays) {
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span>VLSFO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span>LSMGO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);display:inline-block"></span>BOTH</span>
+      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);outline:1.5px solid var(--purple-bd);display:inline-block"></span>TRANSFER</span>
     </span>
   </div>`;
 

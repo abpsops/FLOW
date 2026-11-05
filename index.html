@@ -969,6 +969,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .qa-btn:active{filter:brightness(.95);transform:translateY(0)}
 .cal-ticket-clickable:hover{border-color:var(--azure) !important;transform:translateX(1px);box-shadow:var(--sh-xs)}
 .cal-ticket-loading:hover{border-color:rgba(255,255,255,.8) !important;filter:brightness(1.08);transform:translateX(1px);box-shadow:var(--sh-xs)}
+.cal-ticket-transfer:hover{border-color:rgba(255,255,255,.8) !important;filter:brightness(1.08);transform:translateX(1px);box-shadow:var(--sh-xs)}
 
 /* ════════════════════════════════════════
    DASHBOARD — COMPACT KPI STRIP
@@ -2003,6 +2004,10 @@ html[data-skin="harbour"] .cal-ticket-loading{background:#FFF1D9!important;borde
 html[data-skin="harbour"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#A15C00!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(161,92,0,.35)!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(161,92,0,.2)!important}
+html[data-skin="harbour"] .cal-ticket-transfer{background:var(--purple-lt)!important;border-color:var(--purple-bd)!important;border-radius:10px!important}
+html[data-skin="harbour"] .cal-ticket-transfer :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:var(--purple)!important}
+html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.55)"]{border-color:var(--purple-bd)!important}
+html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.3)"]{border-top-color:var(--purple-bd)!important}
 /* Command Center wallboard stays a dark TV screen by design — but in the
    Harbour palette: navy ground, #0B3D6B panels, one coral accent, Harbour
    status tints, Plus Jakarta Sans labels + IBM Plex Mono figures. The panel
@@ -3528,13 +3533,26 @@ function flowWelcomeGo(pageId) {
   <!-- Add loading form -->
   <div class="card" id="loading-form-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
     <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Schedule a Loading</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
+    <div class="ld-kind-row" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;margin:6px 0 10px">
+      <div class="field" style="min-width:220px"><label for="ld-kind">Type</label>
+        <select id="ld-kind" onchange="_ldKindChanged()">
+          <option value="loading">Terminal loading</option>
+          <option value="transfer">Barge transfer (barge to barge)</option>
+        </select>
+      </div>
+      <div class="field ld-xfer-only" id="ld-from-barge-field" style="min-width:220px;display:none"><label for="ld-from-barge">From barge <span style="font-weight:400;color:var(--muted)">— discharges</span></label>
+        <select id="ld-from-barge" onchange="_ldSyncFromBarge();_recalcLoadingEstimate()"></select>
+      </div>
+      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--purple);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
+    </div>
+    <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the giving barge's pump rate for that grade (Barge Fleet) + hose-up time; both barges are blocked for it in the schedule.</div>
+    <div class="ld-load-only" style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
-      <div class="field"><label for="ld-barge">Barge</label>
-        <select id="ld-barge"></select>
+      <div class="field"><label for="ld-barge" id="ld-barge-label">Barge</label>
+        <select id="ld-barge" onchange="_recalcLoadingEstimate()"></select>
       </div>
-      <div class="field"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
+      <div class="field ld-load-only"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
       <div class="field"><label for="ld-grade">Grade</label>
         <select id="ld-grade" onchange="_recalcLoadingEstimate();_ldRefreshDealSelect(undefined, 'grade')">
           <option value="VLSFO">VLSFO</option>
@@ -3545,10 +3563,10 @@ function flowWelcomeGo(pageId) {
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
-      <div class="field"><label for="ld-start-date">Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
+      <div class="field"><label for="ld-start-date" id="ld-start-date-label">Loading Start Date</label><input type="date" id="ld-start-date" onchange="_recalcLoadingEstimate()"></div>
       <div class="field"><label for="ld-start-time">Start Time (24h)</label><input type="text" id="ld-start-time" inputmode="numeric" placeholder="HH:MM" maxlength="5" value="08:00" oninput="_maskTime24Input(this)" onblur="_validateTime24Input(this)"></div>
-      <div class="field"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
-      <div class="field"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field ld-load-only"><label for="ld-pre-ops">Pre-Loading Ops (hrs)</label><input type="number" id="ld-pre-ops" min="0" step="0.5" value="2.5" title="Berthing, connection, line-up — before pumping starts" oninput="_recalcLoadingEstimate()"></div>
+      <div class="field ld-load-only"><label for="ld-post-ops">Post-Loading Ops (hrs)</label><input type="number" id="ld-post-ops" min="0" step="0.5" value="3.5" title="Disconnection, sampling, documentation — after pumping ends" oninput="_recalcLoadingEstimate()"></div>
     </div>
     <!-- Start given only as a part of the day (AM / PM …): start = frame start, completion = frame end + duration (worst case). -->
     <div class="field tf-row ld-tf-row" style="margin:-4px 0 12px">
@@ -3568,7 +3586,7 @@ function flowWelcomeGo(pageId) {
       <div class="field"><label for="ld-surveyor">Surveyor</label><input type="text" id="ld-surveyor" placeholder="e.g. SGS, Intertek, independent surveyor"></div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px">
-      <div class="field"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
+      <div class="field ld-load-only"><label for="ld-deal">Deal <span style="font-weight:400;color:var(--muted)">— bulk purchase this loading lifts from</span></label>
         <select id="ld-deal" onchange="this.dataset.manual=this.value?'1':'none'"><option value="">No deal</option></select>
       </div>
       <div class="field"><label for="ld-notes">Notes <span style="font-weight:400;color:var(--muted)">— optional</span></label><input type="text" id="ld-notes" placeholder="Berth, product spec, remarks…"></div>
@@ -5701,6 +5719,16 @@ function renderDashActivity(records, vessels) {
       const start = new Date(r.startAt), end = new Date(r.endAt);
       const t = start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
       const dateLbl = start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      if (r.kind === 'transfer') {
+        items.push({
+          color: 'var(--purple)',
+          title: `Barge Transfer Scheduled — ${r.grade}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
+          time: dateLbl + ' ' + t,
+          onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
+        });
+        return;
+      }
       const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
       const ldWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
       items.push({
@@ -5723,6 +5751,16 @@ function renderDashActivity(records, vessels) {
       const d = new Date(r.completedAt);
       const t = isNaN(d) ? '—' : d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false });
       const dateLbl = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+      if (r.kind === 'transfer') {
+        items.push({
+          color: 'var(--purple)',
+          title: `Barge Transfer Completed — ${r.grade}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade}`,
+          time: (dateLbl + ' ' + t).trim() || '—',
+          onclick: `showPage('loading')`,
+        });
+        return;
+      }
       const color = r.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
       items.push({
         color,
@@ -7724,7 +7762,7 @@ function _mergeByNewer(b, l, r, ctx, path, groups) {
 // from the other: then pumping, duration and end time are derived again from the
 // merged inputs with the merged rates (unless the end date was set by hand). When
 // the merged inputs are exactly one side's, that side's own figures stay.
-const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden'];
+const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
 function _ldInputs(r) { return _stableStr(_LD_INPUT_KEYS.map(function(k) { return r && r[k] !== undefined ? r[k] : null; })); }
 function _mergeLoadingDerived(merged, ld, rd) {
   const recs = merged && merged.state && Array.isArray(merged.state.loadingRecords) ? merged.state.loadingRecords : null;
@@ -7744,9 +7782,21 @@ function _mergeLoadingDerived(merged, ld, rd) {
     if (mi === ri) return _sameDerived(m, r, manual) ? m : Object.assign({}, m, _derivedOf(r, manual));
     const start = new Date(m.startAt);
     if (isNaN(start.getTime())) return m;
-    const rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
-    const q = Number(m.qty) || 0, pump = q > 0 ? q / rate : 0;
-    const total = (Number(m.preOpsHours) || 0) + pump + (Number(m.postOpsHours) || 0);
+    const q = Number(m.qty) || 0;
+    let rate, total, pump;
+    if (m.kind === 'transfer') {
+      // A barge transfer pumps at the giving barge's rate, then hose-up.
+      const fb = (merged.state.barges || []).find(function(b) { return b && b.name === m.fromBarge; });
+      rate = Number(fb && (m.grade === 'LSMGO' ? fb.mtph : fb.vtph)) || 0;
+      if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
+      if (!rate) return m;
+      pump = q > 0 ? q / rate : 0;
+      total = pump > 0 ? pump + (Number(m.hoseHours) || 0) : 0;
+    } else {
+      rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
+      pump = q > 0 ? q / rate : 0;
+      total = (Number(m.preOpsHours) || 0) + pump + (Number(m.postOpsHours) || 0);
+    }
     const frame = m.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(m.startWin) : 0;
     changed = true;
     return Object.assign({}, m, { pumpHours: pump, estimatedHours: total }, manual ? {} : { endAt: new Date(start.getTime() + (frame + total) * 3600000).toISOString() });
@@ -8868,16 +8918,63 @@ function updateLoadingConfig() {
 
 // Live estimate shown in the form as the operator types — does not
 // touch any saved record until Add/Update Loading is pressed.
+/* ── Barge transfers (self cargo discharge, barge to barge) ──
+   A record with kind:'transfer': fromBarge discharges `qty` of `grade` into
+   barge. It lives with the loadings (same list, calendar, sync) but is not a
+   loading: it adds no stock in the forecast (both ROBs are updated by hand),
+   links to no deal, and has no BL. Both barges are busy for its window: it
+   counts as an Unavailable block for each of them (planner, Availability
+   Check, Free Windows, conflict warnings — see _transferBlocksForBarge).
+   Duration = quantity ÷ the giving barge's pump rate for the grade + hose-up. */
+function _isTransfer(r) { return !!r && r.kind === 'transfer'; }
+function _ldKind() { const el = document.getElementById('ld-kind'); return el && el.value === 'transfer' ? 'transfer' : 'loading'; }
+function _xferRate(fromBargeName, grade) {
+  const b = (typeof getBarges === 'function' ? getBarges() : (_bargeConfig || [])).find(function(x) { return x.name === fromBargeName; });
+  if (!b) return 0;
+  return Number(grade === 'LSMGO' ? b.mtph : b.vtph) || 0;
+}
+function _xferHoseHrs() { return Number((_calcParams || {}).hoseHrs) || 0; }
+function _xferDuration(fromBargeName, grade, qty) {
+  const rate = _xferRate(fromBargeName, grade);
+  const pump = rate > 0 && qty > 0 ? qty / rate : 0;
+  return { rate: rate, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+}
+// Show the fields of the chosen type (terminal loading / barge transfer).
+function _ldKindChanged() {
+  const xfer = _ldKind() === 'transfer';
+  document.querySelectorAll('#loading-form-card .ld-xfer-only').forEach(function(el) { el.style.display = xfer ? '' : 'none'; });
+  document.querySelectorAll('#loading-form-card .ld-load-only').forEach(function(el) { el.style.display = xfer ? 'none' : ''; });
+  const lbl = document.getElementById('ld-barge-label');
+  if (lbl) lbl.innerHTML = xfer ? 'To barge <span style="font-weight:400;color:var(--muted)">— receives</span>' : 'Barge';
+  const sl = document.getElementById('ld-start-date-label');
+  if (sl) sl.textContent = xfer ? 'Transfer Start Date' : 'Loading Start Date';
+  const lb = document.getElementById('loading-submit-btn-label');
+  if (lb && !_loadingEditingId) lb.textContent = xfer ? 'Add Transfer' : 'Add Loading';
+  _populateLoadingBargeSelect();
+  _recalcLoadingEstimate();
+}
+// Barges that can't be the other side: giving and receiving must differ.
+function _ldSyncFromBarge() {
+  const from = document.getElementById('ld-from-barge'), to = document.getElementById('ld-barge');
+  if (!from || !to) return;
+  if (from.value && from.value === to.value) {
+    const other = Array.from(to.options).map(function(o) { return o.value; }).find(function(v) { return v !== from.value; });
+    if (other) to.value = other;
+  }
+}
+
 function _recalcLoadingEstimate() {
   const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const startDateStr = document.getElementById('ld-start-date')?.value;
   const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
-  const preOps = parseFloat(document.getElementById('ld-pre-ops')?.value) || 0;
-  const postOps = parseFloat(document.getElementById('ld-post-ops')?.value) || 0;
+  const xfer = _ldKind() === 'transfer';
+  const preOps = xfer ? 0 : (parseFloat(document.getElementById('ld-pre-ops')?.value) || 0);
+  const postOps = xfer ? 0 : (parseFloat(document.getElementById('ld-post-ops')?.value) || 0);
 
-  const pumpHrs = computeLoadingDurationHours(qty, grade);
-  const totalHrs = preOps + pumpHrs + postOps;
+  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty) : null;
+  const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
+  const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start: completion = frame END + the operation (worst case).
   const win = _ldStartWin();
   const winHrs = win ? _etaFrameHrs(win) : 0;
@@ -8887,8 +8984,8 @@ function _recalcLoadingEstimate() {
   const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
-  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) : '—';
-  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) : '—';
+  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : '') : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
+  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. hose-up ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
 
   if (compEl) {
     if (totalHrs > 0 && startDateStr) {
@@ -8987,25 +9084,41 @@ function _readLoadingForm() {
   const endOverride = document.getElementById('ld-end-date-override')?.value;
   const surveyor = (document.getElementById('ld-surveyor')?.value || '').trim();
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
-  let dealId = document.getElementById('ld-deal')?.value || '';
+  const xfer = _ldKind() === 'transfer';
+  // A transfer has no deal (the Deal field is hidden for it, whatever it still holds).
+  let dealId = xfer ? '' : (document.getElementById('ld-deal')?.value || '');
   const deal = dealId ? _dealById(dealId) : null;
   if (!deal) dealId = ''; // a removed deal
   else if ((deal.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') !== grade) { alert('The deal "' + (deal.supplier || '') + '" is for ' + (deal.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') + ' — pick a ' + grade + ' deal, or "No deal".'); return null; }
 
-  if (!terminal) { alert('Enter a terminal.'); return null; }
+  const fromBarge = xfer ? ((document.getElementById('ld-from-barge') || {}).value || '').trim() : '';
+  if (xfer) {
+    if (!fromBarge || !barge) { alert('Choose the barge that discharges and the barge that receives.'); return null; }
+    if (fromBarge === barge) { alert('A transfer needs two different barges.'); return null; }
+  } else if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
-  if (!startDateStr) { alert('Select a loading start date.'); return null; }
+  if (!startDateStr) { alert('Select a ' + (xfer ? 'transfer' : 'loading') + ' start date.'); return null; }
+  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'LSMGO' ? 'MGO' : 'VLSFO') + ' pump rate — set it on Barge Fleet first.'); return null; }
 
   const startWin = _ldStartWin();
   const start = new Date(startDateStr + 'T' + (startWin ? pad(_etaFrame(startWin).from) + ':00' : startTimeStr) + ':00');
   if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
-  const pumpHrs = computeLoadingDurationHours(qty, grade);
-  const totalHrs = preOps + pumpHrs + postOps;
+  const xd = xfer ? _xferDuration(fromBarge, grade, qty) : null;
+  const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
+  const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start (AM / PM …): start = frame start; the barge stays
   // committed until frame END + the whole operation (worst case).
   const estimatedEnd = new Date(start.getTime() + ((startWin ? _etaFrameHrs(startWin) : 0) + totalHrs) * 3600000);
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
+  if (xfer) {
+    return Object.assign({
+      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty,
+      startAt: start.toISOString(), endAt: end.toISOString(),
+      preOpsHours: 0, pumpHours: pumpHrs, postOpsHours: 0, hoseHours: xd.hose, estimatedHours: totalHrs,
+      endOverridden: !!endOverride, surveyor: surveyor, notes: notes,
+    }, startWin ? { startWin: startWin } : {});
+  }
 
   return Object.assign({
     barge, terminal, grade, qty,
@@ -9039,6 +9152,8 @@ function _clearLoadingForm() {
 // (e.g. loading finishing right as supply starts) — but it's never
 // silent anymore.
 function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
+  // (a transfer's own window shows up as a block on both its barges — the
+  // record loop below reports it once, so blocks made from transfers are skipped)
   const conflicts = [];
   if (!bargeName) return conflicts;
   const b = (_bargeConfig || []).find(function(x) { return x.name === bargeName; });
@@ -9049,6 +9164,7 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   // Against that barge's active vessel supply commitments
   if (b) {
     _getBargeTimeline(b.id, b.name).forEach(function(op) {
+      if (op.transferId) return;
       if (_doesJobConflict(jobStart, jobEnd, op, travelHrs, 0)) {
         conflicts.push(op.isBlock ? `Barge unavailable — ${op.reason || 'blocked'} (${fmt24(op.start)} → ${fmt24(op.etc)})`
                                   : `Vessel ${op.vessel} (supply ${fmt24(op.start)} → ${fmt24(op.etc)})`);
@@ -9061,30 +9177,32 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   (_loadingRecords || []).forEach(function(r) {
     if (r.id === excludeLoadingId) return;
     if (r.deletedAt) return;
-    if (r.barge !== bargeName) return;
+    if (r.completed) return;
+    if (r.barge !== bargeName && !(_isTransfer(r) && r.fromBarge === bargeName)) return;
     const rStart = new Date(r.startAt), rEnd = new Date(r.endAt);
     if (jobStart < rEnd && jobEnd > rStart) {
-      conflicts.push(`Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
+      conflicts.push(_isTransfer(r) ? `Barge transfer ${r.fromBarge} → ${r.barge} (${fmt24(rStart)} → ${fmt24(rEnd)})` : `Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
     }
   });
 
   return conflicts;
 }
 
-function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId) {
-  const conflicts = _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId);
-  if (!conflicts.length) return true;
+function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, fromBarge) {
+  // A transfer occupies both barges: each is checked.
+  const names = fromBarge ? [fromBarge, bargeName] : [bargeName];
+  const parts = names.map(function(n) { return { n: n, c: _checkLoadingConflict(n, startAt, endAt, excludeLoadingId) }; }).filter(function(x) { return x.c.length; });
+  if (!parts.length) return true;
   return confirm(
-    `⚠ ${bargeName} is already committed during this window:\n\n` +
-    conflicts.map(c => '• ' + c).join('\n') +
-    `\n\nSave this Loading anyway?`
+    parts.map(function(x) { return `⚠ ${x.n} is already committed during this window:\n\n` + x.c.map(c => '• ' + c).join('\n'); }).join('\n\n') +
+    `\n\nSave this ${fromBarge ? 'transfer' : 'Loading'} anyway?`
   );
 }
 
 function addLoadingRecord() {
   const data = _readLoadingForm();
   if (!data) return;
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null)) return;
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null, data.fromBarge)) return;
   const rec = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
   _loadingRecords.push(rec);
   saveLoadingRecords();
@@ -9101,23 +9219,28 @@ function editLoadingRecord(id) {
   _loadingEditingSeen = rec.updatedAt || null;
 
   const start = new Date(rec.startAt);
+  const kindEl = document.getElementById('ld-kind');
+  if (kindEl) { kindEl.value = _isTransfer(rec) ? 'transfer' : 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
   const bargeSel = document.getElementById('ld-barge');
   if (bargeSel && rec.barge) bargeSel.value = rec.barge;
+  const fromSel = document.getElementById('ld-from-barge');
+  if (fromSel && rec.fromBarge) fromSel.value = rec.fromBarge;
   document.getElementById('ld-terminal').value = rec.terminal || '';
   document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
   document.getElementById('ld-qty').value = rec.qty || '';
   document.getElementById('ld-start-date').value = _localDateInputStr(start);
   document.getElementById('ld-start-time').value = _localTimeInputStr(start);
   _ldSetStartWin(rec.startWin || '');
-  document.getElementById('ld-pre-ops').value = (rec.preOpsHours != null ? rec.preOpsHours : 2.5);
-  document.getElementById('ld-post-ops').value = (rec.postOpsHours != null ? rec.postOpsHours : 3.5);
+  // A transfer has no ops hours: the hidden fields keep the defaults, so switching it to a loading starts from them.
+  document.getElementById('ld-pre-ops').value = (!_isTransfer(rec) && rec.preOpsHours != null ? rec.preOpsHours : 2.5);
+  document.getElementById('ld-post-ops').value = (!_isTransfer(rec) && rec.postOpsHours != null ? rec.postOpsHours : 3.5);
   document.getElementById('ld-end-date-override').value = rec.endOverridden ? _localDateInputStr(new Date(rec.endAt)) : '';
   document.getElementById('ld-surveyor').value = rec.surveyor || '';
   document.getElementById('ld-notes').value = rec.notes || '';
   _ldRefreshDealSelect(rec.dealId || '');
 
-  document.getElementById('loading-submit-btn-label').textContent = 'Update Loading';
+  document.getElementById('loading-submit-btn-label').textContent = _isTransfer(rec) ? 'Update Transfer' : 'Update Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = '';
   _recalcLoadingEstimate();
 
@@ -9130,13 +9253,15 @@ function updateLoadingRecord(id) {
   if (!data) return;
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id)) return;
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id, data.fromBarge)) return;
   // The form's fields replace the record's; everything else the record carries
   // (Completed + its BL figure set on another device meanwhile, a tombstone…)
   // is kept. Fields the form left out on purpose are cleared.
   const next = Object.assign({}, _loadingRecords[idx], data, { id: id, updatedAt: Date.now() });
   if (!data.startWin) delete next.startWin;
   if (!data.dealId) delete next.dealId;
+  if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; }
+  else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
   _loadingRecords[idx] = next;
   saveLoadingRecords();
   cancelLoadingEdit();
@@ -9150,7 +9275,7 @@ function cancelLoadingEdit() {
   document.getElementById('ld-pre-ops').value = 2.5;
   document.getElementById('ld-post-ops').value = 3.5;
   _ldSetStartWin('');
-  document.getElementById('loading-submit-btn-label').textContent = 'Add Loading';
+  document.getElementById('loading-submit-btn-label').textContent = _ldKind() === 'transfer' ? 'Add Transfer' : 'Add Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = 'none';
   _recalcLoadingEstimate();
 }
@@ -9352,6 +9477,13 @@ function completeLoadingPrompt(id, opts) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
   if (!rec || rec.deletedAt) { showToast('That loading is no longer in the list.', 'warning'); return; }
   if (rec.completed) { showToast('That loading is already marked Completed.', 'warning'); _refreshLoadingConsumers(); return; }
+  // A barge transfer has no BL and no deal — it just completes. ROB stays as the
+  // operator updates it by hand on Barge Fleet (for both barges).
+  if (_isTransfer(rec)) {
+    markLoadingRecordDone(rec.id);
+    showToast('Transfer marked done — update ROB for ' + (rec.fromBarge || 'the giving barge') + ' and ' + _resolveRecordBargeName(rec) + ' on Barge Fleet.', 'success');
+    return;
+  }
   _openBlModal(rec, 'complete', opts || {});
 }
 function editLoadingBl(id) {
@@ -9591,7 +9723,7 @@ function _dealCardHtml(d, operator) {
       '<td>' + (r.completed ? '<span class="ld-chip" style="background:var(--green-lt);color:var(--green)">LIFTED</span>' : '<span class="ld-chip" style="background:var(--amber-lt);color:var(--amber)">SCHEDULED</span>') + '</td>' + act + '</tr>';
   });
   const linked = {}; (_loadingRecords || []).forEach(function(r) { if (r && r.dealId) linked[r.id] = 1; });
-  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && (!r.dealId || !_dealById(r.dealId)) && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
+  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && (!r.dealId || !_dealById(r.dealId)) && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
     .sort(function(a, b) { return new Date(b.startAt) - new Date(a.startAt); }) : [];
   const linkSel = linkable.length ? '<select onchange="dealLinkLoading(\'' + escJs(d.id) + '\', this.value)" aria-label="Link a loading to this deal"><option value="">Link a loading of ' + esc(grade) + '…</option>' +
     linkable.map(function(r) { return '<option value="' + esc(r.id) + '">' + esc(fmt24(new Date(r.startAt)) + ' · ' + (_resolveRecordBargeName(r) || '') + ' · ' + (r.terminal || '') + ' · ' + _mtStr(r.completed && r.blQty != null ? r.blQty : r.qty) + ' MT' + (r.completed ? ' (lifted)' : '')) + '</option>'; }).join('') + '</select>' : '';
@@ -9817,21 +9949,23 @@ function renderLoadingList() {
       const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
       const preTag = r.preOpsHours ? ('Pre ' + _formatDurationHours(r.preOpsHours)) : '';
       const postTag = r.postOpsHours ? ('Post ' + _formatDurationHours(r.postOpsHours)) : '';
+      const xfer = _isTransfer(r);
       const durLine = r.endOverridden
         ? 'Manual end date'
+        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : ''].filter(Boolean).join(' · ')
         : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag, (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ');
       // Time-frame start: "16 Oct 2026 AM (06:00–12:00)".
       const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
       const doneStyle = r.completed ? 'opacity:.55' : '';
       const actionBtns = r.completed
-        ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button>'
+        ? (xfer ? '' : '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button>')
           + '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>'
-        : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline">'
+        : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="' + (xfer ? 'Mark the transfer as done — removes it from the calendar and timeline; update both barges\' ROB on Barge Fleet' : 'Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline') + '">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + escJs(r.id) + '\')" title="Edit">'
@@ -9840,6 +9974,23 @@ function renderLoadingList() {
           + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>';
+      if (xfer) {
+        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--purple);' + doneStyle + '">'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--purple);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
+          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--purple);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
+          + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
+          + '<div style="flex:1;min-width:160px">'
+            + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
+            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+          + '</div>'
+          + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
+            + '<div class="ld-when">' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
+            + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:6px">' + actionBtns + '</div>'
+        + '</div>';
+      }
       return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;' + doneStyle + '">'
         + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
         + _bargePill(_resolveRecordBargeName(r), ldMap)
@@ -9863,7 +10014,8 @@ function renderLoadingList() {
 
   // KPIs — scoped to ACTIVE loadings only; a completed one is no longer
   // "upcoming" regardless of what its original date said.
-  const active = sorted.filter(function(r) { return !r.completed; });
+  // Barge transfers are not terminal loadings — they stay out of these figures.
+  const active = sorted.filter(function(r) { return !r.completed && !_isTransfer(r); });
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 86400000);
   const totalV = active.filter(function(r) { return r.grade === 'VLSFO'; }).reduce(function(s, r) { return s + r.qty; }, 0);
@@ -10135,12 +10287,15 @@ function _dismissTrackingReportAlerts() {
 // Keeps the Loading form's barge dropdown in sync with the configured
 // fleet, preserving whatever is currently selected where possible.
 function _populateLoadingBargeSelect() {
-  const sel = document.getElementById('ld-barge');
-  if (!sel) return;
   const fleet = _fleetNow();
-  const prev = sel.value;
-  sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
-  if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
+  ['ld-barge', 'ld-from-barge'].forEach(function(id) {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = fleet.map(function(b) { return `<option value="${esc(b.name)}">${esc(b.name)}</option>`; }).join('');
+    if (prev && fleet.some(function(b) { return b.name === prev; })) sel.value = prev;
+  });
+  if (typeof _ldKind === 'function' && _ldKind() === 'transfer') _ldSyncFromBarge();
 }
 
 // Loadings whose window hasn't fully passed, scoped to one barge — used to
@@ -10149,7 +10304,14 @@ function _populateLoadingBargeSelect() {
 function _loadingsForBargeName(name) {
   const now = new Date();
   return (_loadingRecords || []).filter(function(r) {
-    return !r.deletedAt && !r.completed && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+    return !r.deletedAt && !r.completed && r.kind !== 'transfer' && new Date(r.endAt) >= now && _resolveRecordBargeName(r) === name;
+  });
+}
+// Barge transfers still ahead that involve this barge (discharging or receiving).
+function _transfersForBargeName(name) {
+  const now = new Date();
+  return (_loadingRecords || []).filter(function(r) {
+    return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && new Date(r.endAt) >= now && (r.barge === name || r.fromBarge === name);
   });
 }
 
@@ -15580,7 +15742,7 @@ function getVessels(quiet) {
    them as a plain object so it never reads app state itself. */
 function _planCtxLive() {
   const hoseHrs = _calcParams.hoseHrs, travelHrs = _calcParams.travelHrs;
-  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name) };
+  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name)) };
 }
 
 /* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its
@@ -15943,11 +16105,11 @@ function renderBargeTabsAndTL(sched, barges) {
     tabsHtml += '</div>';
     bargeKeys.forEach((bid,i) => { tabsHtml += `<div id="tl-${bid}" style="${i>0?'display:none':''}"></div>`; });
     tlWrap.innerHTML = tabsHtml;
-    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !isDone(item)), `tl-${bid}`, _loadingsForBargeName(bargeGroups[bid].name)));
+    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !isDone(item)), `tl-${bid}`, _loadingsForBargeName(bargeGroups[bid].name).concat(_transfersForBargeName(bargeGroups[bid].name))));
   } else {
     tlWrap.innerHTML = '<div id="tl-single"></div>';
     const singleBargeName = bargeKeys[0] ? bargeGroups[bargeKeys[0]].name : '';
-    buildTL(sched.filter(item => !isDone(item)), 'tl-single', _loadingsForBargeName(singleBargeName));
+    buildTL(sched.filter(item => !isDone(item)), 'tl-single', _loadingsForBargeName(singleBargeName).concat(_transfersForBargeName(singleBargeName)));
   }
 
   if (voyWrap) {
@@ -16103,6 +16265,27 @@ function buildTL(items, containerId, loadingsForBarge) {
     return;
   }
   merged.forEach(entry => {
+    if (entry.type === 'loading' && _isTransfer(entry.rec)) {
+      // Barge-to-barge transfer — purple; both barges are busy for its whole window.
+      const rec = entry.rec;
+      const toN = _resolveRecordBargeName(rec), fromN = rec.fromBarge || '';
+      const ld = document.createElement('div');
+      ld.className = 'tli tli-transfer';
+      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--purple)"></div><div class="tll"></div></div>
+      <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
+        <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
+        <div class="tlm">
+          <div class="tmi"><label>Transfer Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
+          <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
+          <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
+          <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
+          <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
+        </div>
+        ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
+      </div>`;
+      tl.appendChild(ld);
+      return;
+    }
     if (entry.type === 'loading') {
       const rec = entry.rec;
       const gradeColor = rec.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
@@ -16426,7 +16609,7 @@ function _ccRefreshData() {
         `<div style="display:flex;margin:0 -10px">${cols}</div>`;
     } else {
       const singleBargeLoadings = (typeof _loadingsForBargeName === 'function')
-        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.deletedAt && !r.completed && new Date(r.endAt) >= new Date(); }))
+        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.deletedAt && !r.completed && r.kind !== 'transfer' && new Date(r.endAt) >= new Date(); }))
         : [];
       schedPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">VESSEL SCHEDULE</div>' +
         scheduleTableHtml(activeItems, singleBargeLoadings);
@@ -16734,17 +16917,30 @@ function _getBargeTimeline(bargeId, bargeName, includePastUnsaved) {
   // Unavailable blocks occupy the barge like a job (fixed times, no
   // contingency), so Check Availability never proposes a start inside one
   // and the Loading conflict check sees them too.
-  _blocksForBarge(bargeId, bargeName).forEach(function (bk) {
+  _blocksForBarge(bargeId, bargeName).concat(_transferBlocksForBarge(bargeId, bargeName)).forEach(function (bk) {
     var s = new Date(bk.start), e = new Date(bk.end);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= now || e <= s) return;
-    ops.push({ vessel: 'Unavailable — ' + (bk.reason || 'blocked'), nomUid: null, start: s, etc: e, busyUntil: e,
-               vQ: 0, mQ: 0, sno: null, pastEtc: false, kind: 'block', isBlock: true, blockId: bk.id, reason: bk.reason || '' });
+    ops.push(Object.assign({ vessel: 'Unavailable — ' + (bk.reason || 'blocked'), nomUid: null, start: s, etc: e, busyUntil: e,
+               vQ: 0, mQ: 0, sno: null, pastEtc: false, kind: 'block', isBlock: true, blockId: bk.id, reason: bk.reason || '' }, bk.transferId ? { transferId: bk.transferId } : {}));
   });
   return ops.sort(function (a, b) { return a.start - b.start; });
 }
 // End of an op's busy time for gap/conflict maths (ETC + contingency).
 function _opBusyEnd(op) { return op.busyUntil || op.etc; }
 
+// A barge transfer keeps BOTH barges busy: for planning it is an Unavailable
+// block on each (not listed with the Unavailable blocks, not editable there).
+function _transferBlocksForBarge(bargeId, bargeName) {
+  let name = bargeName;
+  if (!name && bargeId != null) { const b = (_bargeConfig || []).find(function(x) { return String(x.id) === String(bargeId); }); name = b && b.name; }
+  if (!name) return [];
+  return (_loadingRecords || []).filter(function(r) {
+    return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && (r.barge === name || r.fromBarge === name);
+  }).map(function(r) {
+    return { id: 'xfer_' + r.id, transferId: r.id, bargeName: name, start: r.startAt, end: r.endAt,
+      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') };
+  });
+}
 function _blocksForBarge(bargeId, bargeName, list) {
   return (list || _bargeBlocks || []).filter(function (bk) {
     if (!bk || bk.deletedAt) return false;
@@ -16836,7 +17032,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   var pendingLoads = [];
   var bid = barge.id != null ? barge.id : bargeId;
   (_loadingRecords || []).filter(function(r) {
-    return r && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
+    return r && r.kind !== 'transfer' && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
   }).sort(function(a, b) { return new Date(a.endAt) - new Date(b.endAt); }).forEach(function(r) {
     var q = Number(r.qty) || 0, g = r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
     if (!q) return;
@@ -17355,7 +17551,7 @@ function rlPlanLoading(bargeId, key, hrs) {
   set('ld-pre-ops', RL_PRE_OPS_HRS);
   set('ld-post-ops', RL_POST_OPS_HRS);
   // Most recent terminal this barge loaded at, as a starting point.
-  var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.terminal && r.barge === rec.bargeName; })
+  var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && r.terminal && r.barge === rec.bargeName; })
     .sort(function(a, c) { return new Date(c.startAt) - new Date(a.startAt); })[0];
   set('ld-terminal', last ? last.terminal : '');
   _ldRefreshDealSelect(); // the deal for THIS grade, terminal and quantity (the form may have held another grade)
@@ -17633,7 +17829,7 @@ function _fwInputSignature() {
   // Free Windows reads live ROB anyway.
   var b = _fwHash(_stableStr((st.barges || []).map(function(x) { return [x.id, x.name, x.vcap, x.mcap, x.vbuf, x.mbuf, x.vtph, x.mtph]; })));
   var l = _fwHash(_stableStr((_loadingRecords || []).filter(function(r) { return r && !r.deletedAt; })
-    .map(function(r) { return [r.id, r.barge, r.startAt, r.endAt, r.grade, r.qty]; }).map(_stableStr).sort()));
+    .map(function(r) { return [r.id, r.barge, r.startAt, r.endAt, r.grade, r.qty].concat(r.kind === 'transfer' ? [r.fromBarge, !!r.completed] : []); }).map(_stableStr).sort()));
   var k = _fwHash(_stableStr((_bargeBlocks || []).filter(function(x) { return x && !x.deletedAt; })
     .map(function(x) { return [x.id, x.bargeId, x.start, x.end]; }).map(_stableStr).sort()));
   var p = _fwHash(_stableStr([_calcParams && _calcParams.hoseHrs, _calcParams && _calcParams.travelHrs]));
@@ -23609,6 +23805,35 @@ function renderWeekCalendar(offsetDays) {
           }
 
           return dayEntries.map(function(entry) {
+            if (entry.kind === 'loading' && _isTransfer(entry.data)) {
+              // Barge-to-barge transfer — purple, so it never reads as a terminal loading.
+              const r = entry.data;
+              const start = new Date(r.startAt), end = new Date(r.endAt);
+              const fromN = r.fromBarge || '', toN = _resolveRecordBargeName(r);
+              const xWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
+              return `<div style="
+                background:var(--purple);
+                border:1px solid var(--purple-bd);
+                border-radius:4px;
+                padding:6px 7px;
+                overflow:hidden;
+                box-sizing:border-box;
+                cursor:pointer;
+                transition:filter .12s, transform .12s;
+              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(r.grade)} ${Number(r.qty).toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+                <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
+                  <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${xWin || fmt(start)}</span>
+                  <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">TRANSFER</span>
+                </div>
+                <div class="cal-xfer-route" style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(fromN)} → ${esc(toN)}</div>
+                <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
+                  <span style="color:#fff">${esc(r.grade)}&nbsp;${Number(r.qty).toLocaleString()}</span>
+                </div>
+                <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
+                  <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
+                </div>
+              </div>`;
+            }
             if (entry.kind === 'loading') {
               const r = entry.data;
               const isM = r.grade === 'LSMGO';
@@ -23711,6 +23936,7 @@ function renderWeekCalendar(offsetDays) {
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span>VLSFO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span>LSMGO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);display:inline-block"></span>BOTH</span>
+      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);outline:1.5px solid var(--purple-bd);display:inline-block"></span>TRANSFER</span>
     </span>
   </div>`;
 
