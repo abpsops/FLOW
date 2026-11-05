@@ -1,8 +1,8 @@
 /* Barge transfer (self cargo discharge, barge to barge) — a new type on the Loading page.
    • Type "Barge transfer": From barge (discharges) → To barge (receives); terminal, ops hours
      and deal are hidden; duration = qty ÷ the giving barge's pump rate for the grade + hose-up
-   • saved with the loadings (kind:'transfer'); purple ticket on the calendar ("TRANSFER",
-     "FNSA 10 → FNSA 11"), purple entry on BOTH barges' timelines, purple row in the list
+   • saved with the loadings (kind:'transfer'); orange ticket on the calendar ("TRANSFER",
+     "FNSA 10 → FNSA 11"), orange entry on BOTH barges' timelines, orange row in the list
    • both barges are busy: the planner moves a vessel on either barge out of the window,
      Free Windows / Availability see it, a loading on either barge warns (once)
    • the stock forecast is not changed, no deal link, no BL: Done just completes it (ROB by hand)
@@ -98,17 +98,17 @@ function seed(loadings, extra) {
       showPage('dashboard'); renderWeekCalendar(0);
       const t = document.querySelector('.cal-ticket-transfer');
       return t && { text: t.textContent.replace(/\s+/g, ' ').trim(), bg: t.getAttribute('style'), loadClass: t.classList.contains('cal-ticket-loading'), title: t.getAttribute('title'), onclick: t.getAttribute('onclick'),
-        // Classic: solid purple; Harbour: light purple (like its light loading tickets)
-        bgColor: getComputedStyle(t).backgroundColor, purple: (() => { const p = document.createElement('div'); p.style.background = document.documentElement.dataset.skin === 'harbour' ? 'var(--purple-lt)' : 'var(--purple)'; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; })(),
+        // solid orange in both looks (Classic and Harbour)
+        bgColor: getComputedStyle(t).backgroundColor, orange: (() => { const p = document.createElement('div'); p.style.background = 'var(--xfer)'; document.body.appendChild(p); const c = getComputedStyle(p).backgroundColor; p.remove(); return c; })(),
         loads: document.querySelectorAll('.cal-ticket-loading').length };
     });
-    check('X2 the calendar shows the transfer as a purple ticket: TRANSFER · VLSFO, FNSA 10 → FNSA 11, 1,500', c && /TRANSFER/.test(c.text) && /VLSFO/.test(c.text) && /FNSA 10 → FNSA 11/.test(c.text) && /1,500/.test(c.text) && !c.loadClass && c.bgColor === c.purple && /editLoadingRecord\('x1'\)/.test(c.onclick) && c.loads >= 1, c);
+    check('X2 the calendar shows the transfer as an orange ticket: TRANSFER · VLSFO, FNSA 10 → FNSA 11, 1,500', c && /TRANSFER/.test(c.text) && /VLSFO/.test(c.text) && /FNSA 10 → FNSA 11/.test(c.text) && /1,500/.test(c.text) && !c.loadClass && c.bgColor === c.orange && c.orange === 'rgb(232, 89, 12)' && /editLoadingRecord\('x1'\)/.test(c.onclick) && c.loads >= 1, c);
     const l = await A.page.evaluate(() => {
       showPage('loading');
       const row = document.querySelector('#loading-list .ld-row-transfer');
       return { row: row && row.textContent.replace(/\s+/g, ' '), kpiTotal: document.getElementById('ld-kpi-total').textContent, kpiV: document.getElementById('ld-kpi-vlsfo').textContent, rows: document.querySelectorAll('#loading-list .card').length };
     });
-    check('X2 the Loading list shows a purple TRANSFER row "Barge transfer — FNSA 10 → FNSA 11"; KPIs count only the terminal loading', l.row && /TRANSFER/.test(l.row) && /Barge transfer — FNSA 10 → FNSA 11/.test(l.row) && /Pump 5h · Hose 6h/.test(l.row) && l.kpiTotal === '1' && l.kpiV === '3,000' && l.rows === 2, l);
+    check('X2 the Loading list shows an orange TRANSFER row "Barge transfer — FNSA 10 → FNSA 11"; KPIs count only the terminal loading', l.row && /TRANSFER/.test(l.row) && /Barge transfer — FNSA 10 → FNSA 11/.test(l.row) && /Pump 5h · Hose 6h/.test(l.row) && l.kpiTotal === '1' && l.kpiV === '3,000' && l.rows === 2, l);
     const tl = await A.page.evaluate(() => {
       showPage('schedule'); addVessel(); const id = document.querySelector('.vcard[id^="vessel-"]').id.replace('vessel-', '');
       document.getElementById('v' + id + '-name').value = 'SOME VESSEL'; document.getElementById('v' + id + '-vlsfo').value = '300';
@@ -226,7 +226,7 @@ function seed(loadings, extra) {
       const r = _loadingRecords.find(x => x.kind === 'transfer' && x.fromBarge === 'FNSA 11');
       return r && { est: r.estimatedHours, grade: r.grade, cal: [...document.querySelectorAll('.cal-ticket-transfer')].map(t => t.textContent.replace(/\s+/g, ' ')).join(' | ') };
     });
-    check('X6 another device gets the transfer (LSMGO 200 ÷ 100 + 6 = 8h) and shows it purple on its calendar', b && b.est === 8 && b.grade === 'LSMGO' && /FNSA 11 → FNSA 10/.test(b.cal), b);
+    check('X6 another device gets the transfer (LSMGO 200 ÷ 100 + 6 = 8h) and shows it orange on its calendar', b && b.est === 8 && b.grade === 'LSMGO' && /FNSA 11 → FNSA 10/.test(b.cal), b);
     const m = await A.page.evaluate(() => {
       const base = { id: 'x1', kind: 'transfer', fromBarge: 'FNSA 11', barge: 'FNSA 10', grade: 'VLSFO', qty: 1000, startAt: '2026-12-01T08:00:00.000Z', endAt: '2026-12-01T18:00:00.000Z', preOpsHours: 0, postOpsHours: 0, pumpHours: 4, hoseHours: 6, estimatedHours: 10, endOverridden: false };
       const L = Object.assign({}, base, { qty: 2000, pumpHours: 8, estimatedHours: 14, endAt: '2026-12-01T22:00:00.000Z' });

@@ -620,13 +620,13 @@ function renderLoadingList() {
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>';
       if (xfer) {
-        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--purple);' + doneStyle + '">'
-          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--purple);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
+        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--xfer);' + doneStyle + '">'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--xfer);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
           + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
-          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--purple);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
+          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--xfer);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
           + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
           + '<div style="flex:1;min-width:160px">'
-            + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
           + '</div>'

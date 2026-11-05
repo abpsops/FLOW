@@ -46,6 +46,10 @@
   --purple-lt: #ECEAFA;
   --purple-bd: #C7BFEF;
   --slate:     #435872;
+  /* ── Barge transfer (barge to barge) — bright orange ── */
+  --xfer:      #E8590C;
+  --xfer-lt:   #FFEDE0;
+  --xfer-bd:   #F7B48A;
 
   /* ── Fuel indication (VLSFO / LSMGO) — rich, distinct, professional hues ── */
   --fuel-v:    #2C5FA8;   /* VLSFO — deep cobalt blue */
@@ -169,6 +173,9 @@ html[data-theme="dark"] {
   --purple-lt: rgba(144,137,224,.16);
   --purple-bd: rgba(144,137,224,.38);
   --slate:     #8FA3BC;
+  --xfer:      #F2803A;
+  --xfer-lt:   rgba(242,128,58,.16);
+  --xfer-bd:   rgba(242,128,58,.40);
 
   --fuel-v:    #6E9AE0;
   --fuel-v-lt: rgba(110,154,224,.15);
@@ -1414,7 +1421,7 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
   @page{size:A4 landscape;margin:10mm 8mm}
   /* Paper is white: print with the light-theme tokens even when the screen
      is in dark mode (mirrors :root — keep in sync if those values change). */
-  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#2E7D1E;--sts-lt:#D6F1C2;--sts-bd:#78C257;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
+  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--xfer:#E8590C;--xfer-lt:#FFEDE0;--xfer-bd:#F7B48A;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#2E7D1E;--sts-lt:#D6F1C2;--sts-bd:#78C257;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
   body>*{display:none!important}
   #print-only-container{display:block!important;position:static!important;width:100%!important}
   #print-only-container *{display:revert}
