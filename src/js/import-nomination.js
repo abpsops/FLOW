@@ -680,7 +680,7 @@ function getVessels(quiet) {
    them as a plain object so it never reads app state itself. */
 function _planCtxLive() {
   const hoseHrs = _calcParams.hoseHrs, travelHrs = _calcParams.travelHrs;
-  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name) };
+  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name)) };
 }
 
 /* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its

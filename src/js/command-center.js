@@ -230,7 +230,7 @@ function _ccRefreshData() {
         `<div style="display:flex;margin:0 -10px">${cols}</div>`;
     } else {
       const singleBargeLoadings = (typeof _loadingsForBargeName === 'function')
-        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.deletedAt && !r.completed && new Date(r.endAt) >= new Date(); }))
+        ? (barges.length === 1 ? _loadingsForBargeName(barges[0].name) : (_loadingRecords || []).filter(function(r) { return !r.deletedAt && !r.completed && r.kind !== 'transfer' && new Date(r.endAt) >= new Date(); }))
         : [];
       schedPanel.innerHTML = '<div style="font-size:11.5px;color:#F0A500;letter-spacing:.1em;margin-bottom:9px;border-bottom:1px solid #2A2A2A;padding-bottom:6px">VESSEL SCHEDULE</div>' +
         scheduleTableHtml(activeItems, singleBargeLoadings);

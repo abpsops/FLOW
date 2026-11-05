@@ -139,17 +139,30 @@ function _getBargeTimeline(bargeId, bargeName, includePastUnsaved) {
   // Unavailable blocks occupy the barge like a job (fixed times, no
   // contingency), so Check Availability never proposes a start inside one
   // and the Loading conflict check sees them too.
-  _blocksForBarge(bargeId, bargeName).forEach(function (bk) {
+  _blocksForBarge(bargeId, bargeName).concat(_transferBlocksForBarge(bargeId, bargeName)).forEach(function (bk) {
     var s = new Date(bk.start), e = new Date(bk.end);
     if (isNaN(s.getTime()) || isNaN(e.getTime()) || e <= now || e <= s) return;
-    ops.push({ vessel: 'Unavailable — ' + (bk.reason || 'blocked'), nomUid: null, start: s, etc: e, busyUntil: e,
-               vQ: 0, mQ: 0, sno: null, pastEtc: false, kind: 'block', isBlock: true, blockId: bk.id, reason: bk.reason || '' });
+    ops.push(Object.assign({ vessel: 'Unavailable — ' + (bk.reason || 'blocked'), nomUid: null, start: s, etc: e, busyUntil: e,
+               vQ: 0, mQ: 0, sno: null, pastEtc: false, kind: 'block', isBlock: true, blockId: bk.id, reason: bk.reason || '' }, bk.transferId ? { transferId: bk.transferId } : {}));
   });
   return ops.sort(function (a, b) { return a.start - b.start; });
 }
 // End of an op's busy time for gap/conflict maths (ETC + contingency).
 function _opBusyEnd(op) { return op.busyUntil || op.etc; }
 
+// A barge transfer keeps BOTH barges busy: for planning it is an Unavailable
+// block on each (not listed with the Unavailable blocks, not editable there).
+function _transferBlocksForBarge(bargeId, bargeName) {
+  let name = bargeName;
+  if (!name && bargeId != null) { const b = (_bargeConfig || []).find(function(x) { return String(x.id) === String(bargeId); }); name = b && b.name; }
+  if (!name) return [];
+  return (_loadingRecords || []).filter(function(r) {
+    return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && (r.barge === name || r.fromBarge === name);
+  }).map(function(r) {
+    return { id: 'xfer_' + r.id, transferId: r.id, bargeName: name, start: r.startAt, end: r.endAt,
+      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') };
+  });
+}
 function _blocksForBarge(bargeId, bargeName, list) {
   return (list || _bargeBlocks || []).filter(function (bk) {
     if (!bk || bk.deletedAt) return false;
@@ -241,7 +254,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   var pendingLoads = [];
   var bid = barge.id != null ? barge.id : bargeId;
   (_loadingRecords || []).filter(function(r) {
-    return r && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
+    return r && r.kind !== 'transfer' && !r.deletedAt && !r.completed && _resolveRecordBargeName(r) === bargeName && !isNaN(new Date(r.endAt).getTime()) && new Date(r.endAt) < now;
   }).sort(function(a, b) { return new Date(a.endAt) - new Date(b.endAt); }).forEach(function(r) {
     var q = Number(r.qty) || 0, g = r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO';
     if (!q) return;

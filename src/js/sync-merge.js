@@ -51,7 +51,13 @@ function _merge3(b, l, r, key, ctx, path) {
     if (f) return _mergeById(bArr, l, r, f, key, ctx, path);
   } else if (_isPlainObj(l) && _isPlainObj(r) && !_MERGE_ATOMIC_KEYS[key]) {
     // A manual end date and its flag are ONE value; a computed end (flag off) is derived again after the merge.
-    if (key === 'loadingRecords[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+    if (key === 'loadingRecords[]' && _isPlainObj(b)) {
+      const ldm = _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+      // One side made it a barge transfer while the other linked a deal / entered a BL:
+      // a transfer has neither (the merged record stays a transfer).
+      if (_isPlainObj(ldm) && ldm.kind === 'transfer') { delete ldm.dealId; delete ldm.blQty; delete ldm.blAt; delete ldm.blDate; }
+      return ldm;
+    }
     if (key === 'loadingDeals[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
     if (l.updatedAt != null || r.updatedAt != null) {
       _mergeConflict(ctx, path);
@@ -101,7 +107,7 @@ function _mergeByNewer(b, l, r, ctx, path, groups) {
 // from the other: then pumping, duration and end time are derived again from the
 // merged inputs with the merged rates (unless the end date was set by hand). When
 // the merged inputs are exactly one side's, that side's own figures stay.
-const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden'];
+const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
 function _ldInputs(r) { return _stableStr(_LD_INPUT_KEYS.map(function(k) { return r && r[k] !== undefined ? r[k] : null; })); }
 function _mergeLoadingDerived(merged, ld, rd) {
   const recs = merged && merged.state && Array.isArray(merged.state.loadingRecords) ? merged.state.loadingRecords : null;
@@ -121,9 +127,21 @@ function _mergeLoadingDerived(merged, ld, rd) {
     if (mi === ri) return _sameDerived(m, r, manual) ? m : Object.assign({}, m, _derivedOf(r, manual));
     const start = new Date(m.startAt);
     if (isNaN(start.getTime())) return m;
-    const rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
-    const q = Number(m.qty) || 0, pump = q > 0 ? q / rate : 0;
-    const total = (Number(m.preOpsHours) || 0) + pump + (Number(m.postOpsHours) || 0);
+    const q = Number(m.qty) || 0;
+    let rate, total, pump;
+    if (m.kind === 'transfer') {
+      // A barge transfer pumps at the giving barge's rate, then hose-up.
+      const fb = (merged.state.barges || []).find(function(b) { return b && b.name === m.fromBarge; });
+      rate = Number(fb && (m.grade === 'LSMGO' ? fb.mtph : fb.vtph)) || 0;
+      if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
+      if (!rate) return m;
+      pump = q > 0 ? q / rate : 0;
+      total = pump > 0 ? pump + (Number(m.hoseHours) || 0) : 0;
+    } else {
+      rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
+      pump = q > 0 ? q / rate : 0;
+      total = (Number(m.preOpsHours) || 0) + pump + (Number(m.postOpsHours) || 0);
+    }
     const frame = m.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(m.startWin) : 0;
     changed = true;
     return Object.assign({}, m, { pumpHours: pump, estimatedHours: total }, manual ? {} : { endAt: new Date(start.getTime() + (frame + total) * 3600000).toISOString() });

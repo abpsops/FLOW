@@ -346,6 +346,9 @@ function rlPlanLoading(bargeId, key, hrs) {
   if (!rec) { showToast('That reload is no longer needed — the forecast has changed.', 'info'); _rlRenderAllHosts(); return; }
   showPage('loading');
   cancelLoadingEdit(); // a fresh form, never an edit of another loading
+  // a terminal loading, even if the form was last used for a barge transfer
+  var kindEl = document.getElementById('ld-kind');
+  if (kindEl && kindEl.value !== 'loading') { kindEl.value = 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
   var set = function(id, v) { var el = document.getElementById(id); if (el) el.value = v; };
   set('ld-barge', rec.bargeName);
@@ -357,7 +360,7 @@ function rlPlanLoading(bargeId, key, hrs) {
   set('ld-pre-ops', RL_PRE_OPS_HRS);
   set('ld-post-ops', RL_POST_OPS_HRS);
   // Most recent terminal this barge loaded at, as a starting point.
-  var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.terminal && r.barge === rec.bargeName; })
+  var last = (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && r.terminal && r.barge === rec.bargeName; })
     .sort(function(a, c) { return new Date(c.startAt) - new Date(a.startAt); })[0];
   set('ld-terminal', last ? last.terminal : '');
   _ldRefreshDealSelect(); // the deal for THIS grade, terminal and quantity (the form may have held another grade)
@@ -635,7 +638,7 @@ function _fwInputSignature() {
   // Free Windows reads live ROB anyway.
   var b = _fwHash(_stableStr((st.barges || []).map(function(x) { return [x.id, x.name, x.vcap, x.mcap, x.vbuf, x.mbuf, x.vtph, x.mtph]; })));
   var l = _fwHash(_stableStr((_loadingRecords || []).filter(function(r) { return r && !r.deletedAt; })
-    .map(function(r) { return [r.id, r.barge, r.startAt, r.endAt, r.grade, r.qty]; }).map(_stableStr).sort()));
+    .map(function(r) { return [r.id, r.barge, r.startAt, r.endAt, r.grade, r.qty].concat(r.kind === 'transfer' ? [r.fromBarge, !!r.completed] : []); }).map(_stableStr).sort()));
   var k = _fwHash(_stableStr((_bargeBlocks || []).filter(function(x) { return x && !x.deletedAt; })
     .map(function(x) { return [x.id, x.bargeId, x.start, x.end]; }).map(_stableStr).sort()));
   var p = _fwHash(_stableStr([_calcParams && _calcParams.hoseHrs, _calcParams && _calcParams.travelHrs]));

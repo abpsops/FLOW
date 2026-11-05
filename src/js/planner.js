@@ -325,11 +325,11 @@ function renderBargeTabsAndTL(sched, barges) {
     tabsHtml += '</div>';
     bargeKeys.forEach((bid,i) => { tabsHtml += `<div id="tl-${bid}" style="${i>0?'display:none':''}"></div>`; });
     tlWrap.innerHTML = tabsHtml;
-    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !isDone(item)), `tl-${bid}`, _loadingsForBargeName(bargeGroups[bid].name)));
+    bargeKeys.forEach(bid => buildTL(bargeGroups[bid].items.filter(item => !isDone(item)), `tl-${bid}`, _loadingsForBargeName(bargeGroups[bid].name).concat(_transfersForBargeName(bargeGroups[bid].name))));
   } else {
     tlWrap.innerHTML = '<div id="tl-single"></div>';
     const singleBargeName = bargeKeys[0] ? bargeGroups[bargeKeys[0]].name : '';
-    buildTL(sched.filter(item => !isDone(item)), 'tl-single', _loadingsForBargeName(singleBargeName));
+    buildTL(sched.filter(item => !isDone(item)), 'tl-single', _loadingsForBargeName(singleBargeName).concat(_transfersForBargeName(singleBargeName)));
   }
 
   if (voyWrap) {
@@ -485,6 +485,28 @@ function buildTL(items, containerId, loadingsForBarge) {
     return;
   }
   merged.forEach(entry => {
+    if (entry.type === 'loading' && _isTransfer(entry.rec)) {
+      // Barge-to-barge transfer — purple; both barges are busy for its whole window.
+      const rec = entry.rec;
+      const toN = _resolveRecordBargeName(rec), fromN = rec.fromBarge || '';
+      const ld = document.createElement('div');
+      ld.className = 'tli tli-transfer';
+      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--purple)"></div><div class="tll"></div></div>
+      <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
+        <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
+        <div class="tlm">
+          <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
+          <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
+          <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
+          <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
+          <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
+          ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
+        </div>
+        ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
+      </div>`;
+      tl.appendChild(ld);
+      return;
+    }
     if (entry.type === 'loading') {
       const rec = entry.rec;
       const gradeColor = rec.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';

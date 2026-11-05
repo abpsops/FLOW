@@ -52,16 +52,63 @@ function updateLoadingConfig() {
 
 // Live estimate shown in the form as the operator types — does not
 // touch any saved record until Add/Update Loading is pressed.
+/* ── Barge transfers (self cargo discharge, barge to barge) ──
+   A record with kind:'transfer': fromBarge discharges `qty` of `grade` into
+   barge. It lives with the loadings (same list, calendar, sync) but is not a
+   loading: it adds no stock in the forecast (both ROBs are updated by hand),
+   links to no deal, and has no BL. Both barges are busy for its window: it
+   counts as an Unavailable block for each of them (planner, Availability
+   Check, Free Windows, conflict warnings — see _transferBlocksForBarge).
+   Duration = quantity ÷ the giving barge's pump rate for the grade + hose-up. */
+function _isTransfer(r) { return !!r && r.kind === 'transfer'; }
+function _ldKind() { const el = document.getElementById('ld-kind'); return el && el.value === 'transfer' ? 'transfer' : 'loading'; }
+function _xferRate(fromBargeName, grade) {
+  const b = (typeof getBarges === 'function' ? getBarges() : (_bargeConfig || [])).find(function(x) { return x.name === fromBargeName; });
+  if (!b) return 0;
+  return Number(grade === 'LSMGO' ? b.mtph : b.vtph) || 0;
+}
+function _xferHoseHrs() { return Number((_calcParams || {}).hoseHrs) || 0; }
+function _xferDuration(fromBargeName, grade, qty) {
+  const rate = _xferRate(fromBargeName, grade);
+  const pump = rate > 0 && qty > 0 ? qty / rate : 0;
+  return { rate: rate, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+}
+// Show the fields of the chosen type (terminal loading / barge transfer).
+function _ldKindChanged() {
+  const xfer = _ldKind() === 'transfer';
+  document.querySelectorAll('#loading-form-card .ld-xfer-only').forEach(function(el) { el.style.display = xfer ? '' : 'none'; });
+  document.querySelectorAll('#loading-form-card .ld-load-only').forEach(function(el) { el.style.display = xfer ? 'none' : ''; });
+  const lbl = document.getElementById('ld-barge-label');
+  if (lbl) lbl.innerHTML = xfer ? 'To barge <span style="font-weight:400;color:var(--muted)">— receives</span>' : 'Barge';
+  const sl = document.getElementById('ld-start-date-label');
+  if (sl) sl.textContent = xfer ? 'Transfer Start Date' : 'Loading Start Date';
+  const lb = document.getElementById('loading-submit-btn-label');
+  if (lb) lb.textContent = _loadingEditingId ? (xfer ? 'Update Transfer' : 'Update Loading') : (xfer ? 'Add Transfer' : 'Add Loading');
+  _populateLoadingBargeSelect();
+  _recalcLoadingEstimate();
+}
+// Barges that can't be the other side: giving and receiving must differ.
+function _ldSyncFromBarge() {
+  const from = document.getElementById('ld-from-barge'), to = document.getElementById('ld-barge');
+  if (!from || !to) return;
+  if (from.value && from.value === to.value) {
+    const other = Array.from(to.options).map(function(o) { return o.value; }).find(function(v) { return v !== from.value; });
+    if (other) to.value = other;
+  }
+}
+
 function _recalcLoadingEstimate() {
   const qty = parseFloat(document.getElementById('ld-qty')?.value) || 0;
   const grade = document.getElementById('ld-grade')?.value || 'VLSFO';
   const startDateStr = document.getElementById('ld-start-date')?.value;
   const startTimeStr = document.getElementById('ld-start-time')?.value || '08:00';
-  const preOps = parseFloat(document.getElementById('ld-pre-ops')?.value) || 0;
-  const postOps = parseFloat(document.getElementById('ld-post-ops')?.value) || 0;
+  const xfer = _ldKind() === 'transfer';
+  const preOps = xfer ? 0 : (parseFloat(document.getElementById('ld-pre-ops')?.value) || 0);
+  const postOps = xfer ? 0 : (parseFloat(document.getElementById('ld-post-ops')?.value) || 0);
 
-  const pumpHrs = computeLoadingDurationHours(qty, grade);
-  const totalHrs = preOps + pumpHrs + postOps;
+  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty) : null;
+  const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
+  const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start: completion = frame END + the operation (worst case).
   const win = _ldStartWin();
   const winHrs = win ? _etaFrameHrs(win) : 0;
@@ -71,8 +118,8 @@ function _recalcLoadingEstimate() {
   const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
-  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) : '—';
-  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) : '—';
+  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : '') : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
+  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. hose-up ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
 
   if (compEl) {
     if (totalHrs > 0 && startDateStr) {
@@ -171,25 +218,41 @@ function _readLoadingForm() {
   const endOverride = document.getElementById('ld-end-date-override')?.value;
   const surveyor = (document.getElementById('ld-surveyor')?.value || '').trim();
   const notes = (document.getElementById('ld-notes')?.value || '').trim();
-  let dealId = document.getElementById('ld-deal')?.value || '';
+  const xfer = _ldKind() === 'transfer';
+  // A transfer has no deal (the Deal field is hidden for it, whatever it still holds).
+  let dealId = xfer ? '' : (document.getElementById('ld-deal')?.value || '');
   const deal = dealId ? _dealById(dealId) : null;
   if (!deal) dealId = ''; // a removed deal
   else if ((deal.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') !== grade) { alert('The deal "' + (deal.supplier || '') + '" is for ' + (deal.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') + ' — pick a ' + grade + ' deal, or "No deal".'); return null; }
 
-  if (!terminal) { alert('Enter a terminal.'); return null; }
+  const fromBarge = xfer ? ((document.getElementById('ld-from-barge') || {}).value || '').trim() : '';
+  if (xfer) {
+    if (!fromBarge || !barge) { alert('Choose the barge that discharges and the barge that receives.'); return null; }
+    if (fromBarge === barge) { alert('A transfer needs two different barges.'); return null; }
+  } else if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
-  if (!startDateStr) { alert('Select a loading start date.'); return null; }
+  if (!startDateStr) { alert('Select a ' + (xfer ? 'transfer' : 'loading') + ' start date.'); return null; }
+  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'LSMGO' ? 'MGO' : 'VLSFO') + ' pump rate — set it on Barge Fleet first.'); return null; }
 
   const startWin = _ldStartWin();
   const start = new Date(startDateStr + 'T' + (startWin ? pad(_etaFrame(startWin).from) + ':00' : startTimeStr) + ':00');
   if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
-  const pumpHrs = computeLoadingDurationHours(qty, grade);
-  const totalHrs = preOps + pumpHrs + postOps;
+  const xd = xfer ? _xferDuration(fromBarge, grade, qty) : null;
+  const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
+  const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start (AM / PM …): start = frame start; the barge stays
   // committed until frame END + the whole operation (worst case).
   const estimatedEnd = new Date(start.getTime() + ((startWin ? _etaFrameHrs(startWin) : 0) + totalHrs) * 3600000);
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
+  if (xfer) {
+    return Object.assign({
+      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty,
+      startAt: start.toISOString(), endAt: end.toISOString(),
+      preOpsHours: 0, pumpHours: pumpHrs, postOpsHours: 0, hoseHours: xd.hose, estimatedHours: totalHrs,
+      endOverridden: !!endOverride, surveyor: surveyor, notes: notes,
+    }, startWin ? { startWin: startWin } : {});
+  }
 
   return Object.assign({
     barge, terminal, grade, qty,
@@ -223,6 +286,8 @@ function _clearLoadingForm() {
 // (e.g. loading finishing right as supply starts) — but it's never
 // silent anymore.
 function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
+  // (a transfer's own window shows up as a block on both its barges — the
+  // record loop below reports it once, so blocks made from transfers are skipped)
   const conflicts = [];
   if (!bargeName) return conflicts;
   const b = (_bargeConfig || []).find(function(x) { return x.name === bargeName; });
@@ -233,6 +298,7 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   // Against that barge's active vessel supply commitments
   if (b) {
     _getBargeTimeline(b.id, b.name).forEach(function(op) {
+      if (op.transferId) return;
       if (_doesJobConflict(jobStart, jobEnd, op, travelHrs, 0)) {
         conflicts.push(op.isBlock ? `Barge unavailable — ${op.reason || 'blocked'} (${fmt24(op.start)} → ${fmt24(op.etc)})`
                                   : `Vessel ${op.vessel} (supply ${fmt24(op.start)} → ${fmt24(op.etc)})`);
@@ -245,30 +311,32 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
   (_loadingRecords || []).forEach(function(r) {
     if (r.id === excludeLoadingId) return;
     if (r.deletedAt) return;
-    if (r.barge !== bargeName) return;
+    if (r.completed) return;
+    if (r.barge !== bargeName && !(_isTransfer(r) && r.fromBarge === bargeName)) return;
     const rStart = new Date(r.startAt), rEnd = new Date(r.endAt);
     if (jobStart < rEnd && jobEnd > rStart) {
-      conflicts.push(`Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
+      conflicts.push(_isTransfer(r) ? `Barge transfer ${r.fromBarge} → ${r.barge} (${fmt24(rStart)} → ${fmt24(rEnd)})` : `Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
     }
   });
 
   return conflicts;
 }
 
-function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId) {
-  const conflicts = _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId);
-  if (!conflicts.length) return true;
+function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, fromBarge) {
+  // A transfer occupies both barges: each is checked.
+  const names = fromBarge ? [fromBarge, bargeName] : [bargeName];
+  const parts = names.map(function(n) { return { n: n, c: _checkLoadingConflict(n, startAt, endAt, excludeLoadingId) }; }).filter(function(x) { return x.c.length; });
+  if (!parts.length) return true;
   return confirm(
-    `⚠ ${bargeName} is already committed during this window:\n\n` +
-    conflicts.map(c => '• ' + c).join('\n') +
-    `\n\nSave this Loading anyway?`
+    parts.map(function(x) { return `⚠ ${x.n} is already committed during this window:\n\n` + x.c.map(c => '• ' + c).join('\n'); }).join('\n\n') +
+    `\n\nSave this ${fromBarge ? 'transfer' : 'Loading'} anyway?`
   );
 }
 
 function addLoadingRecord() {
   const data = _readLoadingForm();
   if (!data) return;
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null)) return;
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null, data.fromBarge)) return;
   const rec = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
   _loadingRecords.push(rec);
   saveLoadingRecords();
@@ -285,23 +353,28 @@ function editLoadingRecord(id) {
   _loadingEditingSeen = rec.updatedAt || null;
 
   const start = new Date(rec.startAt);
+  const kindEl = document.getElementById('ld-kind');
+  if (kindEl) { kindEl.value = _isTransfer(rec) ? 'transfer' : 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
   const bargeSel = document.getElementById('ld-barge');
   if (bargeSel && rec.barge) bargeSel.value = rec.barge;
+  const fromSel = document.getElementById('ld-from-barge');
+  if (fromSel && rec.fromBarge) fromSel.value = rec.fromBarge;
   document.getElementById('ld-terminal').value = rec.terminal || '';
   document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
   document.getElementById('ld-qty').value = rec.qty || '';
   document.getElementById('ld-start-date').value = _localDateInputStr(start);
   document.getElementById('ld-start-time').value = _localTimeInputStr(start);
   _ldSetStartWin(rec.startWin || '');
-  document.getElementById('ld-pre-ops').value = (rec.preOpsHours != null ? rec.preOpsHours : 2.5);
-  document.getElementById('ld-post-ops').value = (rec.postOpsHours != null ? rec.postOpsHours : 3.5);
+  // A transfer has no ops hours: the hidden fields keep the defaults, so switching it to a loading starts from them.
+  document.getElementById('ld-pre-ops').value = (!_isTransfer(rec) && rec.preOpsHours != null ? rec.preOpsHours : 2.5);
+  document.getElementById('ld-post-ops').value = (!_isTransfer(rec) && rec.postOpsHours != null ? rec.postOpsHours : 3.5);
   document.getElementById('ld-end-date-override').value = rec.endOverridden ? _localDateInputStr(new Date(rec.endAt)) : '';
   document.getElementById('ld-surveyor').value = rec.surveyor || '';
   document.getElementById('ld-notes').value = rec.notes || '';
   _ldRefreshDealSelect(rec.dealId || '');
 
-  document.getElementById('loading-submit-btn-label').textContent = 'Update Loading';
+  document.getElementById('loading-submit-btn-label').textContent = _isTransfer(rec) ? 'Update Transfer' : 'Update Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = '';
   _recalcLoadingEstimate();
 
@@ -314,13 +387,15 @@ function updateLoadingRecord(id) {
   if (!data) return;
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id)) return;
+  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id, data.fromBarge)) return;
   // The form's fields replace the record's; everything else the record carries
   // (Completed + its BL figure set on another device meanwhile, a tombstone…)
   // is kept. Fields the form left out on purpose are cleared.
   const next = Object.assign({}, _loadingRecords[idx], data, { id: id, updatedAt: Date.now() });
   if (!data.startWin) delete next.startWin;
   if (!data.dealId) delete next.dealId;
+  if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; }
+  else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
   _loadingRecords[idx] = next;
   saveLoadingRecords();
   cancelLoadingEdit();
@@ -334,7 +409,7 @@ function cancelLoadingEdit() {
   document.getElementById('ld-pre-ops').value = 2.5;
   document.getElementById('ld-post-ops').value = 3.5;
   _ldSetStartWin('');
-  document.getElementById('loading-submit-btn-label').textContent = 'Add Loading';
+  document.getElementById('loading-submit-btn-label').textContent = _ldKind() === 'transfer' ? 'Add Transfer' : 'Add Loading';
   document.getElementById('loading-cancel-edit-btn').style.display = 'none';
   _recalcLoadingEstimate();
 }

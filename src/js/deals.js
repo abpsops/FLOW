@@ -40,7 +40,7 @@ function _dealLiftingRows(d) {
   return { st: st, lifted: lifted, scheduled: scheduled };
 }
 function _dealLoadings(dealId) {
-  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.dealId === dealId; })
+  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && r.dealId === dealId; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
 }
 function _dealStats(d) {
@@ -122,6 +122,13 @@ function completeLoadingPrompt(id, opts) {
   const rec = (_loadingRecords || []).find(function(r) { return r && r.id === id; });
   if (!rec || rec.deletedAt) { showToast('That loading is no longer in the list.', 'warning'); return; }
   if (rec.completed) { showToast('That loading is already marked Completed.', 'warning'); _refreshLoadingConsumers(); return; }
+  // A barge transfer has no BL and no deal — it just completes. ROB stays as the
+  // operator updates it by hand on Barge Fleet (for both barges).
+  if (_isTransfer(rec)) {
+    markLoadingRecordDone(rec.id);
+    showToast('Transfer marked done — update ROB for ' + (rec.fromBarge || 'the giving barge') + ' and ' + _resolveRecordBargeName(rec) + ' on Barge Fleet.', 'success');
+    return;
+  }
   _openBlModal(rec, 'complete', opts || {});
 }
 function editLoadingBl(id) {
@@ -361,7 +368,7 @@ function _dealCardHtml(d, operator) {
       '<td>' + (r.completed ? '<span class="ld-chip" style="background:var(--green-lt);color:var(--green)">LIFTED</span>' : '<span class="ld-chip" style="background:var(--amber-lt);color:var(--amber)">SCHEDULED</span>') + '</td>' + act + '</tr>';
   });
   const linked = {}; (_loadingRecords || []).forEach(function(r) { if (r && r.dealId) linked[r.id] = 1; });
-  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && (!r.dealId || !_dealById(r.dealId)) && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
+  const linkable = operator && !closed ? (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && (!r.dealId || !_dealById(r.dealId)) && (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') === grade; })
     .sort(function(a, b) { return new Date(b.startAt) - new Date(a.startAt); }) : [];
   const linkSel = linkable.length ? '<select onchange="dealLinkLoading(\'' + escJs(d.id) + '\', this.value)" aria-label="Link a loading to this deal"><option value="">Link a loading of ' + esc(grade) + '…</option>' +
     linkable.map(function(r) { return '<option value="' + esc(r.id) + '">' + esc(fmt24(new Date(r.startAt)) + ' · ' + (_resolveRecordBargeName(r) || '') + ' · ' + (r.terminal || '') + ' · ' + _mtStr(r.completed && r.blQty != null ? r.blQty : r.qty) + ' MT' + (r.completed ? ' (lifted)' : '')) + '</option>'; }).join('') + '</select>' : '';
@@ -587,21 +594,23 @@ function renderLoadingList() {
       const fmtD = function(d) { return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'}) + ' ' + d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false}); };
       const preTag = r.preOpsHours ? ('Pre ' + _formatDurationHours(r.preOpsHours)) : '';
       const postTag = r.postOpsHours ? ('Post ' + _formatDurationHours(r.postOpsHours)) : '';
+      const xfer = _isTransfer(r);
       const durLine = r.endOverridden
         ? 'Manual end date'
+        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : '', (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ')
         : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag, (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ');
       // Time-frame start: "16 Oct 2026 AM (06:00–12:00)".
       const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
       const doneStyle = r.completed ? 'opacity:.55' : '';
       const actionBtns = r.completed
-        ? '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button>'
+        ? (xfer ? '' : '<button class="btn btn-secondary btn-sm" onclick="editLoadingBl(\'' + escJs(r.id) + '\')" title="Quantity loaded per BL">BL</button>')
           + '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>'
-        : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline">'
+        : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="' + (xfer ? 'Mark the transfer as done — removes it from the calendar and timeline; update both barges\' ROB on Barge Fleet' : 'Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline') + '">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
           + '</button>'
           + '<button class="btn btn-secondary btn-sm" onclick="editLoadingRecord(\'' + escJs(r.id) + '\')" title="Edit">'
@@ -610,6 +619,24 @@ function renderLoadingList() {
           + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>';
+      if (xfer) {
+        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--purple);' + doneStyle + '">'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--purple);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
+          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--purple);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
+          + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
+          + '<div style="flex:1;min-width:160px">'
+            + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
+            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+            + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
+          + '</div>'
+          + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
+            + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'
+            + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
+          + '</div>'
+          + '<div style="display:flex;gap:6px">' + actionBtns + '</div>'
+        + '</div>';
+      }
       return '<div class="card" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;' + doneStyle + '">'
         + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
         + _bargePill(_resolveRecordBargeName(r), ldMap)
@@ -633,7 +660,8 @@ function renderLoadingList() {
 
   // KPIs — scoped to ACTIVE loadings only; a completed one is no longer
   // "upcoming" regardless of what its original date said.
-  const active = sorted.filter(function(r) { return !r.completed; });
+  // Barge transfers are not terminal loadings — they stay out of these figures.
+  const active = sorted.filter(function(r) { return !r.completed && !_isTransfer(r); });
   const now = new Date();
   const in7 = new Date(now.getTime() + 7 * 86400000);
   const totalV = active.filter(function(r) { return r.grade === 'VLSFO'; }).reduce(function(s, r) { return s + r.qty; }, 0);

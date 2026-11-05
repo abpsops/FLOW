@@ -795,6 +795,7 @@ body.sidebar-collapsed .sidebar{width:0;min-width:0;border-right-color:transpare
 .qa-btn:active{filter:brightness(.95);transform:translateY(0)}
 .cal-ticket-clickable:hover{border-color:var(--azure) !important;transform:translateX(1px);box-shadow:var(--sh-xs)}
 .cal-ticket-loading:hover{border-color:rgba(255,255,255,.8) !important;filter:brightness(1.08);transform:translateX(1px);box-shadow:var(--sh-xs)}
+.cal-ticket-transfer:hover{border-color:rgba(255,255,255,.8) !important;filter:brightness(1.08);transform:translateX(1px);box-shadow:var(--sh-xs)}
 
 /* ════════════════════════════════════════
    DASHBOARD — COMPACT KPI STRIP
