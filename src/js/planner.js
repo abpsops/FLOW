@@ -486,14 +486,14 @@ function buildTL(items, containerId, loadingsForBarge) {
   }
   merged.forEach(entry => {
     if (entry.type === 'loading' && _isTransfer(entry.rec)) {
-      // Barge-to-barge transfer — purple; both barges are busy for its whole window.
+      // Barge-to-barge transfer — orange; both barges are busy for its whole window.
       const rec = entry.rec;
       const toN = _resolveRecordBargeName(rec), fromN = rec.fromBarge || '';
       const ld = document.createElement('div');
       ld.className = 'tli tli-transfer';
-      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--purple)"></div><div class="tll"></div></div>
-      <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
-        <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
+      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--xfer)"></div><div class="tll"></div></div>
+      <div class="tlc" style="border-color:var(--xfer-bd);background:var(--xfer-lt)">
+        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
         <div class="tlm">
           <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>

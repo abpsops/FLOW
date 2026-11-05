@@ -220,6 +220,10 @@ function _chartTextColor() {
   --purple-lt: #ECEAFA;
   --purple-bd: #C7BFEF;
   --slate:     #435872;
+  /* ── Barge transfer (barge to barge) — bright orange ── */
+  --xfer:      #E8590C;
+  --xfer-lt:   #FFEDE0;
+  --xfer-bd:   #F7B48A;
 
   /* ── Fuel indication (VLSFO / LSMGO) — rich, distinct, professional hues ── */
   --fuel-v:    #2C5FA8;   /* VLSFO — deep cobalt blue */
@@ -343,6 +347,9 @@ html[data-theme="dark"] {
   --purple-lt: rgba(144,137,224,.16);
   --purple-bd: rgba(144,137,224,.38);
   --slate:     #8FA3BC;
+  --xfer:      #F2803A;
+  --xfer-lt:   rgba(242,128,58,.16);
+  --xfer-bd:   rgba(242,128,58,.40);
 
   --fuel-v:    #6E9AE0;
   --fuel-v-lt: rgba(110,154,224,.15);
@@ -1588,7 +1595,7 @@ html[data-skin="harbour"] .vcard[data-sts]:hover,html[data-skin="harbour"] .tli.
   @page{size:A4 landscape;margin:10mm 8mm}
   /* Paper is white: print with the light-theme tokens even when the screen
      is in dark mode (mirrors :root — keep in sync if those values change). */
-  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#2E7D1E;--sts-lt:#D6F1C2;--sts-bd:#78C257;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
+  html[data-theme="dark"]{--navy:#060B14;--navy2:#0A1420;--ink:#0F1E30;--ink-solid:#0F1E30;--azure:#0E7A9B;--azure-lt:#E6F3F7;--azure-bd:#97C9D9;--azure-dk:#0B6480;--teal:#0B5C6E;--teal-lt:#E3F1F1;--teal-bd:#86BFC7;--amber:#B8790F;--amber-lt:#FAF2E3;--amber-bd:#E7C077;--red:#AE3A2E;--red-lt:#FAEAE8;--red-lt2:#F3CCC5;--red-bd:#E3ACA4;--green:#147A58;--green-lt:#E2F2EB;--green-lt2:#C4E9D9;--green-bd:#8ECDB2;--purple:#5B4FBF;--purple-lt:#ECEAFA;--purple-bd:#C7BFEF;--xfer:#E8590C;--xfer-lt:#FFEDE0;--xfer-bd:#F7B48A;--slate:#435872;--fuel-v:#2C5FA8;--fuel-v-lt:#E8EFF9;--fuel-v-bd:#A9C0E2;--fuel-m:#BE6118;--fuel-m-lt:#FAEEE1;--fuel-m-bd:#E4B98C;--barge-1:#7C4DDB;--barge-1-lt:#F0EAFB;--barge-2:#D6336C;--barge-2-lt:#FCE8EF;--barge-3:#52667A;--barge-3-lt:#ECEFF3;--barge-4:#7A8B1F;--barge-4-lt:#F1F4DF;--barge-5:#8D5B3A;--barge-5-lt:#F5ECE4;--sts:#2E7D1E;--sts-lt:#D6F1C2;--sts-bd:#78C257;--sts-on:#FFFFFF;--bg:var(--surface2);--surface:#FFFFFF;--surface2:#EAEFF5;--surface3:#DEE6EF;--border:rgba(19,38,62,.10);--border2:rgba(19,38,62,.07);--text:#101F31;--sub:#47617D;--muted:#7891A8;--overlay:rgba(9,16,28,.52);--sh-xs:0 1px 3px rgba(10,30,60,.08), 0 0 0 1px rgba(10,30,60,.04);--sh-sm:0 2px 8px rgba(10,30,60,.10), 0 0 0 1px rgba(10,30,60,.05);--sh-md:0 4px 16px rgba(10,30,60,.12), 0 0 0 1px rgba(10,30,60,.06);--sh-lg:0 8px 32px rgba(10,30,60,.14), 0 0 0 1px rgba(10,30,60,.07);--sh-xl:0 16px 48px rgba(10,30,60,.18), 0 0 0 1px rgba(10,30,60,.08);--sh-in-xs:inset 0 1px 3px rgba(10,30,60,.07);--sh-in-sm:inset 0 2px 6px rgba(10,30,60,.09);color-scheme:light}
   body>*{display:none!important}
   #print-only-container{display:block!important;position:static!important;width:100%!important}
   #print-only-container *{display:revert}
@@ -2004,10 +2011,7 @@ html[data-skin="harbour"] .cal-ticket-loading{background:#FFF1D9!important;borde
 html[data-skin="harbour"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#A15C00!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(161,92,0,.35)!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(161,92,0,.2)!important}
-html[data-skin="harbour"] .cal-ticket-transfer{background:var(--purple-lt)!important;border-color:var(--purple-bd)!important;border-radius:10px!important}
-html[data-skin="harbour"] .cal-ticket-transfer :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:var(--purple)!important}
-html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.55)"]{border-color:var(--purple-bd)!important}
-html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.3)"]{border-top-color:var(--purple-bd)!important}
+html[data-skin="harbour"] .cal-ticket-transfer{background:var(--xfer)!important;border-color:var(--xfer)!important;border-radius:10px!important}
 /* Command Center wallboard stays a dark TV screen by design — but in the
    Harbour palette: navy ground, #0B3D6B panels, one coral accent, Harbour
    status tints, Plus Jakarta Sans labels + IBM Plex Mono figures. The panel
@@ -3543,7 +3547,7 @@ function flowWelcomeGo(pageId) {
       <div class="field ld-xfer-only" id="ld-from-barge-field" style="min-width:220px;display:none"><label for="ld-from-barge">From barge <span style="font-weight:400;color:var(--muted)">— discharges</span></label>
         <select id="ld-from-barge" onchange="_ldSyncFromBarge();_recalcLoadingEstimate()"></select>
       </div>
-      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--purple);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
+      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--xfer);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
     </div>
     <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the giving barge's pump rate for that grade (Barge Fleet) + hose-up time; both barges are blocked for it in the schedule.</div>
     <div class="ld-load-only" style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
@@ -5721,7 +5725,7 @@ function renderDashActivity(records, vessels) {
       const dateLbl = start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       if (r.kind === 'transfer') {
         items.push({
-          color: 'var(--purple)',
+          color: 'var(--xfer)',
           title: `Barge Transfer Scheduled — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
           time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
@@ -5753,7 +5757,7 @@ function renderDashActivity(records, vessels) {
       const dateLbl = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       if (r.kind === 'transfer') {
         items.push({
-          color: 'var(--purple)',
+          color: 'var(--xfer)',
           title: `Barge Transfer Completed — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade}`,
           time: (dateLbl + ' ' + t).trim() || '—',
@@ -9981,13 +9985,13 @@ function renderLoadingList() {
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
           + '</button>';
       if (xfer) {
-        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--purple);' + doneStyle + '">'
-          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--purple);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
+        return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--xfer);' + doneStyle + '">'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--xfer);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
           + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
-          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--purple);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
+          + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--xfer);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
           + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
           + '<div style="flex:1;min-width:160px">'
-            + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
+            + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
           + '</div>'
@@ -16273,14 +16277,14 @@ function buildTL(items, containerId, loadingsForBarge) {
   }
   merged.forEach(entry => {
     if (entry.type === 'loading' && _isTransfer(entry.rec)) {
-      // Barge-to-barge transfer — purple; both barges are busy for its whole window.
+      // Barge-to-barge transfer — orange; both barges are busy for its whole window.
       const rec = entry.rec;
       const toN = _resolveRecordBargeName(rec), fromN = rec.fromBarge || '';
       const ld = document.createElement('div');
       ld.className = 'tli tli-transfer';
-      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--purple)"></div><div class="tll"></div></div>
-      <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
-        <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
+      ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--xfer)"></div><div class="tll"></div></div>
+      <div class="tlc" style="border-color:var(--xfer-bd);background:var(--xfer-lt)">
+        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
         <div class="tlm">
           <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
@@ -23817,14 +23821,14 @@ function renderWeekCalendar(offsetDays) {
 
           return dayEntries.map(function(entry) {
             if (entry.kind === 'loading' && _isTransfer(entry.data)) {
-              // Barge-to-barge transfer — purple, so it never reads as a terminal loading.
+              // Barge-to-barge transfer — orange, so it never reads as a terminal loading.
               const r = entry.data;
               const start = new Date(r.startAt), end = new Date(r.endAt);
               const fromN = r.fromBarge || '', toN = _resolveRecordBargeName(r);
               const xWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
               return `<div style="
-                background:var(--purple);
-                border:1px solid var(--purple-bd);
+                background:var(--xfer);
+                border:1px solid var(--xfer-bd);
                 border-radius:4px;
                 padding:6px 7px;
                 overflow:hidden;
@@ -23947,7 +23951,7 @@ function renderWeekCalendar(offsetDays) {
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span>VLSFO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span>LSMGO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);display:inline-block"></span>BOTH</span>
-      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);outline:1.5px solid var(--purple-bd);display:inline-block"></span>TRANSFER</span>
+      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--xfer);outline:1.5px solid var(--xfer-bd);display:inline-block"></span>TRANSFER</span>
     </span>
   </div>`;
 

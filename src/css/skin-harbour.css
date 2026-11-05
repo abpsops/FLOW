@@ -368,10 +368,7 @@ html[data-skin="harbour"] .cal-ticket-loading{background:#FFF1D9!important;borde
 html[data-skin="harbour"] .cal-ticket-loading :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:#A15C00!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.55)"]{border-color:rgba(161,92,0,.35)!important}
 html[data-skin="harbour"] .cal-ticket-loading [style*="rgba(255,255,255,.3)"]{border-top-color:rgba(161,92,0,.2)!important}
-html[data-skin="harbour"] .cal-ticket-transfer{background:var(--purple-lt)!important;border-color:var(--purple-bd)!important;border-radius:10px!important}
-html[data-skin="harbour"] .cal-ticket-transfer :is([style*="color:#fff"],[style*="rgba(255,255,255,.85)"]){color:var(--purple)!important}
-html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.55)"]{border-color:var(--purple-bd)!important}
-html[data-skin="harbour"] .cal-ticket-transfer [style*="rgba(255,255,255,.3)"]{border-top-color:var(--purple-bd)!important}
+html[data-skin="harbour"] .cal-ticket-transfer{background:var(--xfer)!important;border-color:var(--xfer)!important;border-radius:10px!important}
 /* Command Center wallboard stays a dark TV screen by design — but in the
    Harbour palette: navy ground, #0B3D6B panels, one coral accent, Harbour
    status tints, Plus Jakarta Sans labels + IBM Plex Mono figures. The panel

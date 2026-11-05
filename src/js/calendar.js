@@ -190,14 +190,14 @@ function renderWeekCalendar(offsetDays) {
 
           return dayEntries.map(function(entry) {
             if (entry.kind === 'loading' && _isTransfer(entry.data)) {
-              // Barge-to-barge transfer — purple, so it never reads as a terminal loading.
+              // Barge-to-barge transfer — orange, so it never reads as a terminal loading.
               const r = entry.data;
               const start = new Date(r.startAt), end = new Date(r.endAt);
               const fromN = r.fromBarge || '', toN = _resolveRecordBargeName(r);
               const xWin = r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : '';
               return `<div style="
-                background:var(--purple);
-                border:1px solid var(--purple-bd);
+                background:var(--xfer);
+                border:1px solid var(--xfer-bd);
                 border-radius:4px;
                 padding:6px 7px;
                 overflow:hidden;
@@ -320,7 +320,7 @@ function renderWeekCalendar(offsetDays) {
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-v);display:inline-block"></span>VLSFO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--fuel-m);display:inline-block"></span>LSMGO</span>
       <span style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);display:inline-block"></span>BOTH</span>
-      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--purple);outline:1.5px solid var(--purple-bd);display:inline-block"></span>TRANSFER</span>
+      <span class="cal-legend-xfer" style="font-size:9px;font-weight:600;color:var(--sub);display:flex;align-items:center;gap:5px;font-family:'DM Mono',monospace"><span style="width:8px;height:8px;border-radius:2px;background:var(--xfer);outline:1.5px solid var(--xfer-bd);display:inline-block"></span>TRANSFER</span>
     </span>
   </div>`;
 

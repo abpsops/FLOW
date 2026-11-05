@@ -507,7 +507,7 @@ function renderDashActivity(records, vessels) {
       const dateLbl = start.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       if (r.kind === 'transfer') {
         items.push({
-          color: 'var(--purple)',
+          color: 'var(--xfer)',
           title: `Barge Transfer Scheduled — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
           time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
@@ -539,7 +539,7 @@ function renderDashActivity(records, vessels) {
       const dateLbl = isNaN(d) ? '' : d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
       if (r.kind === 'transfer') {
         items.push({
-          color: 'var(--purple)',
+          color: 'var(--xfer)',
           title: `Barge Transfer Completed — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade}`,
           time: (dateLbl + ' ' + t).trim() || '—',

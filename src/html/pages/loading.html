@@ -56,7 +56,7 @@
       <div class="field ld-xfer-only" id="ld-from-barge-field" style="min-width:220px;display:none"><label for="ld-from-barge">From barge <span style="font-weight:400;color:var(--muted)">— discharges</span></label>
         <select id="ld-from-barge" onchange="_ldSyncFromBarge();_recalcLoadingEstimate()"></select>
       </div>
-      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--purple);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
+      <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--xfer);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
     </div>
     <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the giving barge's pump rate for that grade (Barge Fleet) + hose-up time; both barges are blocked for it in the schedule.</div>
     <div class="ld-load-only" style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
