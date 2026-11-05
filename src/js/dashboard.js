@@ -510,7 +510,7 @@ function renderDashActivity(records, vessels) {
           color: 'var(--purple)',
           title: `Barge Transfer Scheduled — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
-          time: dateLbl + ' ' + t,
+          time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
           onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
         });
         return;

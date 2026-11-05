@@ -495,11 +495,12 @@ function buildTL(items, containerId, loadingsForBarge) {
       <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
         <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
         <div class="tlm">
-          <div class="tmi"><label>Transfer Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
+          <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
+          ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;

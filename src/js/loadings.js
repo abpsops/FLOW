@@ -83,7 +83,7 @@ function _ldKindChanged() {
   const sl = document.getElementById('ld-start-date-label');
   if (sl) sl.textContent = xfer ? 'Transfer Start Date' : 'Loading Start Date';
   const lb = document.getElementById('loading-submit-btn-label');
-  if (lb && !_loadingEditingId) lb.textContent = xfer ? 'Add Transfer' : 'Add Loading';
+  if (lb) lb.textContent = _loadingEditingId ? (xfer ? 'Update Transfer' : 'Update Loading') : (xfer ? 'Add Transfer' : 'Add Loading');
   _populateLoadingBargeSelect();
   _recalcLoadingEstimate();
 }

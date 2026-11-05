@@ -247,6 +247,45 @@ function seed(loadings, extra) {
     check('X6 a trader sees the transfers on the calendar', t >= 1, t);
   });
 
+  await scenario('X7 review fixes', async (openT) => {
+    const db = H.createDb({ workspace: seed([xfer('x1', 2, 13), { id: 'l1', barge: 'FNSA 11', grade: 'VLSFO', terminal: 'VOPAK', qty: 3000, startAt: iso(-60), endAt: iso(-49), updatedAt: NOW }]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const p = await A.page.evaluate(() => {
+      showPage('loading'); editLoadingRecord('x1'); cancelLoadingEdit();
+      const before = document.getElementById('ld-kind').value;
+      const orig = _bargeStockForecast;
+      _bargeStockForecast = () => ({ recs: [{ key: 'k1', bargeName: 'FNSA 11', grade: 'VLSFO', qty: 2000, planStart: new Date(Date.now() + 50 * 3600000), vessel: 'V', jobStart: new Date(), reloadBy: new Date() }] });
+      try { rlPlanLoading('2', 'k1', 168); } finally { _bargeStockForecast = orig; }
+      const vis = id => getComputedStyle(document.getElementById(id).closest('.field')).display !== 'none';
+      return { before, kind: document.getElementById('ld-kind').value, terminal: document.getElementById('ld-terminal').value, termVis: vis('ld-terminal'), btn: document.getElementById('loading-submit-btn-label').textContent };
+    });
+    check('X7 "Plan this loading" after a transfer edit fills a TERMINAL loading (type reset, terminal shown, "Add Loading")', p.before === 'transfer' && p.kind === 'loading' && p.terminal === 'VOPAK' && p.termVis && p.btn === 'Add Loading', p);
+    const lb = await A.page.evaluate(() => {
+      editLoadingRecord('x1'); const k = document.getElementById('ld-kind'); k.value = 'loading'; k.dispatchEvent(new Event('change'));
+      const a = document.getElementById('loading-submit-btn-label').textContent; cancelLoadingEdit(); return a;
+    });
+    check('X7 switching the type while editing keeps the button an Update ("Update Loading")', lb === 'Update Loading', lb);
+    const m = await A.page.evaluate(() => {
+      const b = { id: 'm1', barge: 'FNSA 11', terminal: 'VOPAK', grade: 'VLSFO', qty: 3000, startAt: '2026-12-01T08:00:00.000Z', endAt: '2026-12-01T24:00:00.000Z', updatedAt: 1 };
+      const L = Object.assign({}, b, { kind: 'transfer', fromBarge: 'FNSA 10', terminal: '', updatedAt: 3 });
+      const R = Object.assign({}, b, { dealId: 'deal_1', completed: true, blQty: 2990, blDate: '2026-12-02', updatedAt: 2 });
+      const out = _merge3([b], [L], [R], 'loadingRecords', { conflicts: [] }, 'loadingRecords')[0];
+      return { kind: out.kind, deal: 'dealId' in out, bl: 'blQty' in out || 'blDate' in out, completed: out.completed };
+    });
+    check('X7 a merge where one side made it a transfer and the other linked a deal / entered a BL keeps a clean transfer', m.kind === 'transfer' && !m.deal && !m.bl && m.completed === true, m);
+    const tf = await A.page.evaluate(async () => {
+      const k = document.getElementById('ld-kind'); k.value = 'transfer'; k.dispatchEvent(new Event('change'));
+      document.getElementById('ld-from-barge').value = 'FNSA 10'; document.getElementById('ld-barge').value = 'FNSA 11'; document.getElementById('ld-qty').value = '600';
+      const t = new Date(); t.setDate(t.getDate() + 3); document.getElementById('ld-start-date').value = _localDateInputStr(t);
+      document.getElementById('ld-surveyor').value = 'SGS';
+      _ldSetStartWin('AM'); submitLoadingForm(); await _waitForSaveIdle();
+      const r = _loadingRecords.find(x => x.kind === 'transfer' && x.qty === 600);
+      const row = [...document.querySelectorAll('#loading-list .ld-row-transfer')].find(e => /600 MT/.test(e.textContent));
+      return { win: r && r.startWin, row: row && row.textContent.replace(/\s+/g, ' ') };
+    });
+    check('X7 a transfer with a time-frame start shows the frame and "latest end" in the list, and its surveyor', tf.win === 'AM' && /AM \(/.test(tf.row) && /Start frame/.test(tf.row) && /Surveyor: SGS/.test(tf.row), tf);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

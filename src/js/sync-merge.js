@@ -51,7 +51,13 @@ function _merge3(b, l, r, key, ctx, path) {
     if (f) return _mergeById(bArr, l, r, f, key, ctx, path);
   } else if (_isPlainObj(l) && _isPlainObj(r) && !_MERGE_ATOMIC_KEYS[key]) {
     // A manual end date and its flag are ONE value; a computed end (flag off) is derived again after the merge.
-    if (key === 'loadingRecords[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+    if (key === 'loadingRecords[]' && _isPlainObj(b)) {
+      const ldm = _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+      // One side made it a barge transfer while the other linked a deal / entered a BL:
+      // a transfer has neither (the merged record stays a transfer).
+      if (_isPlainObj(ldm) && ldm.kind === 'transfer') { delete ldm.dealId; delete ldm.blQty; delete ldm.blAt; delete ldm.blDate; }
+      return ldm;
+    }
     if (key === 'loadingDeals[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
     if (l.updatedAt != null || r.updatedAt != null) {
       _mergeConflict(ctx, path);

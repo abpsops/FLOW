@@ -346,6 +346,9 @@ function rlPlanLoading(bargeId, key, hrs) {
   if (!rec) { showToast('That reload is no longer needed — the forecast has changed.', 'info'); _rlRenderAllHosts(); return; }
   showPage('loading');
   cancelLoadingEdit(); // a fresh form, never an edit of another loading
+  // a terminal loading, even if the form was last used for a barge transfer
+  var kindEl = document.getElementById('ld-kind');
+  if (kindEl && kindEl.value !== 'loading') { kindEl.value = 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
   var set = function(id, v) { var el = document.getElementById(id); if (el) el.value = v; };
   set('ld-barge', rec.bargeName);

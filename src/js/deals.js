@@ -40,7 +40,7 @@ function _dealLiftingRows(d) {
   return { st: st, lifted: lifted, scheduled: scheduled };
 }
 function _dealLoadings(dealId) {
-  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.dealId === dealId; })
+  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && r.dealId === dealId; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
 }
 function _dealStats(d) {
@@ -597,7 +597,7 @@ function renderLoadingList() {
       const xfer = _isTransfer(r);
       const durLine = r.endOverridden
         ? 'Manual end date'
-        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : ''].filter(Boolean).join(' · ')
+        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : '', (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ')
         : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag, (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ');
       // Time-frame start: "16 Oct 2026 AM (06:00–12:00)".
       const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
@@ -628,9 +628,10 @@ function renderLoadingList() {
           + '<div style="flex:1;min-width:160px">'
             + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+            + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
           + '</div>'
           + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
-            + '<div class="ld-when">' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
+            + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'
             + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
           + '</div>'
           + '<div style="display:flex;gap:6px">' + actionBtns + '</div>'

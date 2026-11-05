@@ -5724,7 +5724,7 @@ function renderDashActivity(records, vessels) {
           color: 'var(--purple)',
           title: `Barge Transfer Scheduled — ${r.grade}`,
           detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
-          time: dateLbl + ' ' + t,
+          time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
           onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
         });
         return;
@@ -7712,7 +7712,13 @@ function _merge3(b, l, r, key, ctx, path) {
     if (f) return _mergeById(bArr, l, r, f, key, ctx, path);
   } else if (_isPlainObj(l) && _isPlainObj(r) && !_MERGE_ATOMIC_KEYS[key]) {
     // A manual end date and its flag are ONE value; a computed end (flag off) is derived again after the merge.
-    if (key === 'loadingRecords[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+    if (key === 'loadingRecords[]' && _isPlainObj(b)) {
+      const ldm = _mergeByNewer(b, l, r, ctx, path, [{ keys: ['endOverridden', 'endAt'], sig: function(o) { return o && o.endOverridden ? [true, o.endAt] : [false, null]; } }]);
+      // One side made it a barge transfer while the other linked a deal / entered a BL:
+      // a transfer has neither (the merged record stays a transfer).
+      if (_isPlainObj(ldm) && ldm.kind === 'transfer') { delete ldm.dealId; delete ldm.blQty; delete ldm.blAt; delete ldm.blDate; }
+      return ldm;
+    }
     if (key === 'loadingDeals[]' && _isPlainObj(b)) return _mergeByNewer(b, l, r, ctx, path);
     if (l.updatedAt != null || r.updatedAt != null) {
       _mergeConflict(ctx, path);
@@ -8949,7 +8955,7 @@ function _ldKindChanged() {
   const sl = document.getElementById('ld-start-date-label');
   if (sl) sl.textContent = xfer ? 'Transfer Start Date' : 'Loading Start Date';
   const lb = document.getElementById('loading-submit-btn-label');
-  if (lb && !_loadingEditingId) lb.textContent = xfer ? 'Add Transfer' : 'Add Loading';
+  if (lb) lb.textContent = _loadingEditingId ? (xfer ? 'Update Transfer' : 'Update Loading') : (xfer ? 'Add Transfer' : 'Add Loading');
   _populateLoadingBargeSelect();
   _recalcLoadingEstimate();
 }
@@ -9395,7 +9401,7 @@ function _dealLiftingRows(d) {
   return { st: st, lifted: lifted, scheduled: scheduled };
 }
 function _dealLoadings(dealId) {
-  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.dealId === dealId; })
+  return (_loadingRecords || []).filter(function(r) { return r && !r.deletedAt && r.kind !== 'transfer' && r.dealId === dealId; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); });
 }
 function _dealStats(d) {
@@ -9952,7 +9958,7 @@ function renderLoadingList() {
       const xfer = _isTransfer(r);
       const durLine = r.endOverridden
         ? 'Manual end date'
-        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : ''].filter(Boolean).join(' · ')
+        : xfer ? ['Pump ' + _formatDurationHours(r.pumpHours), r.hoseHours ? 'Hose ' + _formatDurationHours(r.hoseHours) : '', (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ')
         : ['Pump ' + _formatDurationHours(r.pumpHours), preTag, postTag, (r.startWin && _etaFrame(r.startWin) ? 'Start frame ' + _formatDurationHours(_etaFrameHrs(r.startWin)) + ' — latest end' : '')].filter(Boolean).join(' · ');
       // Time-frame start: "16 Oct 2026 AM (06:00–12:00)".
       const startTxt = (r.startWin && _etaFrame(r.startWin)) ? _fmtEtaWin(start, r.startWin) : fmtD(start);
@@ -9983,9 +9989,10 @@ function renderLoadingList() {
           + '<div style="flex:1;min-width:160px">'
             + '<div style="font-size:13px;font-weight:700;color:var(--purple);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+            + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
           + '</div>'
           + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
-            + '<div class="ld-when">' + fmtD(start) + ' → ' + fmtD(end) + '</div>'
+            + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'
             + '<div style="color:var(--muted);margin-top:1px">' + durLine + '</div>'
           + '</div>'
           + '<div style="display:flex;gap:6px">' + actionBtns + '</div>'
@@ -16275,11 +16282,12 @@ function buildTL(items, containerId, loadingsForBarge) {
       <div class="tlc" style="border-color:var(--purple-bd);background:var(--purple-lt)">
         <div class="tlch"><div class="tlvn" style="color:var(--purple)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--purple);color:#fff;border:1px solid var(--purple-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--purple);border:1px solid var(--purple-bd)">Barge busy</span></div></div>
         <div class="tlm">
-          <div class="tmi"><label>Transfer Start</label><span>${fmt24(new Date(rec.startAt))}</span></div>
+          <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
+          ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;
@@ -17540,6 +17548,9 @@ function rlPlanLoading(bargeId, key, hrs) {
   if (!rec) { showToast('That reload is no longer needed — the forecast has changed.', 'info'); _rlRenderAllHosts(); return; }
   showPage('loading');
   cancelLoadingEdit(); // a fresh form, never an edit of another loading
+  // a terminal loading, even if the form was last used for a barge transfer
+  var kindEl = document.getElementById('ld-kind');
+  if (kindEl && kindEl.value !== 'loading') { kindEl.value = 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
   var set = function(id, v) { var el = document.getElementById(id); if (el) el.value = v; };
   set('ld-barge', rec.bargeName);
@@ -23820,7 +23831,7 @@ function renderWeekCalendar(offsetDays) {
                 box-sizing:border-box;
                 cursor:pointer;
                 transition:filter .12s, transform .12s;
-              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(r.grade)} ${Number(r.qty).toLocaleString()} MT&#10;${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(r.grade)} ${Number(r.qty).toLocaleString()} MT&#10;${xWin ? 'Start ' + xWin + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
                 <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                   <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${xWin || fmt(start)}</span>
                   <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">TRANSFER</span>
