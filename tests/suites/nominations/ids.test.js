@@ -490,7 +490,11 @@ const etaStr = days => { const d = new Date(Date.now() + days * 86400000); retur
     await A.page.evaluate(() => _pollOnce(true));
     await sleep(500);
     const clean = await B.page.evaluate(() => { const l = _mergeDoc(_buildLocalPayload()), b = _mergeDoc(_lastSyncedPayload); return _sameJSON(l.state.vessels, b.state.vessels); });
-    check('V7 after everything: pulls cause no further writes, B is clean', U.writes(db, 'user-operator').length === wA && U.writes(db, 'user-operator2').length === wB && clean);
+    // on failure: who wrote after the count, and what differed (the CI run once saw an extra write here)
+    const extra = uid => U.writes(db, uid).slice(uid === 'user-operator' ? wA : wB).map(o => ({ action: o.action, keys: Object.keys(o).join(','), at: Date.now() }));
+    const diff = clean ? null : await B.page.evaluate(() => { const l = _mergeDoc(_buildLocalPayload()).state.vessels, b = _mergeDoc(_lastSyncedPayload).state.vessels; return { local: JSON.stringify(l).slice(0, 300), base: JSON.stringify(b).slice(0, 300) }; });
+    check('V7 after everything: pulls cause no further writes, B is clean', U.writes(db, 'user-operator').length === wA && U.writes(db, 'user-operator2').length === wB && clean,
+      { extraA: extra('user-operator'), extraB: extra('user-operator2'), clean, diff });
   });
 
   /* ── 7b. The saved pair is written back unchanged until the card's ID boxes are edited ── */
