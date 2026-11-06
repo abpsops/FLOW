@@ -308,9 +308,34 @@ async function openApp(browser, db, opts) {
   page.on('pageerror', e => errors.push('pageerror: ' + (e.stack || e.message)));
   page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
   page.on('dialog', d => { (opts.onDialog || (dd => dd.accept()))(d); });
+  // Navigation trail: CI has (rarely) lost a page to a navigation mid-test ("Execution
+  // context was destroyed"), never reproduced locally. Every page records what could
+  // have caused one, and that error carries the trail, so a failure names its cause.
+  const trail = [];
+  let loaded = false;
+  const t0 = Date.now(), stamp = () => '+' + ((Date.now() - t0) / 1000).toFixed(1) + 's ';
+  page.on('framenavigated', f => { if (loaded && f === page.mainFrame()) trail.push(stamp() + 'navigated ' + f.url().slice(0, 120)); });
+  page.on('request', r => { if (loaded && r.isNavigationRequest()) trail.push(stamp() + 'navigation request ' + r.url().slice(0, 120)); });
+  page.on('crash', () => trail.push(stamp() + 'page crashed'));
+  page.on('console', m => { if (/^NAVTRAIL /.test(m.text())) trail.push(stamp() + m.text().slice(9, 400)); });
+  const evaluate = page.evaluate.bind(page);
+  page.evaluate = async function() {
+    try { return await evaluate.apply(null, arguments); }
+    catch (e) {
+      if (e && /Execution context was destroyed|Target closed|has been closed/.test(String(e.message))) e.message += ' | page trail: ' + (JSON.stringify(trail.slice(-12)) || '[]');
+      throw e;
+    }
+  };
   await page.goto('https://flow.test/index.html', { waitUntil: 'load' });
   await page.waitForTimeout(opts.settleMs == null ? 2500 : opts.settleMs);
-  return { ctx, page, errors };
+  loaded = true;
+  try {
+    await evaluate(() => {
+      ['_buildReload', '_buildOffer', 'operatorLogout', 'wipeSupabaseWorkspace', 'nuclearClear'].forEach(n => { const o = window[n]; if (typeof o === 'function') window[n] = function() { console.log('NAVTRAIL called ' + n + ' ' + (new Error().stack || '').split('\n').slice(2, 6).join(' | ')); return o.apply(this, arguments); }; });
+      window.addEventListener('beforeunload', () => { let br = ''; try { br = sessionStorage.getItem('flow_build_reload') || ''; } catch (e) {} console.log('NAVTRAIL beforeunload' + (br ? ' build-reload=' + br : '')); });
+    });
+  } catch (e) { /* diagnostics only */ }
+  return { ctx, page, errors, trail };
 }
 
 module.exports = { APP_DIR, CDN_MAP, createDb, handle, handleAndBroadcast, launch, openApp };
