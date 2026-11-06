@@ -677,6 +677,7 @@ function renderLoadingList() {
   setTxt('ld-kpi-avgdur', avgHrs > 0 ? avgHrs.toFixed(1) : '0');
 
   _refreshLoadingTerminalDatalist();
+  _ldRepRefresh();
 }
 
 function renderLoadingPage() {

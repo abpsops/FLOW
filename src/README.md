@@ -86,6 +86,7 @@ styles, body, pages, modals and the script blocks, in page order.
 | `sync-load.js` | sync warning / offline banners, pull-and-merge, first load |
 | `loadings.js` | Loading page: terminal loadings, durations, conflicts |
 | `deals.js` | Loading Deals: bulk purchases, BL quantity, drawdown |
+| `loading-report.js` | Monthly loading report (Excel / PDF): per supplier, per date, each lifting |
 | `barge-tracking.js` | Barge Tracking report uploads |
 | `state.js` | `captureCurrentState()` / `applyState()`, force push / pull |
 | `live-rob.js` | Live ROB engine, ROB summary and editor |
