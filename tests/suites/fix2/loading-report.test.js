@@ -129,6 +129,34 @@ function seed() {
     check('M2 the buttons produce both files and come back after "Preparing…"', btn.n === 2 && /Preparing/.test(btn.mid) && btn.after[0] === '⬇ Excel' && btn.after[1] === '⬇ PDF' && !btn.after[2] && !btn.after[3], btn);
   });
 
+  await scenario('M3 review fixes', async (openT) => {
+    const s = seed();
+    s.state.loadingDeals.push({ id: 'deal_3', supplier: '  aramco ', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 9000, date: '2026-10-01', ref: 'SPOT', status: 'open', createdAt: 1, updatedAt: 1 });
+    s.state.loadingRecords.push(
+      ld('l9', { dealId: 'deal_3', qty: 300, completed: true, completedAt: Date.parse(at(7, 10)), blQty: 300, blDate: '2026-10-07' }),
+      // still running across the month-end: starts 31 Oct, ends 1 Nov → counts in November
+      ld('l10', { dealId: 'deal_1', qty: 2500, startAt: at(31, 6), endAt: new Date(Date.UTC(2026, 10, 1, 12)).toISOString() }),
+      ld('l11', { dealId: 'deal_1', qty: 1000, completed: true, completedAt: Date.parse(at(8, 10)), blQty: 1000, blDate: '2026-10-08', terminal: 'VOPAK HORIZON FUJAIRAH TERMINAL NUMBER TWO' }));
+    const db = H.createDb({ workspace: s, realtime: false });
+    const A = await openT(db, 'user-operator');
+    const d = await A.page.evaluate(() => {
+      const o = _ldMonthReportData('2026-10'), n = _ldMonthReportData('2026-11');
+      return { sup: o.bySupplier.map(g => [g.key, g.liftings, g.v]), octSched: o.scheduled.map(x => x.planned), novSched: n.scheduled.map(x => x.planned) };
+    });
+    check('M3 "ARAMCO" and "  aramco " on different deals are one supplier (first spelling shown)', d.sup[0][0] === 'ARAMCO' && d.sup[0][1] === 4 && d.sup[0][2] === 7290.5 && !d.sup.some(g => /^aramco$/i.test(g[0]) && g !== d.sup[0]), d.sup);
+    check('M3 a loading still running across the month-end is listed under the month it ends in (November), not October', JSON.stringify(d.octSched) === JSON.stringify([3500]) && JSON.stringify(d.novSched) === JSON.stringify([2500]), d);
+    const fmt = await A.page.evaluate(async () => {
+      showPage('loading'); document.getElementById('ld-rep-month').value = '2026-10';
+      let got = null; const orig = _flowSaveOrShareBlob; _flowSaveOrShareBlob = async b => { got = b; };
+      try { await loadingMonthReportExcel(null); } finally { _flowSaveOrShareBlob = orig; }
+      const wb = new (await _loadExcelJS()).Workbook(); await wb.xlsx.load(await got.arrayBuffer());
+      const ws = wb.getWorksheet('Loading report'); const out = {};
+      ws.eachRow(r => r.eachCell(c => { if (c.value === 4000 || c.value === 3990.5 || c.value === 5) out[c.value] = out[c.value] || c.numFmt; }));
+      return out;
+    });
+    check('M3 Excel shows whole tonnes / counts without a trailing dot, decimals only when there are some', fmt['4000'] === '#,##0' && fmt['3990.5'] === '#,##0.###', fmt);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

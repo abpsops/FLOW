@@ -18,6 +18,8 @@ function _dealDateStr(ymd) {
 }
 // Tonnes as on the BL: up to 3 decimals, never rounded away (4,412.5 stays 4,412.5).
 function _mtStr(x) { return (Math.round((Number(x) || 0) * 1000) / 1000).toLocaleString('en-US', { maximumFractionDigits: 3 }); }
+// Excel number format for a tonnage: decimals only when there are some ('#,##0.###' leaves "4,000." on whole numbers).
+function _xlMt(v) { return Number(v) % 1 ? '#,##0.###' : '#,##0'; }
 // What a completed loading lifted: the BL quantity, or the planned quantity until a BL figure is entered.
 function _loadingLifted(r) { return r.blQty != null && r.blQty !== '' && !isNaN(Number(r.blQty)) ? Number(r.blQty) : (Number(r.qty) || 0); }
 // A lifting's BL date: the date entered (YYYY-MM-DD), else the day it was marked
@@ -446,7 +448,7 @@ async function dealExportLiftingExcel(id, btn) {
     let r = 4;
     R.head.forEach(function(h) { ws.getCell('A' + r).value = h[0]; ws.mergeCells('A' + r + ':B' + r); ws.getCell('A' + r).font = { bold: true, color: { argb: 'FF4A6278' } }; ws.getCell('C' + r).value = h[1]; ws.mergeCells('C' + r + ':D' + r); r++; });
     r = 4;
-    R.sums.forEach(function(sm) { ws.getCell('E' + r).value = sm[0] + ' (MT)'; ws.mergeCells('E' + r + ':F' + r); ws.getCell('E' + r).font = { bold: true, color: { argb: 'FF4A6278' } }; const c = ws.getCell('G' + r); c.value = Math.round(sm[1] * 1000) / 1000; c.numFmt = '#,##0.###'; c.font = { bold: sm[0] === 'Left to lift' }; r++; });
+    R.sums.forEach(function(sm) { ws.getCell('E' + r).value = sm[0] + ' (MT)'; ws.mergeCells('E' + r + ':F' + r); ws.getCell('E' + r).font = { bold: true, color: { argb: 'FF4A6278' } }; const c = ws.getCell('G' + r); c.value = Math.round(sm[1] * 1000) / 1000; c.numFmt = _xlMt(c.value); c.font = { bold: sm[0] === 'Left to lift' }; r++; });
     r = Math.max(r, 4 + R.head.length) + 1;
     const header = function(cells) {
       const row = ws.getRow(r);
@@ -460,7 +462,7 @@ async function dealExportLiftingExcel(id, btn) {
       const row = ws.getRow(r++);
       [x.n, x.blDate, x.barge, x.terminal, x.planned, x.bl, x.left].forEach(function(v, i) {
         const c = row.getCell(i + 1); c.value = v; c.border = border;
-        if (i >= 4) { c.numFmt = '#,##0.###'; c.alignment = { horizontal: 'right' }; }
+        if (i >= 4) { c.numFmt = _xlMt(c.value); c.alignment = { horizontal: 'right' }; }
         if (i === 5 && x.blMark) c.note = 'No BL quantity entered — the planned quantity is used';
         if (i === 6) c.font = { bold: true };
       });
@@ -468,8 +470,8 @@ async function dealExportLiftingExcel(id, btn) {
     if (R.lifted.length) {
       const row = ws.getRow(r++);
       row.getCell(4).value = 'Total lifted'; row.getCell(4).font = { bold: true };
-      const t = row.getCell(6); t.value = Math.round(R.lifted.reduce(function(a, x) { return a + x.bl; }, 0) * 1000) / 1000; t.numFmt = '#,##0.###'; t.font = { bold: true };
-      const lft = row.getCell(7); lft.value = R.lifted[R.lifted.length - 1].left; lft.numFmt = '#,##0.###'; lft.font = { bold: true };
+      const t = row.getCell(6); t.value = Math.round(R.lifted.reduce(function(a, x) { return a + x.bl; }, 0) * 1000) / 1000; t.numFmt = _xlMt(t.value); t.font = { bold: true };
+      const lft = row.getCell(7); lft.value = R.lifted[R.lifted.length - 1].left; lft.numFmt = _xlMt(lft.value); lft.font = { bold: true };
     }
     r++;
     title(r, 'Scheduled loadings (not yet completed)', { bold: true, size: 11, color: { argb: 'FF0D1B2A' } }); r++;
@@ -477,7 +479,7 @@ async function dealExportLiftingExcel(id, btn) {
     if (!R.scheduled.length) { title(r, 'None.', { italic: true, color: { argb: 'FF8A9BAC' } }); r++; }
     R.scheduled.forEach(function(x, i) {
       const row = ws.getRow(r++);
-      [i + 1, x.when, x.barge, x.terminal, x.planned].forEach(function(v, j) { const c = row.getCell(j + 1); c.value = v; c.border = border; if (j === 4) { c.numFmt = '#,##0.###'; c.alignment = { horizontal: 'right' }; } });
+      [i + 1, x.when, x.barge, x.terminal, x.planned].forEach(function(v, j) { const c = row.getCell(j + 1); c.value = v; c.border = border; if (j === 4) { c.numFmt = _xlMt(c.value); c.alignment = { horizontal: 'right' }; } });
     });
     if (R.anyStar) { r++; title(r, '* No BL date / BL quantity entered for that lifting — the day it was marked Completed / the planned quantity is used.', { size: 9, color: { argb: 'FFB8790F' } }); }
     const buf = await wb.xlsx.writeBuffer();

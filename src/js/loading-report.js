@@ -15,8 +15,9 @@ function _ldRepMonthLabel(ym) {
 }
 function _ldRepSupplier(r) {
   const d = r.dealId ? _dealById(r.dealId, true) : null;
-  if (d && String(d.supplier || '').trim()) return { name: String(d.supplier).trim(), ref: d.ref || '', deal: true };
-  return { name: (String(r.terminal || '').trim() || 'Unknown terminal') + ' (no deal)', ref: '', deal: false };
+  const clean = function(s) { return String(s || '').replace(/\s+/g, ' ').trim(); };
+  if (d && clean(d.supplier)) return { name: clean(d.supplier), ref: d.ref || '', deal: true };
+  return { name: (clean(r.terminal) || 'Unknown terminal') + ' (no deal)', ref: '', deal: false };
 }
 // The month's report data. ym = 'YYYY-MM'.
 function _ldMonthReportData(ym) {
@@ -28,18 +29,20 @@ function _ldMonthReportData(ym) {
       grade: r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO', planned: Number(r.qty) || 0, qty: _loadingLifted(r), blEntered: blEntered };
   }).filter(function(x) { return String(x.ymd).slice(0, 7) === ym; })
     .sort(function(a, b) { return String(a.ymd).localeCompare(String(b.ymd)) || ((a.rec.completedAt || 0) - (b.rec.completedAt || 0)); });
-  const add = function(map, key, x) {
-    const g = map[key] || (map[key] = { key: key, liftings: 0, v: 0, m: 0 });
+  // one group per supplier however its name is typed on different deals ("ARAMCO" / "Aramco"); first spelling shown
+  const add = function(map, key, x, label) {
+    const g = map[key] || (map[key] = { key: label || key, liftings: 0, v: 0, m: 0 });
     g.liftings++; if (x.grade === 'LSMGO') g.m += x.qty; else g.v += x.qty;
   };
   const sup = {}, day = {};
-  lifted.forEach(function(x) { add(sup, x.supplier, x); add(day, x.ymd, x); });
+  lifted.forEach(function(x) { add(sup, x.supplier.toUpperCase(), x, x.supplier); add(day, x.ymd, x); });
   const total = function(g) { return g.v + g.m; };
   const bySupplier = Object.values(sup).sort(function(a, b) { return total(b) - total(a) || a.key.localeCompare(b.key); });
   const byDate = Object.values(day).sort(function(a, b) { return a.key.localeCompare(b.key); });
   const tot = { liftings: lifted.length, v: 0, m: 0 };
   lifted.forEach(function(x) { if (x.grade === 'LSMGO') tot.m += x.qty; else tot.v += x.qty; });
-  const scheduled = recs.filter(function(r) { return !r.completed && _localDateInputStr(new Date(r.startAt)).slice(0, 7) === ym; })
+  // not yet completed: listed in the month it will count in once done (its end day, as _loadingBlDate does)
+  const scheduled = recs.filter(function(r) { return !r.completed && String(_loadingBlDate(r).ymd).slice(0, 7) === ym; })
     .sort(function(a, b) { return new Date(a.startAt) - new Date(b.startAt); })
     .map(function(r) { return { when: _ldStartTxt(r), supplier: _ldRepSupplier(r).name, terminal: r.terminal || '', barge: _resolveRecordBargeName(r) || '', grade: r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO', planned: Number(r.qty) || 0 }; });
   return { ym: ym, label: _ldRepMonthLabel(ym), lifted: lifted, bySupplier: bySupplier, byDate: byDate, tot: tot, scheduled: scheduled,
@@ -84,9 +87,9 @@ async function loadingMonthReportExcel(btn) {
     const ExcelJS = await _loadExcelJS();
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Loading report');
-    ws.columns = [{ width: 6 }, { width: 15 }, { width: 28 }, { width: 14 }, { width: 24 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 14 }];
+    ws.columns = [{ width: 6 }, { width: 30 }, { width: 28 }, { width: 14 }, { width: 24 }, { width: 14 }, { width: 10 }, { width: 14 }, { width: 14 }];
     const thin = { style: 'thin', color: { argb: 'FFD8E0E8' } }, border = { top: thin, bottom: thin, left: thin, right: thin };
-    const NUM = '#,##0.###', r3 = function(n) { return Math.round((Number(n) || 0) * 1000) / 1000; };
+    const r3 = function(n) { return Math.round((Number(n) || 0) * 1000) / 1000; };
     let r = 1;
     const title = function(text, font) { ws.mergeCells('A' + r + ':I' + r); const c = ws.getCell('A' + r); c.value = text; c.font = font; r++; };
     const header = function(cells) {
@@ -96,15 +99,15 @@ async function loadingMonthReportExcel(btn) {
     };
     const line = function(vals, numFrom, bold) {
       const row = ws.getRow(r++);
-      vals.forEach(function(v, i) { const c = row.getCell(i + 1); c.value = v; c.border = border; if (i >= numFrom && typeof v === 'number') { c.numFmt = NUM; c.alignment = { horizontal: 'right' }; } if (bold) c.font = { bold: true }; });
+      vals.forEach(function(v, i) { const c = row.getCell(i + 1); c.value = v; c.border = border; if (i >= numFrom && typeof v === 'number') { c.numFmt = _xlMt(v); c.alignment = { horizontal: 'right' }; } if (bold) c.font = { bold: true }; });
       return row;
     };
     title('Monthly loading report — ' + R.label, { bold: true, size: 14, color: { argb: 'FF0D1B2A' } });
     title('Completed loadings by BL date, at the BL quantity · generated ' + R.generated, { size: 9, color: { argb: 'FF8A9BAC' } });
     r++;
     title('Total', { bold: true, size: 11, color: { argb: 'FF0D1B2A' } });
-    header(['', 'Liftings', 'VLSFO (MT)', 'LSMGO (MT)', 'Total (MT)']);
-    line(['', R.tot.liftings, r3(R.tot.v), r3(R.tot.m), r3(R.tot.v + R.tot.m)], 1, true);
+    header(['', 'Month', 'Liftings', 'VLSFO (MT)', 'LSMGO (MT)', 'Total (MT)']);
+    line(['', R.label, R.tot.liftings, r3(R.tot.v), r3(R.tot.m), r3(R.tot.v + R.tot.m)], 2, true);
     r++;
     title('By supplier', { bold: true, size: 11, color: { argb: 'FF0D1B2A' } });
     header(['#', 'Supplier', 'Liftings', 'VLSFO (MT)', 'LSMGO (MT)', 'Total (MT)']);
@@ -175,12 +178,16 @@ async function loadingMonthReportPdf(btn) {
       drawHead();
       if (!rows.length) { pdf.setFont('helvetica', 'italic'); pdf.setFontSize(9); ink([138, 155, 172]); pdf.text(emptyText, M + 1.5, y + 5); y += 10; return; }
       rows.forEach(function(row, ri) {
-        if (room(7)) drawHead();
-        if (ri % 2) { pdf.setFillColor(242, 245, 249); pdf.rect(M, y, tw, 6.5, 'F'); }
-        pdf.setFontSize(8.8); ink([13, 27, 42]);
+        // long names wrap: the row is as tall as its tallest cell, so nothing prints over the next row
+        pdf.setFontSize(8.8);
+        const cells = cols.map(function(c, ci) { pdf.setFont('helvetica', c.b ? 'bold' : 'normal'); return pdf.splitTextToSize(String(row[ci]), c.w - 3); });
+        const rh = 6.5 + (Math.max.apply(null, cells.map(function(l) { return l.length; })) - 1) * 3.8;
+        if (room(rh + 1)) drawHead();
+        if (ri % 2) { pdf.setFillColor(242, 245, 249); pdf.rect(M, y, tw, rh, 'F'); }
+        ink([13, 27, 42]);
         let x = M;
-        cols.forEach(function(c, ci) { pdf.setFont('helvetica', c.b ? 'bold' : 'normal'); pdf.text(String(row[ci]), c.r ? x + c.w - 1.5 : x + 1.5, y + 4.5, { align: c.r ? 'right' : 'left', maxWidth: c.w - 3 }); x += c.w; });
-        y += 6.5;
+        cols.forEach(function(c, ci) { pdf.setFont('helvetica', c.b ? 'bold' : 'normal'); pdf.text(cells[ci], c.r ? x + c.w - 1.5 : x + 1.5, y + 4.5, { align: c.r ? 'right' : 'left', lineHeightFactor: 1.2 }); x += c.w; });
+        y += rh;
       });
       if (totals) {
         room(8); pdf.setDrawColor(13, 27, 42); pdf.line(M, y, W - M, y);
