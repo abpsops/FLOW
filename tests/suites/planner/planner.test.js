@@ -105,7 +105,11 @@ const hash = d => crypto.createHash('sha1').update(JSON.stringify(d)).digest('he
 (async () => {
   const browser = await H.launch();
   const db = H.createDb();
-  const app = await H.openApp(browser, db, { appDir, uid: 'user-operator', onDialog: async d => { try { await d.accept(); } catch (e) {} } });
+  // The weeks are built around 5 Nov 2026 and golden.json was recorded on 20 Oct 2026, when all of
+  // them were still ahead. The planner compares ETAs with "now", so the page runs at that date:
+  // otherwise, once the real date passes 5 Nov, weeks whose jobs are now in the past plan differently.
+  const app = await H.openApp(browser, db, { appDir, uid: 'user-operator', onDialog: async d => { try { await d.accept(); } catch (e) {} },
+    beforeLoad: (ctx, page) => page.clock.setSystemTime(new Date('2026-10-20T08:00:00Z')) });
   const page = app.page;
   await page.evaluate(HELPERS);
 

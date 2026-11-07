@@ -443,8 +443,17 @@ function openArchiveWindow(yr,mon){
 // the body — not just the header — matching the app's own fuel-type colors,
 // so the PDF reads at a glance instead of being a flat black-and-white grid.
 function _flowReportPDFHTML(opts) {
-  var rows = opts.rows, totV = opts.totV, totM = opts.totM;
+  var rows = opts.rows, totV = opts.totV, totM = opts.totM, bd = !!opts.bdnDates;
+  var anyStar = bd && rows.some(function(r) { return (r.bdnDateV && r.bdnDateV.star) || (r.bdnDateM && r.bdnDateM.star); });
+  var bdCell = function(x) { return '<td class="bdn-date">' + esc((x && x.text) || '') + '</td>'; };
   var tableRows = rows.map(function(r, i){
+    // Monthly Report: the BDN date of each grade instead of the supply date and time.
+    if (bd) return '<tr><td>' + (i+1) + '</td><td>' + esc(r.vessel) + '</td>'
+      + '<td class="v">' + (r.v > 0 ? fmtMT(r.v) : '—') + '</td>'
+      + '<td>' + esc(r.bdnV || '—') + '</td>' + bdCell(r.bdnDateV)
+      + '<td class="m">' + (r.m > 0 ? fmtMT(r.m) : '—') + '</td>'
+      + '<td>' + esc(r.bdnM || '—') + '</td>' + bdCell(r.bdnDateM)
+      + '<td>' + esc(r.barge || '—') + '</td><td>' + esc(r.port || '—') + '</td></tr>';
     // Every cell is user/cloud data and this HTML is inserted into the live
     // DOM by _flowExportReportPDF, so escape it.
     return '<tr><td>' + (i+1) + '</td><td>' + esc(r.vessel) + '</td><td>' + esc(r.dateStr) + '</td>'
@@ -474,11 +483,18 @@ function _flowReportPDFHTML(opts) {
     + 'tr.tot td{background:#0F1E30;color:#fff;font-weight:700;border-bottom:none;}'
     + 'tr.tot td.v{background:#1D4ED8;color:#fff;}'
     + 'tr.tot td.m{background:#C2570A;color:#fff;}'
+    + 'td.bdn-date{white-space:nowrap;}'
     + '</style>'
-    + '<table><thead><tr><th>S.No.</th><th>Vessel</th><th>Date</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>Barge</th><th>Port</th></tr></thead>'
-    + '<tbody>' + tableRows
-    + '<tr class="tot"><td colspan="3">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td></tr>'
-    + '</tbody></table>'
+    + (bd
+      ? '<table><thead><tr><th>S.No.</th><th>Vessel</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th>BDN date</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>BDN date</th><th>Barge</th><th>Port</th></tr></thead>'
+        + '<tbody>' + tableRows
+        + '<tr class="tot"><td colspan="2">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td><td></td></tr>'
+        + '</tbody></table>'
+        + (anyStar ? '<div style="margin-top:6px;font-size:7.5pt;color:#B8790F">' + esc(_RPT_BDN_NOTE) + '</div>' : '')
+      : '<table><thead><tr><th>S.No.</th><th>Vessel</th><th>Date</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>Barge</th><th>Port</th></tr></thead>'
+        + '<tbody>' + tableRows
+        + '<tr class="tot"><td colspan="3">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td></tr>'
+        + '</tbody></table>')
     + '<div style="margin-top:14px;padding-top:8px;border-top:1px solid #E2E8F0;font-size:7.5pt;color:#7891A8;text-align:center">FLOW — Bunker Planning System · ' + (opts.footerNote || 'System-generated for operational reference only.') + '</div>'
     + '</div>';
 }

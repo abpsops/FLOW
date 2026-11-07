@@ -308,11 +308,12 @@ async function openApp(browser, db, opts) {
   page.on('pageerror', e => errors.push('pageerror: ' + (e.stack || e.message)));
   page.on('console', m => { if (m.type() === 'error') errors.push('console.error: ' + m.text()); });
   page.on('dialog', d => { (opts.onDialog || (dd => dd.accept()))(d); });
-  // Navigation trail: CI has (rarely) lost a page to a navigation mid-test ("Execution
-  // context was destroyed"), never reproduced locally. Every page records what could
-  // have caused one, and that error carries the trail, so a failure names its cause.
+  // Navigation trail: CI has (rarely) lost a page mid-test ("Execution context was
+  // destroyed"). Every page records what could have caused a navigation (reload paths,
+  // beforeunload, navigation requests, crashes); a failure carries that trail, so it names
+  // its cause. Reproduced under load: no navigation at all, same document — see below.
   const trail = [];
-  let loaded = false;
+  let loaded = false, origin0 = '';
   const t0 = Date.now(), stamp = () => '+' + ((Date.now() - t0) / 1000).toFixed(1) + 's ';
   page.on('framenavigated', f => { if (loaded && f === page.mainFrame()) trail.push(stamp() + 'navigated ' + f.url().slice(0, 120)); });
   page.on('request', r => { if (loaded && r.isNavigationRequest()) trail.push(stamp() + 'navigation request ' + r.url().slice(0, 120)); });
@@ -322,13 +323,28 @@ async function openApp(browser, db, opts) {
   page.evaluate = async function() {
     try { return await evaluate.apply(null, arguments); }
     catch (e) {
-      if (e && /Execution context was destroyed|Target closed|has been closed/.test(String(e.message))) e.message += ' | page trail: ' + (JSON.stringify(trail.slice(-12)) || '[]');
+      if (e && /Execution context was destroyed|Target closed|has been closed/.test(String(e.message))) {
+        await new Promise(r => setTimeout(r, 600)); // the navigation / console events arrive just after the context dies
+        // Under heavy CPU load Chromium has (rarely) dropped the page's script context with NO
+        // navigation: same document (performance.timeOrigin unchanged), nothing in the trail. The
+        // app did nothing — retry that step once, and say so. A real navigation still fails.
+        let now = '';
+        try { now = String(await evaluate(() => performance.timeOrigin)); } catch (x) {}
+        if (/Execution context was destroyed/.test(String(e.message)) && origin0 && now === origin0 && !trail.length) {
+          console.log('[harness] page.evaluate lost its context without any navigation (same document) — retried once');
+          return await evaluate.apply(null, arguments);
+        }
+        const t = ' | page trail: ' + (JSON.stringify(trail.slice(-12)) || '[]') + ' | document ' + (now === origin0 ? 'same' : 'replaced (' + origin0 + ' → ' + (now || '?') + ')');
+        e.message += t;
+        if (typeof e.stack === 'string') { const nl = e.stack.indexOf('\n'); e.stack = (nl === -1 ? e.stack : e.stack.slice(0, nl)) + t + (nl === -1 ? '' : e.stack.slice(nl)); } // tests print the stack
+      }
       throw e;
     }
   };
   await page.goto('https://flow.test/index.html', { waitUntil: 'load' });
   await page.waitForTimeout(opts.settleMs == null ? 2500 : opts.settleMs);
   loaded = true;
+  try { origin0 = String(await evaluate(() => performance.timeOrigin)); } catch (e) {}
   try {
     await evaluate(() => {
       ['_buildReload', '_buildOffer', 'operatorLogout', 'wipeSupabaseWorkspace', 'nuclearClear'].forEach(n => { const o = window[n]; if (typeof o === 'function') window[n] = function() { console.log('NAVTRAIL called ' + n + ' ' + (new Error().stack || '').split('\n').slice(2, 6).join(' | ')); return o.apply(this, arguments); }; });
