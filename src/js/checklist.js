@@ -255,7 +255,7 @@ function renderChecklist(sched) {
       ${th('No.')}${th('Vessel')}${th('Supply Date')}
       ${th('Nom. VLSFO')}${th('Actual VLSFO')}
       ${th('Nom. LSMGO')}${th('Actual LSMGO')}
-      ${th('Barge')}${th('BDN No.')}${th('Status')}${th('Remarks')}${th('Action')}
+      ${th('Barge')}${th('BDN No. / BDN date')}${th('Status')}${th('Remarks')}${th('Action')}
     </tr></thead>
     <tbody>` +
     dedupedRecords.map((rec, idx) => {
@@ -329,6 +329,10 @@ function renderChecklist(sched) {
                 onchange="clUpdateBdn('${uJ}','v',this.value)"
                 placeholder="${(rec.nomV === null || rec.nomV === undefined) ? '—' : 'BDN No.'}"
                 style="width:88px;font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomV === null || rec.nomV === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
+              <input type="date" id="cl-bdv-${uA}" value="${esc(_bdnYmd(rec.bdnDateV))}" title="BDN date (VLSFO)" aria-label="BDN date (VLSFO)"
+                ${(rec.nomV === null || rec.nomV === undefined || isLocked) ? 'disabled' : ''}
+                onchange="clUpdateBdnDate('${uJ}','v',this.value)"
+                style="width:122px;font-size:11px;padding:4px 6px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomV === null || rec.nomV === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
             </div>
             <div style="display:flex;align-items:center;gap:5px">
               <span style="font-size:9px;font-weight:700;color:var(--teal);width:34px;flex-shrink:0">LSMGO</span>
@@ -337,6 +341,10 @@ function renderChecklist(sched) {
                 onchange="clUpdateBdn('${uJ}','m',this.value)"
                 placeholder="${(rec.nomM === null || rec.nomM === undefined) ? '—' : 'BDN No.'}"
                 style="width:88px;font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomM === null || rec.nomM === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
+              <input type="date" id="cl-bdm-${uA}" value="${esc(_bdnYmd(rec.bdnDateM))}" title="BDN date (LSMGO)" aria-label="BDN date (LSMGO)"
+                ${(rec.nomM === null || rec.nomM === undefined || isLocked) ? 'disabled' : ''}
+                onchange="clUpdateBdnDate('${uJ}','m',this.value)"
+                style="width:122px;font-size:11px;padding:4px 6px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomM === null || rec.nomM === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
             </div>
           </div>
         </td>
@@ -478,6 +486,21 @@ function clUpdateBdn(uid, field, val) {
   if (field === 'v') { rec.bdnV = val; }
   if (field === 'm') { rec.bdnM = val; }
 }
+// BDN date — the date on the Bunker Delivery Note, per grade, picked from a calendar
+// (date only, 'YYYY-MM-DD'). The Monthly Report shows it instead of the supply time.
+function _bdnYmd(v) {
+  const s = String(v || ''), m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return '';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); // no 31 Feb: the date must exist
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? s : '';
+}
+function clUpdateBdnDate(uid, field, val) {
+  const rec = _checklistRecords[uid];
+  if (!rec || rec.lockedAt) return;
+  const d = _bdnYmd(val);
+  if (field === 'v') rec.bdnDateV = d;
+  if (field === 'm') rec.bdnDateM = d;
+}
 
 // Id of the supply record a checklist row saves. A nomination's supply gets
 // the same id on every device, so the same row saved on two devices before
@@ -554,6 +577,9 @@ async function saveChecklistRecord(uid) {
   rec.actM = String(actM);
   rec.bdnV = inpBv ? inpBv.value.trim() : (rec.bdnV || '');
   rec.bdnM = inpBm ? inpBm.value.trim() : (rec.bdnM || '');
+  const inpBdv = document.getElementById('cl-bdv-' + uid), inpBdm = document.getElementById('cl-bdm-' + uid);
+  rec.bdnDateV = inpBdv ? _bdnYmd(inpBdv.value) : _bdnYmd(rec.bdnDateV);
+  rec.bdnDateM = inpBdm ? _bdnYmd(inpBdm.value) : _bdnYmd(rec.bdnDateM);
 
   // Also update input display to confirm what was captured
   if (inpV) inpV.value = actV > 0 ? actV : (inpV.value || '');
@@ -599,6 +625,8 @@ async function saveChecklistRecord(uid) {
     mgoAct:   actM,
     bdnV:     rec.bdnV || '',
     bdnM:     rec.bdnM || '',
+    bdnDateV: _bdnYmd(rec.bdnDateV),
+    bdnDateM: _bdnYmd(rec.bdnDateM),
     barge:    rec.bargeLabel || '',
     notes:    rec.notes || '',
     supplied: true,

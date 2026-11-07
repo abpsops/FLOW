@@ -93,6 +93,7 @@ function renderSavedRecords() {
           ${r.spec  ? `&nbsp;|&nbsp; ${esc(r.spec)}` : ''}
         </div>
         ${(r.bdnV || r.bdnM) ? `<div class="saved-record-bdn" style="font-size:11px;color:var(--sub);margin-top:3px">BDN No.: ${[r.bdnV ? 'VLSFO <strong>' + esc(r.bdnV) + '</strong>' : '', r.bdnM ? 'LSMGO <strong>' + esc(r.bdnM) + '</strong>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>` : ''}
+        ${(_bdnYmd(r.bdnDateV) || _bdnYmd(r.bdnDateM)) ? `<div class="saved-record-bdn-date" style="font-size:11px;color:var(--sub);margin-top:3px">BDN date: ${[_bdnYmd(r.bdnDateV) ? 'VLSFO <strong>' + esc(_dealDateStr(r.bdnDateV)) + '</strong>' : '', _bdnYmd(r.bdnDateM) ? 'LSMGO <strong>' + esc(_dealDateStr(r.bdnDateM)) + '</strong>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>` : ''}
         ${r.notes?`<div style="font-size:11px;color:var(--sub);margin-top:3px"> ${esc(r.notes)}</div>`:''}
         <div style="font-size:10px;color:var(--muted);margin-top:3px">Saved: ${new Date(r.savedAt).toLocaleString()}</div>
       </div>
@@ -104,13 +105,13 @@ function renderSavedRecords() {
 }
 
 let _editingRecordId = null, _editingOrig = null, _editingShown = null;
-const _ER_FIELDS = ['vessel', 'barge', 'agent', 'spec', 'dateStr', 'vlsfoAct', 'mgoAct', 'bdnV', 'bdnM', 'notes', 'supplied'];
+const _ER_FIELDS = ['vessel', 'barge', 'agent', 'spec', 'dateStr', 'vlsfoAct', 'mgoAct', 'bdnV', 'bdnM', 'bdnDateV', 'bdnDateM', 'notes', 'supplied'];
 function _erFormValues() {
   const g = function(id) { const el = document.getElementById(id); return el ? String(el.value == null ? '' : el.value) : ''; };
   return {
     vessel: g('er-vessel').trim(), barge: g('er-barge').trim(), agent: g('er-agent').trim(), spec: g('er-spec').trim(),
     dateStr: g('er-date').trim(), vlsfoAct: parseFloat(g('er-vlsfo-act')) || 0, mgoAct: parseFloat(g('er-mgo-act')) || 0,
-    bdnV: g('er-bdn-v').trim().slice(0, 60), bdnM: g('er-bdn-m').trim().slice(0, 60), notes: g('er-notes').trim(), supplied: g('er-supplied') === 'yes',
+    bdnV: g('er-bdn-v').trim().slice(0, 60), bdnM: g('er-bdn-m').trim().slice(0, 60), bdnDateV: _bdnYmd(g('er-bdn-date-v')), bdnDateM: _bdnYmd(g('er-bdn-date-m')), notes: g('er-notes').trim(), supplied: g('er-supplied') === 'yes',
   };
 }
 // A record's value for one dialog field, the way the dialog reads it.
@@ -134,6 +135,8 @@ function openEditRecord(id) {
   document.getElementById('er-mgo-act').value   = _recActQty(r, 'm');
   document.getElementById('er-bdn-v').value     = r.bdnV      || '';
   document.getElementById('er-bdn-m').value     = r.bdnM      || '';
+  document.getElementById('er-bdn-date-v').value = _bdnYmd(r.bdnDateV);
+  document.getElementById('er-bdn-date-m').value = _bdnYmd(r.bdnDateM);
   document.getElementById('er-notes').value     = r.notes     || '';
   document.getElementById('er-supplied').value  = r.supplied ? 'yes' : 'no';
   // What the dialog showed: Save writes only what the user changed from this, onto the
@@ -192,7 +195,7 @@ async function _saveEditRecord(s) {
   const _cr = saved.checklistUid && _checklistRecords ? _checklistRecords[saved.checklistUid] : null;
   if (_cr && (String(saved.checklistUid).indexOf('v_') !== 0 ||
       _sameDelivery(Object.assign({}, _cr, { checklistUid: saved.checklistUid, supplyDate: _cr.supplyDate || _cr.lockedAt }), cur))) {
-    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || '';
+    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || ''; _cr.bdnDateV = _bdnYmd(saved.bdnDateV); _cr.bdnDateM = _bdnYmd(saved.bdnDateM);
   }
   await saveSharedRecords();
   if (_erSession === s) closeEditRecord();
@@ -220,6 +223,10 @@ function updateEditDiff() {
   });
   [['bdnV', 'VLSFO', 'var(--fuel-v)'], ['bdnM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
     if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN No. (${b[1]}): <strong>${esc(r[b[0]] || '—')}</strong> → <strong style="color:${b[2]}">${esc(now[b[0]] || '—')}</strong></span></div>`);
+  });
+  [['bdnDateV', 'VLSFO', 'var(--fuel-v)'], ['bdnDateM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
+    const show = function(v) { return _bdnYmd(v) ? _dealDateStr(v) : '—'; };
+    if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN date (${b[1]}): <strong>${esc(show(r[b[0]]))}</strong> → <strong style="color:${b[2]}">${esc(show(now[b[0]]))}</strong></span></div>`);
   });
   if (edited('supplied')) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${now.supplied?'var(--green)':'var(--amber)'}">${now.supplied?'Completed':'Pending'}</strong></span></div>`);
   const diffEl = document.getElementById('er-diff'), rowEl = document.getElementById('er-diff-rows');
