@@ -3256,14 +3256,14 @@ function flowWelcomeGo(pageId) {
   <!-- Fuel type distribution -->
   <div class="chart-card">
     <div class="chart-title">Fuel Type Distribution</div>
-      <div class="chart-subtitle">VLSFO vs LSMGO — this month's distributed vs planned (ROB-adjusted) quantities</div>
+      <div class="chart-subtitle">VLSFO vs LSMGO — supplied this month vs still to be supplied (ROB-adjusted)</div>
       <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px;flex:1">
         <div style="display:flex;flex-direction:column;min-width:0">
-          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Distributed</div>
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Supplied</div>
           <div class="chart-wrap" style="flex:1"><canvas id="chart-fuel-dist-distributed"></canvas></div>
         </div>
         <div style="display:flex;flex-direction:column;min-width:0">
-          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Planned</div>
+          <div style="font-size:10.5px;font-weight:700;color:var(--muted);text-align:center;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">To be supplied</div>
           <div class="chart-wrap" style="flex:1"><canvas id="chart-fuel-dist-planned"></canvas></div>
         </div>
       </div>
