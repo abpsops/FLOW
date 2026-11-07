@@ -332,7 +332,7 @@ function getRowsByRange(fromD, toD, port) {
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
     // Only supplied rows reach here, so report the ACTUAL quantity (0 is a
     // real actual) — never fall back to the nominated figure.
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
 function getMonthlyRows(mon, yr, port) {
   return _getAllReportRecords().filter(r => {
@@ -340,7 +340,16 @@ function getMonthlyRows(mon, yr, port) {
     const d = _parseDateLocal(r.supplyDate);
     return d.getMonth() === mon && d.getFullYear() === yr && r.supplied === true && _rowMatchesReportPort(r, port);
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+}
+// BDN date shown in the Monthly Report for one grade: the date entered on the BDN, else the
+// supply day (date only) marked * — nothing for a grade that was not supplied.
+const _RPT_BDN_NOTE = '* BDN date not entered yet — the supply date is shown.';
+function _rptBdnDate(r, g) {
+  const ymd = g === 'v' ? r.bdnDateV : r.bdnDateM, qty = g === 'v' ? r.vQ : r.mQ, no = g === 'v' ? r.bdnV : r.bdnM;
+  if (ymd) return { text: _dealDateStr(ymd), star: false };
+  if (!(qty > 0) && !no) return { text: '', star: false };
+  return r.supplyDay ? { text: _dealDateStr(r.supplyDay) + ' *', star: true } : { text: '—', star: false };
 }
 async function downloadMonthlyReport(btnEl) {
   let rows, rangeLabel;
@@ -365,14 +374,14 @@ async function downloadMonthlyReport(btnEl) {
     const ExcelJS = await _loadExcelJS();
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Supply Report');
-    ws.columns = [{width:6},{width:22},{width:22},{width:15},{width:18},{width:15},{width:18},{width:16}];
+    ws.columns = [{width:6},{width:24},{width:15},{width:18},{width:15},{width:15},{width:18},{width:15},{width:16}];
 
     // Title + subtitle rows
-    ws.mergeCells('A1:H1');
+    ws.mergeCells('A1:I1');
     const titleCell = ws.getCell('A1');
     titleCell.value = `FLOW Supply Report — ${rangeLabel.replace(/_/g,' ')}`;
     titleCell.font = { bold:true, size:13, color:{argb:'FF0D1B2A'} };
-    ws.mergeCells('A2:H2');
+    ws.mergeCells('A2:I2');
     const subCell = ws.getCell('A2');
     subCell.value = `Generated ${fmt24(new Date())} · ${rows.length} record${rows.length>1?'s':''}`;
     subCell.font = { size:9, color:{argb:'FF8A9BAC'} };
@@ -382,30 +391,34 @@ async function downloadMonthlyReport(btnEl) {
     const border = { top:thinBorder, bottom:thinBorder, left:thinBorder, right:thinBorder };
 
     // Header row (row 4)
-    const headers = ['S.No.','Vessel Name','Date of Supply','VLSFO Qty (MT)','BDN No. (VLSFO)','MGO Qty (MT)','BDN No. (LSMGO)','Barge'];
+    const headers = ['S.No.','Vessel Name','VLSFO Qty (MT)','BDN No. (VLSFO)','BDN Date (VLSFO)','MGO Qty (MT)','BDN No. (LSMGO)','BDN Date (LSMGO)','Barge'];
+    const VQ = 2, MQ = 5; // quantity columns (0-based)
     const headerRow = ws.getRow(4);
     headers.forEach((h, i) => {
       const cell = headerRow.getCell(i+1);
       cell.value = h;
       cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: i===3 ? 'FF2F6FED' : i===5 ? 'FFFF7A1A' : 'FF0D1B2A'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: i===VQ ? 'FF2F6FED' : i===MQ ? 'FFFF7A1A' : 'FF0D1B2A'} };
       cell.alignment = { horizontal:'center', vertical:'middle' };
       cell.border = border;
     });
     headerRow.height = 20;
 
     // Data rows
+    let anyStar = false;
     rows.forEach((r, i) => {
       const row = ws.getRow(5+i);
       const alt = i % 2 === 1;
-      const vals = [i+1, r.name, r.dateStr, r.vQ||0, r.bdnV||'', r.mQ||0, r.bdnM||'', r.bargeLabel||''];
+      const dv = _rptBdnDate(r, 'v'), dm = _rptBdnDate(r, 'm');
+      if (dv.star || dm.star) anyStar = true;
+      const vals = [i+1, r.name, r.vQ||0, r.bdnV||'', dv.text, r.mQ||0, r.bdnM||'', dm.text, r.bargeLabel||''];
       vals.forEach((v, c) => {
         const cell = row.getCell(c+1);
         cell.value = v;
         cell.border = border;
-        cell.alignment = { vertical:'middle', horizontal: c===3||c===5 ? 'right' : 'left' };
-        if (c === 3) { cell.font = { color:{argb:'FF1D4ED8'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFE6EFFD':'FFEFF5FF'} }; }
-        else if (c === 5) { cell.font = { color:{argb:'FFC2570A'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFFDEEDD':'FFFFF6EC'} }; }
+        cell.alignment = { vertical:'middle', horizontal: c===VQ||c===MQ ? 'right' : 'left' };
+        if (c === VQ) { cell.font = { color:{argb:'FF1D4ED8'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFE6EFFD':'FFEFF5FF'} }; }
+        else if (c === MQ) { cell.font = { color:{argb:'FFC2570A'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFFDEEDD':'FFFFF6EC'} }; }
         else if (alt) { cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF8FAFC'} }; }
       });
     });
@@ -413,16 +426,17 @@ async function downloadMonthlyReport(btnEl) {
     // Total row
     const totRow = ws.getRow(5+rows.length);
     const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
-    const totVals = ['', 'TOTAL', '', totV, '', totM, '', ''];
+    const totVals = ['', 'TOTAL', totV, '', '', totM, '', '', ''];
     totVals.forEach((v, c) => {
       const cell = totRow.getCell(c+1);
       cell.value = v;
       cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: c===3 ? 'FF2F6FED' : c===5 ? 'FFFF7A1A' : 'FF0D1B2A'} };
-      cell.alignment = { vertical:'middle', horizontal: c===3||c===5 ? 'right' : 'left' };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: c===VQ ? 'FF2F6FED' : c===MQ ? 'FFFF7A1A' : 'FF0D1B2A'} };
+      cell.alignment = { vertical:'middle', horizontal: c===VQ||c===MQ ? 'right' : 'left' };
       cell.border = border;
     });
 
+    if (anyStar) { const n = ws.getCell('A' + (rows.length + 7)); ws.mergeCells('A' + (rows.length + 7) + ':I' + (rows.length + 7)); n.value = _RPT_BDN_NOTE; n.font = { size:9, color:{argb:'FFB8790F'} }; }
     ws.views = [{ state:'frozen', ySplit:4 }];
 
     const buf = await wb.xlsx.writeBuffer();
@@ -453,10 +467,10 @@ async function downloadMonthlyReportPDF(btnEl) {
   }
   if (_reportPort !== 'ALL') { rangeLabel += `_${_reportPort}`; badge += ` · ${_reportPort}`; }
   if (!rows.length){alert('No supplies in selected period.');return;}
-  const pdfRows = rows.map(r => ({ vessel:r.name, dateStr:r.dateStr, v:r.vQ||0, m:r.mQ||0, bdnV:r.bdnV||'', bdnM:r.bdnM||'', barge:r.bargeLabel, port:r.area||r.areaCode }));
+  const pdfRows = rows.map(r => ({ vessel:r.name, dateStr:r.dateStr, v:r.vQ||0, m:r.mQ||0, bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_rptBdnDate(r, 'v'), bdnDateM:_rptBdnDate(r, 'm'), barge:r.bargeLabel, port:r.area||r.areaCode }));
   const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
   const html = _flowReportPDFHTML({
-    rows: pdfRows, totV, totM, badge,
+    rows: pdfRows, totV, totM, badge, bdnDates: true,
     metaLines: [['Generated', fmt24(new Date())], ['Records', rows.length]],
     footerNote: 'Monthly supply report · System-generated for operational reference only.'
   });

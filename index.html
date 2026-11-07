@@ -4907,6 +4907,10 @@ function copyAllAgentEmails(btn) {
       <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-v" style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN No. (VLSFO)</label><input type="text" id="er-bdn-v" maxlength="60" autocomplete="off" spellcheck="false" oninput="updateEditDiff()" placeholder="BDN No." style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
       <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-m" style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN No. (LSMGO)</label><input type="text" id="er-bdn-m" maxlength="60" autocomplete="off" spellcheck="false" oninput="updateEditDiff()" placeholder="BDN No." style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
     </div>
+    <div class="er-bdn-grid er-bdn-date-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:-6px 0 18px">
+      <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-date-v" style="font-size:10px;color:var(--fuel-v);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN date (VLSFO)</label><input type="date" id="er-bdn-date-v" onchange="updateEditDiff()" oninput="updateEditDiff()" style="font-size:13px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
+      <div style="display:flex;flex-direction:column;gap:5px"><label for="er-bdn-date-m" style="font-size:10px;color:var(--fuel-m);font-weight:700;letter-spacing:.07em;text-transform:uppercase">BDN date (LSMGO)</label><input type="date" id="er-bdn-date-m" onchange="updateEditDiff()" oninput="updateEditDiff()" style="font-size:13px;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Mono,monospace;outline:none;width:100%;background:var(--surface);color:var(--text)"></div>
+    </div>
     <div style="font-size:10px;font-weight:700;color:var(--pg-deliverylog);letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;padding-top:12px;border-top:1px solid var(--border2)">Status &amp; Remarks</div>
     <div style="display:grid;grid-template-columns:1fr 2fr;gap:12px;margin-bottom:18px">
       <div style="display:flex;flex-direction:column;gap:5px"><label style="font-size:10px;color:var(--pg-deliverylog);font-weight:600;letter-spacing:.07em;text-transform:uppercase">Supply Status</label><select id="er-supplied" onchange="updateEditDiff()" style="font-size:13px;padding:9px 12px;border:1.5px solid var(--border);border-radius:8px;font-family:DM Sans,sans-serif;outline:none;width:100%;background:var(--surface)"><option value="yes">Completed</option><option value="no">Pending</option></select></div>
@@ -21139,7 +21143,7 @@ function renderChecklist(sched) {
       ${th('No.')}${th('Vessel')}${th('Supply Date')}
       ${th('Nom. VLSFO')}${th('Actual VLSFO')}
       ${th('Nom. LSMGO')}${th('Actual LSMGO')}
-      ${th('Barge')}${th('BDN No.')}${th('Status')}${th('Remarks')}${th('Action')}
+      ${th('Barge')}${th('BDN No. / BDN date')}${th('Status')}${th('Remarks')}${th('Action')}
     </tr></thead>
     <tbody>` +
     dedupedRecords.map((rec, idx) => {
@@ -21213,6 +21217,10 @@ function renderChecklist(sched) {
                 onchange="clUpdateBdn('${uJ}','v',this.value)"
                 placeholder="${(rec.nomV === null || rec.nomV === undefined) ? '—' : 'BDN No.'}"
                 style="width:88px;font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomV === null || rec.nomV === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
+              <input type="date" id="cl-bdv-${uA}" value="${esc(_bdnYmd(rec.bdnDateV))}" title="BDN date (VLSFO)" aria-label="BDN date (VLSFO)"
+                ${(rec.nomV === null || rec.nomV === undefined || isLocked) ? 'disabled' : ''}
+                onchange="clUpdateBdnDate('${uJ}','v',this.value)"
+                style="width:122px;font-size:11px;padding:4px 6px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomV === null || rec.nomV === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
             </div>
             <div style="display:flex;align-items:center;gap:5px">
               <span style="font-size:9px;font-weight:700;color:var(--teal);width:34px;flex-shrink:0">LSMGO</span>
@@ -21221,6 +21229,10 @@ function renderChecklist(sched) {
                 onchange="clUpdateBdn('${uJ}','m',this.value)"
                 placeholder="${(rec.nomM === null || rec.nomM === undefined) ? '—' : 'BDN No.'}"
                 style="width:88px;font-size:11px;padding:5px 7px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomM === null || rec.nomM === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
+              <input type="date" id="cl-bdm-${uA}" value="${esc(_bdnYmd(rec.bdnDateM))}" title="BDN date (LSMGO)" aria-label="BDN date (LSMGO)"
+                ${(rec.nomM === null || rec.nomM === undefined || isLocked) ? 'disabled' : ''}
+                onchange="clUpdateBdnDate('${uJ}','m',this.value)"
+                style="width:122px;font-size:11px;padding:4px 6px;border:none;box-shadow:var(--sh-in-xs);border-radius:5px;font-family:DM Mono,monospace;background:${(rec.nomM === null || rec.nomM === undefined) ? 'var(--surface2)' : 'var(--surface)'};outline:none;${lockStyle}">
             </div>
           </div>
         </td>
@@ -21362,6 +21374,16 @@ function clUpdateBdn(uid, field, val) {
   if (field === 'v') { rec.bdnV = val; }
   if (field === 'm') { rec.bdnM = val; }
 }
+// BDN date — the date on the Bunker Delivery Note, per grade, picked from a calendar
+// (date only, 'YYYY-MM-DD'). The Monthly Report shows it instead of the supply time.
+function _bdnYmd(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : ''; }
+function clUpdateBdnDate(uid, field, val) {
+  const rec = _checklistRecords[uid];
+  if (!rec || rec.lockedAt) return;
+  const d = _bdnYmd(val);
+  if (field === 'v') rec.bdnDateV = d;
+  if (field === 'm') rec.bdnDateM = d;
+}
 
 // Id of the supply record a checklist row saves. A nomination's supply gets
 // the same id on every device, so the same row saved on two devices before
@@ -21438,6 +21460,9 @@ async function saveChecklistRecord(uid) {
   rec.actM = String(actM);
   rec.bdnV = inpBv ? inpBv.value.trim() : (rec.bdnV || '');
   rec.bdnM = inpBm ? inpBm.value.trim() : (rec.bdnM || '');
+  const inpBdv = document.getElementById('cl-bdv-' + uid), inpBdm = document.getElementById('cl-bdm-' + uid);
+  rec.bdnDateV = inpBdv ? _bdnYmd(inpBdv.value) : _bdnYmd(rec.bdnDateV);
+  rec.bdnDateM = inpBdm ? _bdnYmd(inpBdm.value) : _bdnYmd(rec.bdnDateM);
 
   // Also update input display to confirm what was captured
   if (inpV) inpV.value = actV > 0 ? actV : (inpV.value || '');
@@ -21483,6 +21508,8 @@ async function saveChecklistRecord(uid) {
     mgoAct:   actM,
     bdnV:     rec.bdnV || '',
     bdnM:     rec.bdnM || '',
+    bdnDateV: _bdnYmd(rec.bdnDateV),
+    bdnDateM: _bdnYmd(rec.bdnDateM),
     barge:    rec.bargeLabel || '',
     notes:    rec.notes || '',
     supplied: true,
@@ -22678,8 +22705,17 @@ function openArchiveWindow(yr,mon){
 // the body — not just the header — matching the app's own fuel-type colors,
 // so the PDF reads at a glance instead of being a flat black-and-white grid.
 function _flowReportPDFHTML(opts) {
-  var rows = opts.rows, totV = opts.totV, totM = opts.totM;
+  var rows = opts.rows, totV = opts.totV, totM = opts.totM, bd = !!opts.bdnDates;
+  var anyStar = bd && rows.some(function(r) { return (r.bdnDateV && r.bdnDateV.star) || (r.bdnDateM && r.bdnDateM.star); });
+  var bdCell = function(x) { return '<td class="bdn-date">' + esc((x && x.text) || '') + '</td>'; };
   var tableRows = rows.map(function(r, i){
+    // Monthly Report: the BDN date of each grade instead of the supply date and time.
+    if (bd) return '<tr><td>' + (i+1) + '</td><td>' + esc(r.vessel) + '</td>'
+      + '<td class="v">' + (r.v > 0 ? fmtMT(r.v) : '—') + '</td>'
+      + '<td>' + esc(r.bdnV || '—') + '</td>' + bdCell(r.bdnDateV)
+      + '<td class="m">' + (r.m > 0 ? fmtMT(r.m) : '—') + '</td>'
+      + '<td>' + esc(r.bdnM || '—') + '</td>' + bdCell(r.bdnDateM)
+      + '<td>' + esc(r.barge || '—') + '</td><td>' + esc(r.port || '—') + '</td></tr>';
     // Every cell is user/cloud data and this HTML is inserted into the live
     // DOM by _flowExportReportPDF, so escape it.
     return '<tr><td>' + (i+1) + '</td><td>' + esc(r.vessel) + '</td><td>' + esc(r.dateStr) + '</td>'
@@ -22709,11 +22745,18 @@ function _flowReportPDFHTML(opts) {
     + 'tr.tot td{background:#0F1E30;color:#fff;font-weight:700;border-bottom:none;}'
     + 'tr.tot td.v{background:#1D4ED8;color:#fff;}'
     + 'tr.tot td.m{background:#C2570A;color:#fff;}'
+    + 'td.bdn-date{white-space:nowrap;}'
     + '</style>'
-    + '<table><thead><tr><th>S.No.</th><th>Vessel</th><th>Date</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>Barge</th><th>Port</th></tr></thead>'
-    + '<tbody>' + tableRows
-    + '<tr class="tot"><td colspan="3">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td></tr>'
-    + '</tbody></table>'
+    + (bd
+      ? '<table><thead><tr><th>S.No.</th><th>Vessel</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th>BDN date</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>BDN date</th><th>Barge</th><th>Port</th></tr></thead>'
+        + '<tbody>' + tableRows
+        + '<tr class="tot"><td colspan="2">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td><td></td></tr>'
+        + '</tbody></table>'
+        + (anyStar ? '<div style="margin-top:6px;font-size:7.5pt;color:#B8790F">' + esc(_RPT_BDN_NOTE) + '</div>' : '')
+      : '<table><thead><tr><th>S.No.</th><th>Vessel</th><th>Date</th><th class="v">VLSFO (MT)</th><th>BDN (VLSFO)</th><th class="m">MGO (MT)</th><th>BDN (LSMGO)</th><th>Barge</th><th>Port</th></tr></thead>'
+        + '<tbody>' + tableRows
+        + '<tr class="tot"><td colspan="3">TOTAL</td><td class="v">' + fmtMT(totV) + ' MT</td><td></td><td class="m">' + fmtMT(totM) + ' MT</td><td></td><td></td><td></td></tr>'
+        + '</tbody></table>')
     + '<div style="margin-top:14px;padding-top:8px;border-top:1px solid #E2E8F0;font-size:7.5pt;color:#7891A8;text-align:center">FLOW — Bunker Planning System · ' + (opts.footerNote || 'System-generated for operational reference only.') + '</div>'
     + '</div>';
 }
@@ -22974,6 +23017,7 @@ function renderSavedRecords() {
           ${r.spec  ? `&nbsp;|&nbsp; ${esc(r.spec)}` : ''}
         </div>
         ${(r.bdnV || r.bdnM) ? `<div class="saved-record-bdn" style="font-size:11px;color:var(--sub);margin-top:3px">BDN No.: ${[r.bdnV ? 'VLSFO <strong>' + esc(r.bdnV) + '</strong>' : '', r.bdnM ? 'LSMGO <strong>' + esc(r.bdnM) + '</strong>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>` : ''}
+        ${(_bdnYmd(r.bdnDateV) || _bdnYmd(r.bdnDateM)) ? `<div class="saved-record-bdn-date" style="font-size:11px;color:var(--sub);margin-top:3px">BDN date: ${[_bdnYmd(r.bdnDateV) ? 'VLSFO <strong>' + esc(_dealDateStr(r.bdnDateV)) + '</strong>' : '', _bdnYmd(r.bdnDateM) ? 'LSMGO <strong>' + esc(_dealDateStr(r.bdnDateM)) + '</strong>' : ''].filter(Boolean).join(' &nbsp;|&nbsp; ')}</div>` : ''}
         ${r.notes?`<div style="font-size:11px;color:var(--sub);margin-top:3px"> ${esc(r.notes)}</div>`:''}
         <div style="font-size:10px;color:var(--muted);margin-top:3px">Saved: ${new Date(r.savedAt).toLocaleString()}</div>
       </div>
@@ -22985,13 +23029,13 @@ function renderSavedRecords() {
 }
 
 let _editingRecordId = null, _editingOrig = null, _editingShown = null;
-const _ER_FIELDS = ['vessel', 'barge', 'agent', 'spec', 'dateStr', 'vlsfoAct', 'mgoAct', 'bdnV', 'bdnM', 'notes', 'supplied'];
+const _ER_FIELDS = ['vessel', 'barge', 'agent', 'spec', 'dateStr', 'vlsfoAct', 'mgoAct', 'bdnV', 'bdnM', 'bdnDateV', 'bdnDateM', 'notes', 'supplied'];
 function _erFormValues() {
   const g = function(id) { const el = document.getElementById(id); return el ? String(el.value == null ? '' : el.value) : ''; };
   return {
     vessel: g('er-vessel').trim(), barge: g('er-barge').trim(), agent: g('er-agent').trim(), spec: g('er-spec').trim(),
     dateStr: g('er-date').trim(), vlsfoAct: parseFloat(g('er-vlsfo-act')) || 0, mgoAct: parseFloat(g('er-mgo-act')) || 0,
-    bdnV: g('er-bdn-v').trim().slice(0, 60), bdnM: g('er-bdn-m').trim().slice(0, 60), notes: g('er-notes').trim(), supplied: g('er-supplied') === 'yes',
+    bdnV: g('er-bdn-v').trim().slice(0, 60), bdnM: g('er-bdn-m').trim().slice(0, 60), bdnDateV: _bdnYmd(g('er-bdn-date-v')), bdnDateM: _bdnYmd(g('er-bdn-date-m')), notes: g('er-notes').trim(), supplied: g('er-supplied') === 'yes',
   };
 }
 // A record's value for one dialog field, the way the dialog reads it.
@@ -23015,6 +23059,8 @@ function openEditRecord(id) {
   document.getElementById('er-mgo-act').value   = _recActQty(r, 'm');
   document.getElementById('er-bdn-v').value     = r.bdnV      || '';
   document.getElementById('er-bdn-m').value     = r.bdnM      || '';
+  document.getElementById('er-bdn-date-v').value = _bdnYmd(r.bdnDateV);
+  document.getElementById('er-bdn-date-m').value = _bdnYmd(r.bdnDateM);
   document.getElementById('er-notes').value     = r.notes     || '';
   document.getElementById('er-supplied').value  = r.supplied ? 'yes' : 'no';
   // What the dialog showed: Save writes only what the user changed from this, onto the
@@ -23073,7 +23119,7 @@ async function _saveEditRecord(s) {
   const _cr = saved.checklistUid && _checklistRecords ? _checklistRecords[saved.checklistUid] : null;
   if (_cr && (String(saved.checklistUid).indexOf('v_') !== 0 ||
       _sameDelivery(Object.assign({}, _cr, { checklistUid: saved.checklistUid, supplyDate: _cr.supplyDate || _cr.lockedAt }), cur))) {
-    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || '';
+    _cr.bdnV = saved.bdnV || ''; _cr.bdnM = saved.bdnM || ''; _cr.bdnDateV = _bdnYmd(saved.bdnDateV); _cr.bdnDateM = _bdnYmd(saved.bdnDateM);
   }
   await saveSharedRecords();
   if (_erSession === s) closeEditRecord();
@@ -23101,6 +23147,10 @@ function updateEditDiff() {
   });
   [['bdnV', 'VLSFO', 'var(--fuel-v)'], ['bdnM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
     if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN No. (${b[1]}): <strong>${esc(r[b[0]] || '—')}</strong> → <strong style="color:${b[2]}">${esc(now[b[0]] || '—')}</strong></span></div>`);
+  });
+  [['bdnDateV', 'VLSFO', 'var(--fuel-v)'], ['bdnDateM', 'LSMGO', 'var(--fuel-m)']].forEach(function(b) {
+    const show = function(v) { return _bdnYmd(v) ? _dealDateStr(v) : '—'; };
+    if (edited(b[0])) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:${b[2]};flex-shrink:0"></span><span>BDN date (${b[1]}): <strong>${esc(show(r[b[0]]))}</strong> → <strong style="color:${b[2]}">${esc(show(now[b[0]]))}</strong></span></div>`);
   });
   if (edited('supplied')) diffs.push(`<div style="display:flex;align-items:center;gap:8px"><span style="width:10px;height:10px;border-radius:50%;background:var(--amber);flex-shrink:0"></span><span>Status: <strong>${r.supplied?'Completed':'Pending'}</strong> → <strong style="color:${now.supplied?'var(--green)':'var(--amber)'}">${now.supplied?'Completed':'Pending'}</strong></span></div>`);
   const diffEl = document.getElementById('er-diff'), rowEl = document.getElementById('er-diff-rows');
@@ -23508,7 +23558,7 @@ function getRowsByRange(fromD, toD, port) {
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
     // Only supplied rows reach here, so report the ACTUAL quantity (0 is a
     // real actual) — never fall back to the nominated figure.
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
 function getMonthlyRows(mon, yr, port) {
   return _getAllReportRecords().filter(r => {
@@ -23516,7 +23566,16 @@ function getMonthlyRows(mon, yr, port) {
     const d = _parseDateLocal(r.supplyDate);
     return d.getMonth() === mon && d.getFullYear() === yr && r.supplied === true && _rowMatchesReportPort(r, port);
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+}
+// BDN date shown in the Monthly Report for one grade: the date entered on the BDN, else the
+// supply day (date only) marked * — nothing for a grade that was not supplied.
+const _RPT_BDN_NOTE = '* BDN date not entered yet — the supply date is shown.';
+function _rptBdnDate(r, g) {
+  const ymd = g === 'v' ? r.bdnDateV : r.bdnDateM, qty = g === 'v' ? r.vQ : r.mQ, no = g === 'v' ? r.bdnV : r.bdnM;
+  if (ymd) return { text: _dealDateStr(ymd), star: false };
+  if (!(qty > 0) && !no) return { text: '', star: false };
+  return r.supplyDay ? { text: _dealDateStr(r.supplyDay) + ' *', star: true } : { text: '—', star: false };
 }
 async function downloadMonthlyReport(btnEl) {
   let rows, rangeLabel;
@@ -23541,14 +23600,14 @@ async function downloadMonthlyReport(btnEl) {
     const ExcelJS = await _loadExcelJS();
     const wb = new ExcelJS.Workbook();
     const ws = wb.addWorksheet('Supply Report');
-    ws.columns = [{width:6},{width:22},{width:22},{width:15},{width:18},{width:15},{width:18},{width:16}];
+    ws.columns = [{width:6},{width:24},{width:15},{width:18},{width:15},{width:15},{width:18},{width:15},{width:16}];
 
     // Title + subtitle rows
-    ws.mergeCells('A1:H1');
+    ws.mergeCells('A1:I1');
     const titleCell = ws.getCell('A1');
     titleCell.value = `FLOW Supply Report — ${rangeLabel.replace(/_/g,' ')}`;
     titleCell.font = { bold:true, size:13, color:{argb:'FF0D1B2A'} };
-    ws.mergeCells('A2:H2');
+    ws.mergeCells('A2:I2');
     const subCell = ws.getCell('A2');
     subCell.value = `Generated ${fmt24(new Date())} · ${rows.length} record${rows.length>1?'s':''}`;
     subCell.font = { size:9, color:{argb:'FF8A9BAC'} };
@@ -23558,30 +23617,34 @@ async function downloadMonthlyReport(btnEl) {
     const border = { top:thinBorder, bottom:thinBorder, left:thinBorder, right:thinBorder };
 
     // Header row (row 4)
-    const headers = ['S.No.','Vessel Name','Date of Supply','VLSFO Qty (MT)','BDN No. (VLSFO)','MGO Qty (MT)','BDN No. (LSMGO)','Barge'];
+    const headers = ['S.No.','Vessel Name','VLSFO Qty (MT)','BDN No. (VLSFO)','BDN Date (VLSFO)','MGO Qty (MT)','BDN No. (LSMGO)','BDN Date (LSMGO)','Barge'];
+    const VQ = 2, MQ = 5; // quantity columns (0-based)
     const headerRow = ws.getRow(4);
     headers.forEach((h, i) => {
       const cell = headerRow.getCell(i+1);
       cell.value = h;
       cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: i===3 ? 'FF2F6FED' : i===5 ? 'FFFF7A1A' : 'FF0D1B2A'} };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: i===VQ ? 'FF2F6FED' : i===MQ ? 'FFFF7A1A' : 'FF0D1B2A'} };
       cell.alignment = { horizontal:'center', vertical:'middle' };
       cell.border = border;
     });
     headerRow.height = 20;
 
     // Data rows
+    let anyStar = false;
     rows.forEach((r, i) => {
       const row = ws.getRow(5+i);
       const alt = i % 2 === 1;
-      const vals = [i+1, r.name, r.dateStr, r.vQ||0, r.bdnV||'', r.mQ||0, r.bdnM||'', r.bargeLabel||''];
+      const dv = _rptBdnDate(r, 'v'), dm = _rptBdnDate(r, 'm');
+      if (dv.star || dm.star) anyStar = true;
+      const vals = [i+1, r.name, r.vQ||0, r.bdnV||'', dv.text, r.mQ||0, r.bdnM||'', dm.text, r.bargeLabel||''];
       vals.forEach((v, c) => {
         const cell = row.getCell(c+1);
         cell.value = v;
         cell.border = border;
-        cell.alignment = { vertical:'middle', horizontal: c===3||c===5 ? 'right' : 'left' };
-        if (c === 3) { cell.font = { color:{argb:'FF1D4ED8'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFE6EFFD':'FFEFF5FF'} }; }
-        else if (c === 5) { cell.font = { color:{argb:'FFC2570A'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFFDEEDD':'FFFFF6EC'} }; }
+        cell.alignment = { vertical:'middle', horizontal: c===VQ||c===MQ ? 'right' : 'left' };
+        if (c === VQ) { cell.font = { color:{argb:'FF1D4ED8'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFE6EFFD':'FFEFF5FF'} }; }
+        else if (c === MQ) { cell.font = { color:{argb:'FFC2570A'}, bold:true }; cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: alt?'FFFDEEDD':'FFFFF6EC'} }; }
         else if (alt) { cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF8FAFC'} }; }
       });
     });
@@ -23589,16 +23652,17 @@ async function downloadMonthlyReport(btnEl) {
     // Total row
     const totRow = ws.getRow(5+rows.length);
     const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
-    const totVals = ['', 'TOTAL', '', totV, '', totM, '', ''];
+    const totVals = ['', 'TOTAL', totV, '', '', totM, '', '', ''];
     totVals.forEach((v, c) => {
       const cell = totRow.getCell(c+1);
       cell.value = v;
       cell.font = { bold:true, color:{argb:'FFFFFFFF'} };
-      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: c===3 ? 'FF2F6FED' : c===5 ? 'FFFF7A1A' : 'FF0D1B2A'} };
-      cell.alignment = { vertical:'middle', horizontal: c===3||c===5 ? 'right' : 'left' };
+      cell.fill = { type:'pattern', pattern:'solid', fgColor:{argb: c===VQ ? 'FF2F6FED' : c===MQ ? 'FFFF7A1A' : 'FF0D1B2A'} };
+      cell.alignment = { vertical:'middle', horizontal: c===VQ||c===MQ ? 'right' : 'left' };
       cell.border = border;
     });
 
+    if (anyStar) { const n = ws.getCell('A' + (rows.length + 7)); ws.mergeCells('A' + (rows.length + 7) + ':I' + (rows.length + 7)); n.value = _RPT_BDN_NOTE; n.font = { size:9, color:{argb:'FFB8790F'} }; }
     ws.views = [{ state:'frozen', ySplit:4 }];
 
     const buf = await wb.xlsx.writeBuffer();
@@ -23629,10 +23693,10 @@ async function downloadMonthlyReportPDF(btnEl) {
   }
   if (_reportPort !== 'ALL') { rangeLabel += `_${_reportPort}`; badge += ` · ${_reportPort}`; }
   if (!rows.length){alert('No supplies in selected period.');return;}
-  const pdfRows = rows.map(r => ({ vessel:r.name, dateStr:r.dateStr, v:r.vQ||0, m:r.mQ||0, bdnV:r.bdnV||'', bdnM:r.bdnM||'', barge:r.bargeLabel, port:r.area||r.areaCode }));
+  const pdfRows = rows.map(r => ({ vessel:r.name, dateStr:r.dateStr, v:r.vQ||0, m:r.mQ||0, bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_rptBdnDate(r, 'v'), bdnDateM:_rptBdnDate(r, 'm'), barge:r.bargeLabel, port:r.area||r.areaCode }));
   const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
   const html = _flowReportPDFHTML({
-    rows: pdfRows, totV, totM, badge,
+    rows: pdfRows, totV, totM, badge, bdnDates: true,
     metaLines: [['Generated', fmt24(new Date())], ['Records', rows.length]],
     footerNote: 'Monthly supply report · System-generated for operational reference only.'
   });
