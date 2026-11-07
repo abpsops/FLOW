@@ -266,10 +266,10 @@ function renderMonthlyPreview() {
   const totV = rows.reduce((a,r)=>a+(r.vQ||0),0), totM = rows.reduce((a,r)=>a+(r.mQ||0),0);
   const rpMap = _bargeColorMap();
   prev.innerHTML = `<div style="font-size:12px;color:var(--sub);margin-bottom:8px">${rows.length} record${rows.length>1?'s':''} — <strong>${rangeLabel}</strong></div>
-  <table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:var(--ink-solid);color:#fff"><th style="padding:6px 8px;text-align:left">Vessel</th><th style="padding:6px 8px;text-align:left">Date</th><th style="padding:6px 8px;text-align:right">VLSFO</th><th style="padding:6px 8px;text-align:left">BDN (VLSFO)</th><th style="padding:6px 8px;text-align:right">MGO</th><th style="padding:6px 8px;text-align:left">BDN (LSMGO)</th><th style="padding:6px 8px;text-align:left">Barge</th></tr></thead>
-  <tbody>${rows.map(r=>`<tr style="border-bottom:.5px solid var(--border2)"><td style="padding:6px 8px;font-weight:500">${esc(r.name)}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.dateStr)}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.vQ>0?fmtMT(r.vQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnV||'—')}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.mQ>0?fmtMT(r.mQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnM||'—')}</td><td style="padding:6px 8px">${_bargeDot(r.bargeLabel, rpMap)}${esc(r.bargeLabel||'—')}</td></tr>`).join('')}
-  <tr style="background:var(--bg);font-weight:700"><td style="padding:6px 8px" colspan="2">TOTAL</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totV)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totM)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px"></td></tr>
-  </tbody></table>`;
+  <table style="width:100%;border-collapse:collapse;font-size:11px"><thead><tr style="background:var(--ink-solid);color:#fff"><th style="padding:6px 8px;text-align:left">Vessel</th><th style="padding:6px 8px;text-align:right">VLSFO</th><th style="padding:6px 8px;text-align:left">BDN (VLSFO)</th><th style="padding:6px 8px;text-align:left">BDN date</th><th style="padding:6px 8px;text-align:right">MGO</th><th style="padding:6px 8px;text-align:left">BDN (LSMGO)</th><th style="padding:6px 8px;text-align:left">BDN date</th><th style="padding:6px 8px;text-align:left">Barge</th></tr></thead>
+  <tbody>${rows.map(r=>`<tr style="border-bottom:.5px solid var(--border2)"><td style="padding:6px 8px;font-weight:500">${esc(r.name)}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.vQ>0?fmtMT(r.vQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnV||'—')}</td><td class="rp-bdn-date" style="padding:6px 8px;font-family:DM Mono,monospace;white-space:nowrap">${esc(_rptBdnDate(r, 'v').text)}</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${r.mQ>0?fmtMT(r.mQ):'—'}</td><td style="padding:6px 8px;font-family:DM Mono,monospace">${esc(r.bdnM||'—')}</td><td class="rp-bdn-date" style="padding:6px 8px;font-family:DM Mono,monospace;white-space:nowrap">${esc(_rptBdnDate(r, 'm').text)}</td><td style="padding:6px 8px">${_bargeDot(r.bargeLabel, rpMap)}${esc(r.bargeLabel||'—')}</td></tr>`).join('')}
+  <tr style="background:var(--bg);font-weight:700"><td style="padding:6px 8px">TOTAL</td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totV)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px"></td><td style="padding:6px 8px;text-align:right;font-family:DM Mono,monospace">${fmtMT(totM)} MT</td><td style="padding:6px 8px"></td><td style="padding:6px 8px"></td><td style="padding:6px 8px"></td></tr>
+  </tbody></table>${rows.some(r => _rptBdnDate(r, 'v').star || _rptBdnDate(r, 'm').star) ? `<div style="font-size:11px;color:var(--amber);margin-top:6px">${esc(_RPT_BDN_NOTE)}</div>` : ''}`;
 }
 setTimeout(() => {
   const rm = document.getElementById('report-month'), ry = document.getElementById('report-year');
@@ -288,6 +288,7 @@ function _getAllReportRecords() {
               vlsfoAct: _recActQty(r, 'v'),
               mgoAct:   _recActQty(r, 'm'),
               supplyDate: r.supplyDate || r.date || (arch.month != null && arch.year != null ? new Date(arch.year, arch.month, 1).toISOString() : arch.archivedAt) || '',
+              _noRealDate: !(r.supplyDate || r.date), // older archives kept only the shown date (dateStr)
               supplied: true,
               _fromArchive: true
             }));
@@ -332,7 +333,7 @@ function getRowsByRange(fromD, toD, port) {
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
     // Only supplied rows reach here, so report the ACTUAL quantity (0 is a
     // real actual) — never fall back to the nominated figure.
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:_rptSupplyDay(r), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
 function getMonthlyRows(mon, yr, port) {
   return _getAllReportRecords().filter(r => {
@@ -340,16 +341,22 @@ function getMonthlyRows(mon, yr, port) {
     const d = _parseDateLocal(r.supplyDate);
     return d.getMonth() === mon && d.getFullYear() === yr && r.supplied === true && _rowMatchesReportPort(r, port);
   }).sort((a,b) => _parseDateLocal(a.supplyDate) - _parseDateLocal(b.supplyDate))
-    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:(r.supplyDate?_localDateInputStr(_parseDateLocal(r.supplyDate)):''), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
+    .map(r => ({name:r.vessel||r.name, dateStr:r.dateStr||(r.supplyDate?_parseDateLocal(r.supplyDate).toLocaleDateString():'—'), vQ:_recActQty(r,'v'), mQ:_recActQty(r,'m'), bdnV:r.bdnV||'', bdnM:r.bdnM||'', bdnDateV:_bdnYmd(r.bdnDateV), bdnDateM:_bdnYmd(r.bdnDateM), supplyDay:_rptSupplyDay(r), bargeLabel:r.barge||r.bargeLabel, fromSaved:true, fromArchive:!!r._fromArchive, spec:r.spec, agent:r.agent, notes:r.notes, area:r.area, areaCode:r.areaCode}));
 }
 // BDN date shown in the Monthly Report for one grade: the date entered on the BDN, else the
 // supply day (date only) marked * — nothing for a grade that was not supplied.
 const _RPT_BDN_NOTE = '* BDN date not entered yet — the supply date is shown.';
 function _rptBdnDate(r, g) {
   const ymd = g === 'v' ? r.bdnDateV : r.bdnDateM, qty = g === 'v' ? r.vQ : r.mQ, no = g === 'v' ? r.bdnV : r.bdnM;
+  if (!(qty > 0) && !no) return { text: '', star: false }; // that grade was not supplied
   if (ymd) return { text: _dealDateStr(ymd), star: false };
-  if (!(qty > 0) && !no) return { text: '', star: false };
   return r.supplyDay ? { text: _dealDateStr(r.supplyDay) + ' *', star: true } : { text: '—', star: false };
+}
+// The supply day (YYYY-MM-DD, no time) of a report record: from its supply date, or — for an
+// older archived row that kept only the shown date — from that date.
+function _rptSupplyDay(r) {
+  if (r._noRealDate) { const d = r.dateStr ? parseDT(r.dateStr) : null; return d && !isNaN(d) ? _localDateInputStr(d) : ''; }
+  return r.supplyDate ? _localDateInputStr(_parseDateLocal(r.supplyDate)) : '';
 }
 async function downloadMonthlyReport(btnEl) {
   let rows, rangeLabel;

@@ -488,7 +488,12 @@ function clUpdateBdn(uid, field, val) {
 }
 // BDN date — the date on the Bunker Delivery Note, per grade, picked from a calendar
 // (date only, 'YYYY-MM-DD'). The Monthly Report shows it instead of the supply time.
-function _bdnYmd(v) { return /^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : ''; }
+function _bdnYmd(v) {
+  const s = String(v || ''), m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return '';
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])); // no 31 Feb: the date must exist
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] ? s : '';
+}
 function clUpdateBdnDate(uid, field, val) {
   const rec = _checklistRecords[uid];
   if (!rec || rec.lockedAt) return;

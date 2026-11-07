@@ -127,6 +127,36 @@ async function scenario(browser, name, fn) {
     check('B3 the archive PDF keeps its Date column', pdf.archHasDate, pdf.archHasDate);
   });
 
+  await scenario(browser, 'B4 review fixes', async (openT) => {
+    const db = H.createDb({ workspace: seed([], [R1, R2]), realtime: false });
+    const A = await openT(db);
+    const u = await A.page.evaluate(() => ({
+      bad: [_bdnYmd('2026-02-31'), _bdnYmd('2026-13-01'), _bdnYmd('2026-11-07 10:00'), _bdnYmd('2028-02-29')],
+      legacy: _rptSupplyDay({ _noRealDate: true, supplyDate: '2026-10-01T00:00:00.000Z', dateStr: '17 Oct 2026 10:00' }),
+      notSupplied: _rptBdnDate({ vQ: 0, bdnV: '', bdnDateV: '2026-11-01', mQ: 50, bdnM: 'X', bdnDateM: '2026-11-02', supplyDay: '2026-11-03' }, 'v').text,
+    }));
+    check('B4 only real calendar dates are kept (no 31 Feb, no time)', JSON.stringify(u.bad) === '["","","","2028-02-29"]', u.bad);
+    check('B4 an older archived row with only its shown date uses that day, not the 1st of the month', u.legacy === '2026-10-17', u.legacy);
+    check('B4 no BDN date for a grade that was not supplied', u.notSupplied === '', u.notSupplied);
+    const pv = await A.page.evaluate(() => {
+      const d = _parseDateLocal(_savedSupplies[0].supplyDate);
+      showPage('reports'); try { openMonthlyReport(); } catch (e) {}
+      setReportMode('month'); document.getElementById('report-month').value = String(d.getMonth()); document.getElementById('report-year').value = String(d.getFullYear());
+      renderMonthlyPreview();
+      const p = document.getElementById('monthly-preview');
+      return { head: [...p.querySelectorAll('th')].map(t => t.textContent), dates: [...p.querySelectorAll('.rp-bdn-date')].map(t => t.textContent), note: /BDN date not entered yet/.test(p.textContent) };
+    });
+    check('B4 the on-screen preview shows the same BDN dates as the files', pv.head.filter(h => h === 'BDN date').length === 2 && !pv.head.includes('Date') && pv.dates[0] === '30 Oct 2026' && pv.dates[1] === '31 Oct 2026' && pv.dates[2] === '' && / \*$/.test(pv.dates[3]) && pv.note, pv);
+    await A.page.setViewportSize({ width: 360, height: 760 });
+    const w = await A.page.evaluate(() => {
+      try { closeMonthlyReport(); } catch (e) {}
+      showPage('records'); openEditRecord('r1');
+      const box = document.querySelector('#edit-record-modal > div'), m = document.getElementById('er-bdn-date-m');
+      return { right: Math.round(m.getBoundingClientRect().right), boxRight: Math.round(box.getBoundingClientRect().right), scroll: box.scrollWidth <= box.clientWidth + 1 };
+    });
+    check('B4 on a 360 px phone both BDN date boxes fit in the Edit dialog', w.right <= w.boxRight && w.scroll, w);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
