@@ -31,7 +31,9 @@ function check(name, cond, info) {
 }
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const MO = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const eta = h => { const d = new Date(Date.now() + h * 3600000); const p = n => String(n).padStart(2, '0'); return `${p(d.getDate())} ${MO[d.getMonth()]} ${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+// An ETA h hours from now, written as the app reads it: in Dubai time (the test browser runs in
+// Asia/Dubai, UTC+4) — not this machine's local time, which put a near ETA on the previous day.
+const eta = h => { const d = new Date(Date.now() + h * 3600000 + 4 * 3600000); const p = n => String(n).padStart(2, '0'); return `${p(d.getUTCDate())} ${MO[d.getUTCMonth()]} ${d.getUTCFullYear()} ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`; };
 const VB = { imo: '', area: 'FUJ-A', spec: 'ISO 8217:2010', agent: 'AG', manifold: 'VESSEL MANIFOLD', remarks: '', lc: '', paq: 'no', bargeId: '1', refuelChk: false, rfv: 0, rfm: 0, rfvr: 750, rfmr: 275 };
 const ALPHA = qty => Object.assign({}, VB, { nomUid: 'n1', name: 'ALPHA', type: 'VLSFO', qty: qty || 100, mgo: 0, eta: eta(3) });
 const BRAVO = Object.assign({}, VB, { nomUid: 'n2', name: 'BRAVO', type: 'VLSFO', qty: 50, mgo: 0, eta: eta(10) });
