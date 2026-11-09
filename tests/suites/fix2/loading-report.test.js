@@ -1,4 +1,4 @@
-/* Monthly loading report (Loading page → Monthly loading report → ⬇ Excel / ⬇ PDF).
+/* Monthly loading report (Loading Deals page → Monthly loading report → ⬇ Excel / ⬇ PDF).
    • counts completed loadings whose BL date is in the chosen month, at the BL quantity
      (planned until a BL figure is entered, marked *); older loadings without a BL date
      use the day they were marked Completed (marked *)
@@ -58,17 +58,18 @@ function seed() {
     const db = H.createDb({ workspace: seed(), realtime: false });
     const A = await openT(db, 'user-operator');
     const d = await A.page.evaluate(() => {
-      showPage('loading');
+      showPage('deals');
       const m = document.getElementById('ld-rep-month');
       const def = m.value;
       m.value = '2026-10'; m.dispatchEvent(new Event('change'));
       const R = _ldMonthReportData('2026-10');
       return { def, now: _localDateInputStr(new Date()).slice(0, 7), summary: document.getElementById('ld-rep-summary').textContent,
         btns: [...document.querySelectorAll('#ld-report-card button')].map(b => b.textContent.trim()),
+        onDeals: !!document.querySelector('#page-deals #ld-report-card'), onLoading: !!document.querySelector('#page-loading #ld-report-card'),
         ids: R.lifted.map(x => x.rec.id), tot: R.tot, sup: R.bySupplier.map(g => [g.key, g.liftings, g.v, g.m]), days: R.byDate.map(g => [g.key, g.liftings, g.v, g.m]),
         stars: R.lifted.filter(x => !x.dateEntered || !x.blEntered).map(x => x.rec.id), sched: R.scheduled.map(x => [x.supplier, x.planned]), file: R.file };
     });
-    check('M1 the card shows the current month by default, with ⬇ Excel and ⬇ PDF', d.def === d.now && d.btns.includes('⬇ Excel') && d.btns.includes('⬇ PDF'), d);
+    check('M1 the card is on the Loading Deals page (not the Loading page), shows the current month by default, with ⬇ Excel and ⬇ PDF', d.onDeals && !d.onLoading && d.def === d.now && d.btns.includes('⬇ Excel') && d.btns.includes('⬇ PDF'), d);
     check('M1 October counts the 5 completed loadings by BL date — not November, a deleted one or a barge transfer', JSON.stringify(d.ids) === JSON.stringify(['l1', 'l2', 'l3', 'l4', 'l6']) && d.tot.liftings === 5 && d.tot.v === 7990.5 && d.tot.m === 500, d);
     check('M1 per supplier: deal supplier, else terminal "(no deal)", largest first', JSON.stringify(d.sup) === JSON.stringify([['ARAMCO', 2, 5990.5, 0], ['GPS (no deal)', 1, 1200, 0], ['VOPAK TERMINAL (no deal)', 1, 800, 0], ['BP <i>x</i>', 1, 0, 500]]), d.sup);
     check('M1 per date (BL date): 03 Oct 2 liftings 5,990.5 · 15 Oct 500 LSMGO · 20 Oct 1,200 · 25 Oct 800 (completion day)', JSON.stringify(d.days) === JSON.stringify([['2026-10-03', 2, 5990.5, 0], ['2026-10-15', 1, 0, 500], ['2026-10-20', 1, 1200, 0], ['2026-10-25', 1, 800, 0]]), d.days);
@@ -94,7 +95,7 @@ function seed() {
     const db = H.createDb({ workspace: seed(), realtime: false });
     const A = await openT(db, 'user-operator');
     const xl = await A.page.evaluate(async () => {
-      showPage('loading'); document.getElementById('ld-rep-month').value = '2026-10';
+      showPage('deals'); document.getElementById('ld-rep-month').value = '2026-10';
       let got = null, name = '';
       const orig = _flowSaveOrShareBlob; _flowSaveOrShareBlob = async (b, n) => { got = b; name = n; };
       try { await loadingMonthReportExcel(null); } finally { _flowSaveOrShareBlob = orig; }
@@ -146,7 +147,7 @@ function seed() {
     check('M3 "ARAMCO" and "  aramco " on different deals are one supplier (first spelling shown)', d.sup[0][0] === 'ARAMCO' && d.sup[0][1] === 4 && d.sup[0][2] === 7290.5 && !d.sup.some(g => /^aramco$/i.test(g[0]) && g !== d.sup[0]), d.sup);
     check('M3 a loading still running across the month-end is listed under the month it ends in (November), not October', JSON.stringify(d.octSched) === JSON.stringify([3500]) && JSON.stringify(d.novSched) === JSON.stringify([2500]), d);
     const fmt = await A.page.evaluate(async () => {
-      showPage('loading'); document.getElementById('ld-rep-month').value = '2026-10';
+      showPage('deals'); document.getElementById('ld-rep-month').value = '2026-10';
       let got = null; const orig = _flowSaveOrShareBlob; _flowSaveOrShareBlob = async b => { got = b; };
       try { await loadingMonthReportExcel(null); } finally { _flowSaveOrShareBlob = orig; }
       const wb = new (await _loadExcelJS()).Workbook(); await wb.xlsx.load(await got.arrayBuffer());
