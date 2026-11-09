@@ -711,6 +711,9 @@ function emailVoyageToBarge() {
   const first = sel.rows[0].item, fd = first.eta ? (first.eta instanceof Date ? first.eta : new Date(first.eta)) : null;
   const asOf = fd && !isNaN(fd) ? _ordDay(fd.getDate()).toUpperCase() + ' ' + _MON_UP[fd.getMonth()] : _ordDay(new Date().getDate()).toUpperCase() + ' ' + _MON_UP[new Date().getMonth()];
   document.getElementById('em-modal-title').textContent = 'Voyage Schedule — ' + sel.barge.name;
+  // "Download Formatted Email" saves VOYAGE_SCHEDULE_FNSA_10.eml (not a calling-instructions name)
+  _emailVesselCtx = null;
+  _emailFileName = ('VOYAGE_SCHEDULE_' + String(sel.barge.name || '').toUpperCase().replace(/[^A-Z0-9]+/g, '_')).replace(/_+$/, '') + '.eml';
   document.getElementById('em-to').value = sel.barge.email || '';
   document.getElementById('em-to-note').textContent = sel.barge.email ? 'From the Captain e-mail on the barge card.' : 'No Captain e-mail on the barge card yet — type the address, or add it on the Barge Fleet card to have it filled in next time.';
   document.getElementById('em-subject').value = 'VOYAGE SCHEDULE AS OF ' + asOf + ' - ' + String(sel.barge.name || '').toUpperCase();

@@ -1,5 +1,6 @@
 /* ═══ EMAIL GENERATOR — Built-in templates per location ═══ */
 var _emailVesselCtx = null;
+var _emailFileName = ''; // the .eml name when the dialog is not a vessel's calling instructions (e.g. the Voyage Schedule)
 
 var _EMAIL_BODY_FUJ = [
 'ATTN :  OPERATIONS',
@@ -208,6 +209,7 @@ function emailOpenForVessel(vid) {
   var agent    = agentEl ? agentEl.value : '';
   var vids     = _cardIds(vid);
 
+  _emailFileName = '';
   _emailVesselCtx = { id:vid, vessel:vessel, type:type, vlsfoQty:vlsfoQty, lsmgoQty:lsmgoQty, vlsfoTxt:_qtyShow(vqP), lsmgoTxt:_qtyShow(mqP),
     area:area, location:location, laycan:laycan, agent:agent, imo:vids.imo.trim(), mmsi:vids.mmsi.trim() };
   // No valid IMO / MMSI: a warning, the e-mail is still generated.
@@ -257,6 +259,7 @@ function emailCloseModal() {
   _emailRawHtml = null;
   document.getElementById('em-modal').style.display = 'none';
   _emailVesselCtx = null;
+  _emailFileName = '';
 }
 
 function emailCopyBody() {
@@ -363,7 +366,7 @@ function emailDownloadEML() {
   var blob = new Blob([eml], { type: 'message/rfc822' });
   var vesselName = (_emailVesselCtx && _emailVesselCtx.vessel) ? _emailVesselCtx.vessel.replace(/[^A-Za-z0-9]+/g, '_') : 'Email';
   // Only claim "downloaded" when the save actually worked (it can fail in the app).
-  _flowSaveOrShareBlob(blob, vesselName + '_Calling_Instructions.eml').then(function(ok) {
+  _flowSaveOrShareBlob(blob, _emailFileName || (vesselName + '_Calling_Instructions.eml')).then(function(ok) {
     if (ok) _emailShowEmlReminder();
   });
 }
