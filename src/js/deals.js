@@ -571,6 +571,7 @@ function renderDeals() {
   }
   host.innerHTML = (open.length ? open.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '<div class="deal-empty">No open deal — new loadings are not deducted from a bulk purchase.</div>') +
     (closed.length ? '<div class="deal-sec">Closed deals</div>' + closed.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '');
+  _ldRepRefresh();
 }
 
 function renderLoadingList() {

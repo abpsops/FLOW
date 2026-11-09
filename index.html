@@ -3524,18 +3524,6 @@ function flowWelcomeGo(pageId) {
     </div>
   </div>
 
-  <!-- Monthly loading report — what was loaded in a month, per supplier and per date (js/loading-report.js) -->
-  <div class="card" id="ld-report-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
-    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Monthly loading report</div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:12px">Completed loadings of the month by BL date, at the BL quantity — totals per supplier (the deal's supplier, else the terminal) and per date, and every lifting. Barge transfers are not included.</div>
-    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
-      <div class="field" style="min-width:170px"><label for="ld-rep-month">Month</label><input type="month" id="ld-rep-month" onchange="_ldRepRefresh()"></div>
-      <button class="btn btn-secondary btn-sm ld-rep-xls" onclick="loadingMonthReportExcel(this)" title="Monthly loading report as Excel">⬇ Excel</button>
-      <button class="btn btn-secondary btn-sm ld-rep-pdf" onclick="loadingMonthReportPdf(this)" title="Monthly loading report as PDF">⬇ PDF</button>
-      <span id="ld-rep-summary" style="font-size:12px;color:var(--sub);padding-bottom:7px"></span>
-    </div>
-  </div>
-
   <!-- Loading rate configuration — drives the duration estimate below -->
   <div class="card" style="border-top:2px solid var(--teal);margin-bottom:1.25rem">
     <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Loading Rate Configuration</div>
@@ -3944,6 +3932,18 @@ function flowWelcomeGo(pageId) {
     <div style="display:flex;gap:8px">
       <button class="btn btn-primary" id="deal-submit-btn" onclick="dealSubmit()"><span id="deal-submit-label">Add Deal</span></button>
       <button class="btn btn-secondary" onclick="dealCancelEdit()">Cancel</button>
+    </div>
+  </div>
+
+  <!-- Monthly loading report — what was loaded in a month, per supplier and per date (js/loading-report.js) -->
+  <div class="card" id="ld-report-card" style="border-top:2px solid var(--azure);margin-bottom:1.25rem">
+    <div style="font-size:14px;font-weight:700;color:var(--ink);margin-bottom:4px;font-family:DM Sans,sans-serif">Monthly loading report</div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:12px">Completed loadings of the month by BL date, at the BL quantity — totals per supplier (the deal's supplier, else the terminal) and per date, and every lifting. Barge transfers are not included.</div>
+    <div style="display:flex;gap:10px;align-items:end;flex-wrap:wrap">
+      <div class="field" style="min-width:170px"><label for="ld-rep-month">Month</label><input type="month" id="ld-rep-month" onchange="_ldRepRefresh()"></div>
+      <button class="btn btn-secondary btn-sm ld-rep-xls" onclick="loadingMonthReportExcel(this)" title="Monthly loading report as Excel">⬇ Excel</button>
+      <button class="btn btn-secondary btn-sm ld-rep-pdf" onclick="loadingMonthReportPdf(this)" title="Monthly loading report as PDF">⬇ PDF</button>
+      <span id="ld-rep-summary" style="font-size:12px;color:var(--sub);padding-bottom:7px"></span>
     </div>
   </div>
 
@@ -9952,6 +9952,7 @@ function renderDeals() {
   }
   host.innerHTML = (open.length ? open.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '<div class="deal-empty">No open deal — new loadings are not deducted from a bulk purchase.</div>') +
     (closed.length ? '<div class="deal-sec">Closed deals</div>' + closed.map(function(d) { return _dealCardHtml(d, operator); }).join('') : '');
+  _ldRepRefresh();
 }
 
 function renderLoadingList() {
@@ -10079,7 +10080,7 @@ function renderLoadingPage() {
 
 /* ══════════════════════════════════════════════════════
    MONTHLY LOADING REPORT — what was loaded in a month, from whom, on which
-   dates (Loading page → Monthly loading report → ⬇ Excel / ⬇ PDF).
+   dates (Loading Deals page → Monthly loading report → ⬇ Excel / ⬇ PDF).
    • counts completed loadings whose BL date falls in the month, at the BL
      quantity (planned quantity until a BL figure is entered — marked *)
    • supplier = the linked Loading Deal's supplier; a loading with no deal is

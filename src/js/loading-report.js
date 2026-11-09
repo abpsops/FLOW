@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════
    MONTHLY LOADING REPORT — what was loaded in a month, from whom, on which
-   dates (Loading page → Monthly loading report → ⬇ Excel / ⬇ PDF).
+   dates (Loading Deals page → Monthly loading report → ⬇ Excel / ⬇ PDF).
    • counts completed loadings whose BL date falls in the month, at the BL
      quantity (planned quantity until a BL figure is entered — marked *)
    • supplier = the linked Loading Deal's supplier; a loading with no deal is
