@@ -24,7 +24,9 @@
   Query.prototype.update = function (vals) { this.op.action = 'update'; this.op.values = vals; return this; };
   Query.prototype.delete = function () { this.op.action = 'delete'; return this; };
   Query.prototype.then = function (res, rej) {
-    var op = Object.assign({ uid: window.__mockUid }, this.op);
+    // Signed out (the session expired or was revoked): the request goes as the anonymous
+    // role — no uid — so row-level security hides every row and refuses every write.
+    var op = Object.assign({ uid: window.__mockAuthSignedOut ? null : window.__mockUid }, this.op);
     return call(op).then(res, rej);
   };
 
@@ -85,13 +87,19 @@
     var uid = window.__mockUid || 'user-operator';
     var session = { user: { id: uid, email: uid + '@test' }, access_token: 'x', expires_at: Math.floor(Date.now() / 1000) + 86400 };
     var signedIn = !window.__mockSignedOut;
+    window.__mockAuthSignedOut = !signedIn;
+    var listeners = [];
+    var setSignedIn = function (v, ev) { signedIn = v; window.__mockAuthSignedOut = !v; listeners.slice().forEach(function (cb) { try { cb(ev, v ? session : null); } catch (e) {} }); };
+    // Tests: the sign-in expires while the app is open (supabase-js then drops the stored
+    // session and reports SIGNED_OUT; pass false to drop it without the event).
+    window.__mockSessionExpire = function (emit) { if (emit === false) { signedIn = false; window.__mockAuthSignedOut = true; } else setSignedIn(false, 'SIGNED_OUT'); };
     return {
       auth: {
         getSession: function () { return Promise.resolve({ data: { session: signedIn ? session : null }, error: null }); },
         refreshSession: function () { return Promise.resolve({ data: { session: signedIn ? session : null }, error: null }); },
-        signInWithPassword: function () { signedIn = true; return Promise.resolve({ data: { session: session, user: session.user }, error: null }); },
-        signOut: function () { signedIn = false; return Promise.resolve({ error: null }); },
-        onAuthStateChange: function () { return { data: { subscription: { unsubscribe: function () {} } } }; },
+        signInWithPassword: function () { setSignedIn(true, 'SIGNED_IN'); return Promise.resolve({ data: { session: session, user: session.user }, error: null }); },
+        signOut: function () { setSignedIn(false, 'SIGNED_OUT'); return Promise.resolve({ error: null }); },
+        onAuthStateChange: function (cb) { listeners.push(cb); return { data: { subscription: { unsubscribe: function () { listeners = listeners.filter(function (x) { return x !== cb; }); } } } }; },
         getUser: function () { return Promise.resolve({ data: { user: signedIn ? session.user : null }, error: null }); }
       },
       from: function (t) { return new Query(t); },

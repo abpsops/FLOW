@@ -23,7 +23,8 @@ function saveSharedState() {
 }
 function _runSave() {
   const p = _doSaveSharedState().catch(function(e) {
-    console.error('saveSharedState failed:', e);
+    if (e && e.message === FLOW_SIGNED_OUT_MSG) console.warn('saveSharedState: signed out — kept on this device until signed in again');
+    else console.error('saveSharedState failed:', e);
     setSyncStatus('error', `Saved locally only — cloud sync failed: ${e.message}`);
     _showSyncWarningBanner(e.message);
     return false;

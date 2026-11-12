@@ -98,17 +98,33 @@ function _updateSyncUI() {
 // refresh right here would have silently fixed it. Errors here are
 // swallowed on purpose — if refresh genuinely fails, the real call right
 // after this still runs and its real error is what the user sees.
+// Signed out while the app is open (the sign-in expired or was revoked): the cloud
+// would answer every read with "no workspace" and refuse every save (row-level
+// security), and the app would take the shared workspace for empty. So no cloud
+// call is made without a sign-in: the sign-in form comes up instead (this
+// device's changes are kept and sync after signing in) and the call fails.
+const FLOW_SIGNED_OUT_MSG = 'Signed out — sign in again to sync (the changes on this device are kept)';
 async function _ensureFreshSession() {
   if (!supabaseClient) return;
+  let lost = '';
   try {
     const { data, error } = await supabaseClient.auth.getSession();
-    if (error || !data || !data.session) return;
-    const expiresAt = data.session.expires_at; // unix seconds
-    const nowSec = Math.floor(Date.now() / 1000);
-    if (!expiresAt || expiresAt <= nowSec + 60) {
-      await supabaseClient.auth.refreshSession();
+    if (error) return; // the real call below surfaces it (offline, …)
+    if (!data || !data.session) lost = 'no session';
+    else {
+      const expiresAt = data.session.expires_at; // unix seconds
+      const nowSec = Math.floor(Date.now() / 1000);
+      if (!expiresAt || expiresAt <= nowSec + 60) {
+        const r = await supabaseClient.auth.refreshSession();
+        if (r && r.error && !_isNetworkAuthError(r.error)) lost = 'refresh refused: ' + (r.error.message || r.error);
+        else if (r && !r.error && (!r.data || !r.data.session)) lost = 'refresh gave no session';
+      }
     }
   } catch(e) { /* real call below will surface any genuine problem */ }
+  if (lost && navigator.onLine !== false) {
+    if (typeof _flowSessionLostGate === 'function') _flowSessionLostGate(lost);
+    throw new Error(FLOW_SIGNED_OUT_MSG);
+  }
 }
 
 // Compare-and-swap write. Never a blind upsert: an UPDATE only matches the

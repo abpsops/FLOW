@@ -50,6 +50,31 @@ function _normEmail(s) { return (s || '').trim().toLowerCase(); }
 const LAST_LOGIN_LS_KEY = 'abps_last_login_v1'; // { uid, at }
 const ROLE_CACHE_LS_KEY = 'abps_role_cache_v1'; // { uid, role } — last role the server confirmed
 let _flowOfflineLaunch = false;
+let _flowSessionLost = false, _flowLoggingOut = false;
+// The sign-in has gone while the app is open (expired or revoked — e.g. a tab left
+// open overnight): show the sign-in form over the app. Nothing is cleared: the
+// changes on this device stay (a failed save flags them unsynced) and are merged
+// into the shared workspace once signed in again (_flowResumeAfterSignIn).
+function _flowSessionLostGate(reason) {
+  if (_flowSessionLost || _flowLoggingOut) return;
+  const gate = document.getElementById('operator-gate');
+  if (!gate) return;
+  _flowSessionLost = true;
+  console.warn('ABPS: the sign-in was lost (' + reason + ') — asking to sign in again.');
+  try { if (typeof _rtStop === 'function') _rtStop(); } catch (e) {}
+  gate.style.transition = ''; gate.style.opacity = '1'; gate.style.display = '';
+  const err = document.getElementById('og-error');
+  if (err) { err.textContent = 'Your sign-in has expired. Sign in again to keep syncing — the changes on this device are kept and are saved to the shared workspace after you sign in.'; err.style.display = ''; }
+  setTimeout(function() { const e = document.getElementById('og-email'); if (e) e.focus(); }, 100);
+}
+// Signed in again after _flowSessionLostGate: carry on where the app was (no reload):
+// the role, live updates, then a pull that merges this device's changes and saves them.
+async function _flowResumeAfterSignIn() {
+  try { await _fetchAndApplyUserRole(); } catch (e) {}
+  try { if (typeof _rtStart === 'function') _rtStart(); } catch (e) {}
+  try { await _pollOnce(true); } catch (e) {}
+  try { if (typeof _isMarkedUnsynced === 'function' && _isMarkedUnsynced() && !isTrader()) await saveSharedState(); } catch (e) {}
+}
 
 function _recordSuccessfulLogin(uid) {
   if (!uid) return;
@@ -173,6 +198,14 @@ async function _handleOperatorLogin(ev) {
 
   _flowOfflineLaunch = false;
   _recordSuccessfulLogin(data.session.user && data.session.user.id);
+  if (_flowSessionLost) { // signed in again while the app was open: resume it, don't start it twice
+    _flowSessionLost = false;
+    errEl.style.display = 'none';
+    const gate = document.getElementById('operator-gate');
+    if (gate) { gate.style.transition = 'opacity .35s ease'; gate.style.opacity = '0'; setTimeout(function() { gate.style.display = 'none'; }, 360); }
+    _flowResumeAfterSignIn();
+    return false;
+  }
   _unlockOperatorGate();
   return false;
 }
@@ -214,6 +247,7 @@ async function operatorLogout() {
       'To keep ' + them + ', press Cancel, then click Retry on the sync banner or reload the page — unsynced changes stay on this device and sync once the cloud accepts them.\n\n' +
       'Log out anyway and lose ' + them + '?')) return;
   } else if (!confirm('Log out of the shared FLOW workspace on this device?\n\nYou will need the operator email and password to sign back in.')) return;
+  _flowLoggingOut = true; // the SIGNED_OUT that follows is this logout, not a lost sign-in
   try { _rtStop(); } catch(e) {} // unsubscribe from Realtime before the session goes
   // 'local': end THIS device's session only. The default ('global') revokes
   // every session of the account, and the team shares one login — it would
