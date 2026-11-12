@@ -6,7 +6,9 @@
    • one PDF page per document page, A4 like the template, named Calling_Instructions_<vessel>.pdf
    • a letter longer than a page (no page break in the file) flows onto page 2 the way Word does,
      each PDF page A4 and unstretched
-   node suites/fix2/calling-pdf.test.js [appDir]   (PDF_OUT / PDF_OUT2=<file> save the PDFs to look at) */
+   • never a blank page (a typed page break at the foot of page 1 stays on page 1)
+   • Office fonts the device lacks (Century, Calibri, …) are drawn with free look-alikes
+   node suites/fix2/calling-pdf.test.js [appDir]   (PDF_OUT / PDF_OUT2 / PDF_OUT3=<file> save the PDFs to look at) */
 const fs = require('fs');
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -57,6 +59,19 @@ const LONG_BODY =
   ['Gulf Petrol Supplies LLC (Bunkers)', '(A Fujairah National Group Company)', 'FNG Building No. 2, Al Mina Road,', 'P.O. Box 121, Fujairah, U.A.E'].map(t => P(t, '<w:sz w:val="20"/>', '<w:ind w:left="5000"/><w:spacing w:after="0"/>')).join('') +
   P('') + P('To: The Master: {{VESSEL_NAME}}', '<w:u w:val="single"/>') + P('') +
   LONG_PARAS.map(t => P(t, '<w:color w:val="1F4E79"/><w:sz w:val="22"/>', '<w:jc w:val="both"/>' + SP)).join('');
+// like the GPS letter: Century text (East Asian font Calibri), a Calibri block, a page break
+// typed after Note 3, page 2 after it
+const CEN = '<w:rFonts w:ascii="Century" w:hAnsi="Century" w:eastAsia="Calibri"/><w:sz w:val="20"/>';
+const CAL = '<w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/>';
+const GPS_BODY = (fill) =>
+  P('Gulf Petrol Supplies LLC (Bunkers)', CEN, '<w:ind w:left="5000"/><w:spacing w:after="0"/>') +
+  P('To: The Master: {{VESSEL_NAME}}', CEN + '<w:u w:val="single"/>') +
+  LONG_PARAS.slice(0, 13).map(t => P(t, CEN, '<w:jc w:val="both"/>' + SP)).join('') +
+  P('"B" Anchorage Area', CAL, '<w:spacing w:after="0"/>') +
+  Array.from({ length: fill }, (_, i) => P('Filler line ' + (i + 1) + ' of the notes about the anchorage and the port rules.', CEN, SP)).join('') +
+  P(LONG_PARAS[18], CEN, '<w:jc w:val="both"/>' + SP) +
+  '<w:p><w:pPr><w:spacing w:after="200"/></w:pPr><w:r><w:br w:type="page"/></w:r></w:p>' +
+  LONG_PARAS.slice(19).map(t => P(t, CEN, '<w:jc w:val="both"/>' + SP)).join('');
 async function templateB64(body) {
   const z = new JSZip();
   z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
@@ -67,7 +82,8 @@ async function templateB64(body) {
 
 (async () => {
   const browser = await H.launch();
-  const A = await U.open(browser, H.createDb({ workspace: U.seedPayload({}), realtime: false }), 'user-operator');
+  const db = H.createDb({ workspace: U.seedPayload({}), realtime: false }); db.cdnLog = [];
+  const A = await U.open(browser, db, 'user-operator');
   try {
     await U.helpers(A);
     const b64 = await templateB64();
@@ -134,6 +150,35 @@ async function templateB64(body) {
     check('a letter longer than one page (no page break in the file) comes out on 2 A4 pages, the overflow carried to page 2 — not squeezed onto one', r2.pages === 2 && r2.nPages === 2 && r2.fits.every(Boolean), { pages: r2.pages, fits: r2.fits });
     check('…each page image has the A4 shape (text not stretched or squashed)', r2.imgs.length === 2 && r2.imgs.every(([w, h]) => Math.abs(h / w - 297 / 210) < 0.01), r2.imgs);
     check('…page 2 starts at a whole paragraph', /^(Note|LAST-ON|Please|If your|Vessels)/.test((r2.firstP2 || '').trim()), r2.firstP2);
+    // the GPS letter: whatever the length of page 1, never a blank page (the typed page break
+    // used to be pushed to a page of its own when it fell at the foot of page 1)
+    const sweep = [];
+    for (let fill = 0; fill <= 14; fill++) sweep.push([fill, await templateB64(GPS_BODY(fill))]);
+    const r3 = await A.page.evaluate(async (list) => {
+      const lib = await _ciLoadDocxPreview(); const out = [];
+      for (const [fill, b64] of list) {
+        const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-100000px;top:0;'; document.body.appendChild(box);
+        const pages = await _ciLayoutDocx(lib, _base64ToAb(b64), box);
+        out.push({ fill, pages: pages.length, blank: pages.filter(p => ![...p.querySelectorAll(':scope > article')].some(_ciHasInk)).length,
+          fits: pages.every(p => { const i = _ciPageInfo(p); return [...p.querySelectorAll(':scope > article > *')].filter(_ciHasInk).every(b => b.getBoundingClientRect().bottom <= i.bottom + 0.5); }) });
+        box.remove();
+      }
+      const fam = n => [...document.fonts].some(f => f.family.replace(/["']/g, '') === n && f.status === 'loaded');
+      const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-100000px;top:0;'; document.body.appendChild(box);
+      await _ciLayoutDocx(lib, _base64ToAb(list[0][1]), box);
+      const p = [...box.querySelectorAll('article p')].find(x => /Good day/.test(x.textContent));
+      const span = p && p.querySelector('span');
+      const usedFont = span ? getComputedStyle(span).fontFamily : '';
+      box.remove();
+      return { out, century: fam('Century'), calibri: fam('Calibri') || _ciFontOnDevice('Calibri'), usedFont };
+    }, sweep);
+    if (process.env.PDF_OUT3) {
+      const b = await A.page.evaluate(async (b64) => { const pdf = await _ciDocxToPdfBlob(new Blob([_base64ToAb(b64)])); const pb = new Uint8Array(await pdf.arrayBuffer()); let o = ''; for (let i = 0; i < pb.length; i += 0x8000) o += String.fromCharCode.apply(null, pb.subarray(i, i + 0x8000)); return btoa(o); }, sweep[6][1]);
+      fs.writeFileSync(process.env.PDF_OUT3, Buffer.from(b, 'base64'));
+    }
+    const cdn = (db.cdnLog || []).join(' ');
+    check('the GPS letter: no blank page, whatever the length of page 1 (a typed page break at the foot of page 1 does not get a page of its own)', r3.out.every(o => o.blank === 0 && o.fits && o.pages >= 2 && o.pages <= 3) && r3.out.some(o => o.pages === 2), r3.out);
+    check('a font the device lacks (Century) is drawn with its look-alike, not the next font in the list (Calibri); one it has (Calibri — here the system\'s own look-alike) is used as is', r3.century && r3.calibri && /Century/.test(r3.usedFont) && /CenturySchL-Roma\.woff2/.test(cdn), { century: r3.century, calibri: r3.calibri, usedFont: r3.usedFont, cdn: (db.cdnLog || []).filter(u => /woff2/.test(u)) });
     const errs = U.realErrors(A);
     check('no page errors', errs.length === 0, errs.slice(0, 3));
   } catch (e) { check('threw', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); }
