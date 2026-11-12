@@ -23,7 +23,8 @@ function saveSharedState() {
 }
 function _runSave() {
   const p = _doSaveSharedState().catch(function(e) {
-    console.error('saveSharedState failed:', e);
+    if (e && e.message === FLOW_SIGNED_OUT_MSG) console.warn('saveSharedState: signed out — kept on this device until signed in again');
+    else console.error('saveSharedState failed:', e);
     setSyncStatus('error', `Saved locally only — cloud sync failed: ${e.message}`);
     _showSyncWarningBanner(e.message);
     return false;
@@ -235,6 +236,7 @@ async function _traderSave() {
     return true; // vessels unchanged — nothing for a trader to write
   }
   _markUnsynced(true);
+  await _ensureFreshSession(); // signed out: the sign-in form, no write as the anonymous role
   let vessels = state.vessels;
   for (let attempt = 0; attempt < 4; attempt++) {
     const version = _nextVersion();

@@ -461,7 +461,7 @@ function _rtBindAuth() {
   _rtAuthBound = true;
   try {
     supabaseClient.auth.onAuthStateChange(function(event) {
-      if (event === 'SIGNED_OUT') { _rtStop(); return; }
+      if (event === 'SIGNED_OUT') { _rtStop(); if (typeof _flowSessionLostGate === 'function') _flowSessionLostGate('signed out'); return; }
       if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && _rtWanted && _rtStatus !== 'live') {
         _rtRetryDelay = 0;
         setTimeout(_rtSubscribe, 0); // outside the auth callback (supabase-js holds a lock there)
@@ -533,8 +533,8 @@ window.addEventListener('online', function() {
 // waiting for whatever the user does next to be the thing that discovers
 // the expired token and shows the sync-failed banner.
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible' && _syncReady()) {
-    _ensureFreshSession();
+  if (document.visibilityState === 'visible' && _syncReady() && _abpsAppStarted) {
+    _ensureFreshSession().catch(function() {}); // signed out: it brings up the sign-in form
   }
 });
 
