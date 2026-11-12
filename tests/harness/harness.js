@@ -73,6 +73,9 @@ const CDN_MAP = [
   [/chartjs-plugin-datalabels\/2\.2\.0\/chartjs-plugin-datalabels\.min\.js/, vendor('chartjs-plugin-datalabels', 'dist/chartjs-plugin-datalabels.min.js')],
   [/jszip\/3\.10\.1\/jszip\.min\.js/, vendor('jszip', 'dist/jszip.min.js')],
   [/docx-preview@0\.3\.7\/dist\/docx-preview\.min\.js/, vendor('docx-preview', 'dist/docx-preview.min.js')],
+  // Calling Instructions PDF: look-alikes for Office fonts the device lacks
+  [/century-schoolbook-l@1\.0\.0\/fonts\/(CenturySchL-[A-Za-z]+\.woff2)$/, (m) => path.join(pkgDir('century-schoolbook-l'), 'fonts', m[1])],
+  [/@fontsource\/carlito@5\.3\.0\/files\/(carlito-latin-[\w-]+\.woff2)$/, (m) => path.join(pkgDir('@fontsource/carlito'), 'files', m[1])],
   [/@emailjs\/browser@[^/]+\/dist\/email\.min\.js/, vendor('@emailjs/browser', 'dist/email.min.js')],
   // Import nomination OCR (lazy-loaded): library, worker, WebAssembly core, English model.
   [/tesseract\.js@6\.0\.1\/dist\/tesseract\.min\.js/, vendor('tesseract.js', 'dist/tesseract.min.js')],
@@ -290,7 +293,7 @@ async function openApp(browser, db, opts) {
       const m = url.match(re);
       if (m) {
         const file = fileOf(m);
-        const type = file.endsWith('.css') ? 'text/css' : file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.gz') ? 'application/gzip' : 'application/javascript';
+        const type = file.endsWith('.css') ? 'text/css' : file.endsWith('.woff2') ? 'font/woff2' : file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.gz') ? 'application/gzip' : 'application/javascript';
         if (db.cdnLog) db.cdnLog.push(url);
         return route.fulfill({ path: file, headers: { 'access-control-allow-origin': '*', 'content-type': type } });
       }

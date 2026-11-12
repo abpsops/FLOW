@@ -27092,6 +27092,9 @@ async function _ciRenderDocxPages(docxLib, buf, box, breaks) {
   await docxLib.renderDocument(doc, box, box, _CI_PDF_OPTS);
   return Array.prototype.slice.call(box.querySelectorAll('section.ci-docx'));
 }
+function _ciHasInk(el) {
+  return /\S/.test(el.textContent || '') || !!el.querySelector('img,svg,canvas,table');
+}
 function _ciPageInfo(page) {
   const cs = getComputedStyle(page);
   const pageH = parseFloat(cs.minHeight) || page.offsetHeight;
@@ -27107,8 +27110,10 @@ function _ciPageInfo(page) {
 // block on the page — that one stays, it has nowhere better to go), or -1 when the page fits
 function _ciOverflowIndex(page) {
   const info = _ciPageInfo(page);
+  // empty lines (and a line holding only a page break) at the foot of a page are white space:
+  // they never move to a new page (that is what made a blank page)
   const blocks = Array.prototype.slice.call(page.querySelectorAll(':scope > article > *'))
-    .filter(function(b) { return !b.hasAttribute('data-ci-brk') && b.getBoundingClientRect().height > 0; });
+    .filter(function(b) { return !b.hasAttribute('data-ci-brk') && b.getBoundingClientRect().height > 0 && _ciHasInk(b); });
   for (let j = 0; j < blocks.length; j++) {
     if (blocks[j].getBoundingClientRect().bottom <= info.bottom + 0.5) continue;
     for (let k = Math.max(j, 1); k < blocks.length; k++) {
@@ -27119,6 +27124,89 @@ function _ciOverflowIndex(page) {
   }
   return -1;
 }
+// The template's fonts (Century, Calibri, …) come with Microsoft Office; a device without
+// them would draw the letter in whatever the browser has (Calibri, or a plain sans), so the
+// PDF would not look like the .docx. A font the device lacks is replaced, for the PDF only,
+// by a free look-alike with the same name: Century → URW Century Schoolbook, Calibri →
+// Carlito, Cambria → Caladea, Times New Roman → Tinos, Arial → Arimo, Courier New → Cousine
+// (the last five have exactly the same letter widths). A font the device has is used as is.
+const _CI_FS = function(pkg, id) {
+  const b = 'https://cdn.jsdelivr.net/npm/@fontsource/' + pkg + '/files/' + id + '-latin-';
+  return [[b + '400-normal.woff2', '400', 'normal'], [b + '700-normal.woff2', '700', 'normal'], [b + '400-italic.woff2', '400', 'italic'], [b + '700-italic.woff2', '700', 'italic']];
+};
+const _CI_CENTURY = (function() {
+  const b = 'https://cdn.jsdelivr.net/npm/century-schoolbook-l@1.0.0/fonts/CenturySchL-';
+  return [[b + 'Roma.woff2', '400', 'normal'], [b + 'Bold.woff2', '700', 'normal'], [b + 'Ital.woff2', '400', 'italic'], [b + 'BoldItal.woff2', '700', 'italic']];
+})();
+const _CI_FONT_SUBS = {
+  'century': _CI_CENTURY, 'century schoolbook': _CI_CENTURY,
+  'calibri': _CI_FS('carlito@5.3.0', 'carlito'), 'calibri light': _CI_FS('carlito@5.3.0', 'carlito'),
+  'cambria': _CI_FS('caladea@5.3.0', 'caladea'),
+  'times new roman': _CI_FS('tinos@5.3.0', 'tinos'),
+  'arial': _CI_FS('arimo@5.3.0', 'arimo'),
+  'courier new': _CI_FS('cousine@5.3.0', 'cousine'),
+};
+const _ciFontDone = {}; // family (lower case) -> true once it is known to draw (the device's or ours)
+const _ciFontFaces = []; // the look-alikes loaded: { name, buf, weight, style }
+// html2canvas lays the page out again in a copy of the document (an iframe): the look-alikes
+// have to be in that copy too, or the letters are placed for one font and drawn in another
+async function _ciFontsIntoClone(doc) {
+  const win = doc && doc.defaultView;
+  if (!win || !win.FontFace || !doc.fonts || !_ciFontFaces.length) return;
+  await Promise.all(_ciFontFaces.map(async function(f) {
+    try { const face = new win.FontFace(f.name, f.buf.slice(0), { weight: f.weight, style: f.style }); await face.load(); doc.fonts.add(face); } catch (e) {}
+  }));
+}
+function _ciFontOnDevice(fam) {
+  try {
+    const c = document.createElement('canvas').getContext('2d');
+    const t = 'mmmmmmmmmmlli1WQ@#0123 abcxyz';
+    return ['monospace', 'serif', 'sans-serif'].some(function(b) {
+      c.font = '40px ' + b; const w0 = c.measureText(t).width;
+      c.font = '40px "' + fam + '", ' + b; return Math.abs(c.measureText(t).width - w0) > 0.01;
+    });
+  } catch (e) { return true; }
+}
+// the families the laid-out letter asks for that the device does not have: load the look-alikes
+async function _ciLoadMissingFonts(box) {
+  const want = {};
+  box.querySelectorAll('*').forEach(function(el) {
+    String(getComputedStyle(el).fontFamily || '').split(',').forEach(function(f) {
+      const name = f.trim().replace(/^["']|["']$/g, ''); const key = name.toLowerCase();
+      if (_CI_FONT_SUBS[key] && !_ciFontDone[key]) want[key] = name;
+    });
+  });
+  let added = false;
+  for (const key of Object.keys(want)) {
+    _ciFontDone[key] = true;
+    if (_ciFontOnDevice(want[key])) continue;
+    await Promise.all(_CI_FONT_SUBS[key].map(async function(f) {
+      try {
+        const r = await fetch(f[0]); if (!r.ok) return;
+        const buf = await r.arrayBuffer();
+        const face = new FontFace(want[key], buf.slice(0), { weight: f[1], style: f[2] });
+        await face.load(); document.fonts.add(face); added = true;
+        _ciFontFaces.push({ name: want[key], buf: buf, weight: f[1], style: f[2] });
+      } catch (e) { /* offline: the device's own fallback is used */ }
+    }));
+  }
+  return added;
+}
+// lays the document out in box, page by page as Word does; returns the page elements
+async function _ciLayoutDocx(docxLib, buf, box) {
+  const breaks = new Set();
+  let pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
+  if (await _ciLoadMissingFonts(box)) pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
+  if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+  for (let guard = 0; guard < 400; guard++) {
+    let idx = -1;
+    for (let i = 0; i < pages.length && idx < 0; i++) { const k = _ciOverflowIndex(pages[i]); if (k >= 0 && !breaks.has(k)) idx = k; }
+    if (idx < 0) break;
+    breaks.add(idx);
+    pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
+  }
+  return pages;
+}
 async function _ciDocxToPdfBlob(docxBlob) {
   const docxLib = await _ciLoadDocxPreview();
   const h2c = await _loadHtml2Canvas();
@@ -27128,16 +27216,9 @@ async function _ciDocxToPdfBlob(docxBlob) {
   box.style.cssText = 'position:fixed;left:-100000px;top:0;background:#fff;';
   document.body.appendChild(box);
   try {
-    const breaks = new Set();
-    let pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
-    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
-    for (let guard = 0; guard < 400; guard++) {
-      let idx = -1;
-      for (let i = 0; i < pages.length && idx < 0; i++) { const k = _ciOverflowIndex(pages[i]); if (k >= 0 && !breaks.has(k)) idx = k; }
-      if (idx < 0) break;
-      breaks.add(idx);
-      pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
-    }
+    let pages = await _ciLayoutDocx(docxLib, buf, box);
+    // a page with nothing on it (a page break at the top of a page) is left out
+    pages = pages.filter(function(p) { const a = p.querySelectorAll(':scope > article'); return Array.prototype.some.call(a, _ciHasInk); });
     if (!pages.length) throw new Error('The document has no pages to print.');
     let pdf = null;
     const addImg = function(canvas, wMm, hMm) {
@@ -27154,7 +27235,7 @@ async function _ciDocxToPdfBlob(docxBlob) {
       if (i > 0 && first) first.style.marginTop = '0';
       const pageH = _ciPageInfo(page).pageH, w = page.offsetWidth, fullH = page.offsetHeight;
       const wMm = w * 25.4 / 96, hMm = pageH * 25.4 / 96;
-      const canvas = await h2c(page, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: w, height: fullH });
+      const canvas = await h2c(page, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: w, height: fullH, onclone: _ciFontsIntoClone });
       // one PDF page per document page at the page's real size; a block taller than a whole
       // page (nothing to move it to) carries on over the next PDF pages instead of being squeezed
       const sliceH = Math.round(canvas.height * pageH / fullH);
