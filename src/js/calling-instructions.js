@@ -1210,6 +1210,8 @@ async function _ciDocxToPdfBlob(docxBlob) {
         addImg(c, wMm, hMm);
       }
     }
+    // which version of this PDF maker made the file (File → Properties → Application)
+    try { pdf.setProperties({ creator: 'FLOW Calling Instructions PDF r3 (page flow, no blank page, look-alike fonts)' }); } catch (e) {}
     return pdf.output('blob');
   } finally {
     box.remove();

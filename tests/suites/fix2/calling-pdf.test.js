@@ -116,7 +116,7 @@ async function templateB64(body) {
         let txt = ''; for (let i = 0; i < pb.length; i++) txt += String.fromCharCode(pb[i]);
         let b64out = ''; for (let i = 0; i < pb.length; i += 0x8000) b64out += String.fromCharCode.apply(null, pb.subarray(i, i + 0x8000));
         return { shown, label: btn.textContent.trim(), names: saved.map(x => x.name), sameDocx, xmlEdit: /Best regards from the ops desk/.test(xml) && /1F4E79/.test(xml) && /ELANDRA SEA/.test(xml),
-          head: txt.slice(0, 5), pages: (txt.match(/\/Type \/Page\b/g) || []).length, images: (txt.match(/\/Subtype \/Image/g) || []).length,
+          head: txt.slice(0, 5), rev: /\/Creator \(FLOW Calling Instructions PDF r3/.test(txt), pages: (txt.match(/\/Type \/Page\b/g) || []).length, images: (txt.match(/\/Subtype \/Image/g) || []).length,
           media: (txt.match(/\/MediaBox \[([^\]]+)\]/) || [])[1] || '', err: (document.getElementById('ci-modal-error') || {}).textContent || '', pdfB64: btoa(b64out) };
       } finally { _flowSaveOrShareBlob = orig; }
     }, b64);
@@ -125,7 +125,7 @@ async function templateB64(body) {
     check('after Preview & Generate, ⬇ Download PDF shows next to ⬇ Download .docx', r.shown && r.label === '⬇ Download PDF', r.label);
     check('⬇ Download .docx downloads the same formatted file again (with the preview\'s edit and the letterhead formatting)', r.sameDocx && r.xmlEdit, { sameDocx: r.sameDocx, xmlEdit: r.xmlEdit, names: r.names });
     check('the PDF is named Calling_Instructions_M_T_ELANDRA_SEA.pdf', r.names.includes('Calling_Instructions_M_T_ELANDRA_SEA.pdf'), { names: r.names, err: r.err });
-    check('the PDF is the document drawn page by page: 2 pages (the page break kept), each an image of the page, A4 like the template', r.head === '%PDF-' && r.pages === 2 && r.images === 2 && Math.abs(mb[2] - 595.3) < 2 && Math.abs(mb[3] - 841.9) < 2, { pages: r.pages, images: r.images, media: r.media, err: r.err });
+    check('the PDF is the document drawn page by page: 2 pages (the page break kept), each an image of the page, A4 like the template', r.head === '%PDF-' && r.rev && r.pages === 2 && r.images === 2 && Math.abs(mb[2] - 595.3) < 2 && Math.abs(mb[3] - 841.9) < 2, { pages: r.pages, images: r.images, media: r.media, err: r.err });
     // a letter longer than one page, no page break in the file: Word carries it over to page 2
     const b64long = await templateB64(LONG_BODY);
     const r2 = await A.page.evaluate(async (b64) => {
