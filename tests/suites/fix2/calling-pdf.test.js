@@ -4,7 +4,9 @@
    • after Preview & Generate both buttons show; ⬇ Download .docx downloads the same formatted
      file again (it used to rebuild a plain-text document)
    • one PDF page per document page, A4 like the template, named Calling_Instructions_<vessel>.pdf
-   node suites/fix2/calling-pdf.test.js [appDir]   (PDF_OUT=<file> saves the PDF to look at) */
+   • a letter longer than a page (no page break in the file) flows onto page 2 the way Word does,
+     each PDF page A4 and unstretched
+   node suites/fix2/calling-pdf.test.js [appDir]   (PDF_OUT / PDF_OUT2=<file> save the PDFs to look at) */
 const fs = require('fs');
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -30,11 +32,36 @@ const BODY =
   P('Regards') +
   '<w:p><w:r><w:br w:type="page"/></w:r></w:p>' +
   P('PAGE TWO — SAFETY CHECKLIST', '<w:b/><w:color w:val="C00000"/>', '<w:jc w:val="right"/>');
-async function templateB64() {
+const LONG_PARAS = [
+  'Good day,',
+  'We will be supplying bunkers to your good vessel at {{LOCATION}}. Grade and quantity to be supplied are as below.',
+  'RMG: - {{VLSFO_QTY}} MT/380 CST/ 0.5% MAX SULFUR.',
+  'Bunker supply Lay-can:{{LAYCAN}}',
+  'Kindly advise us vessels ETA and after give FIRM notices basis 96/72/48/36/24/12 HRS to our common mail id at operations@example.com.',
+  'Kindly contact FUJ PORT Control on VHF channel 16/10 two hours before your arrival informing nature of call and bunker supplier name and the name of local agent.',
+  'For emergency 24 HRS contact phones no is +971500000000 (24x7). For Vessels carrying hazardous cargoes, anchoring position is BRAVO anchorage or Delta anchorage.',
+  '"B" Anchorage Area', 'For vessels require bunkers, lube oil or de slopping total (50) anchoring positions.',
+  '25* 15.0 N – 056* 35.0E', '25* 15.0 N – 056* 29.0E', '25* 09.7 N – 056* 35.0E', '25* 09.7 N – 056* 29.0E',
+  'Note 1: Fujairah Port Authority will not accept single hull tankers in loaded condition; however single hull tankers in ballast condition could be accepted subject to Harbor master approval. Approval will be considered during port office HRS only.',
+  'Please keep the STBD SIDE vessels clear for our bunker barge to come along side. Also advise us at the earliest your vessels Local Agent, Purpose of call, Duration of stay Fujairah, Vessel type, Year of Built, Tanker Hull Type IMO Number, Vessel (loaded or Ballast), Summer Draft, LOA, DWT, Manifold size / Distance from Stern / Height above sea level and required Pumping rate.',
+  'If your good vessel is coming for bunkering only, we can act as agent provided there is no other service than bunkering, and any service other than bunkering you have to appoint a local agent for the same. FYG, Fujairah Port Authority will not allow two agents to act for the same call.',
+  'Note 2: In case your agent is us, kindly advise us at the earliest in order to send you ISPS code form for filling and returning to our office along with a copy of international ship security certificate and copy of last port clearance. All these documents are needed by Fujairah Port Authorities at least 72 hours prior arrival failing to this Fujairah port authority will not grant permission to enter the anchorage area. Furthermore, you must please advise us, and port control the sailing time immediately upon completion of bunkering.',
+  'Note 3: Please note Port of Fujairah already complied with ISPS Code, Port security level is Level ONE, vessels calling to FOAA with security level 2 or 3 then same to be informed via you appointed agent well in advance to Port Security Officer / boarding arrangements to furnish the DOS with SSO.',
+  'LAST-ON-PAGE-ONE-OR-TWO Vessels to drop anchor only at allocated anchorage area and not to drop anchor at prohibited area or passing through prohibited areas may cause heavy fines as per port regulation.',
+  'Note 4: We will not accept any REMARKS OR STAMPS like charterers account, sign for volume only and any other comments other than ships stamp/sign on the bunker delivery receipt, bunkering notice, before or after ullage or on our sample labels.',
+  'Note 5: The quantity would not be determined based on receiving vessel tank gauging. The quantity will be based on entirely on the Before and After dips/ullage and calibration table of the barge tanks.',
+  'Please copy all your messages to our common Operations e-mail Id.', '', '', 'Best Regards,', 'Operations', 'GULF PETROL SUPPLIES LLC (BUNKERS)'];
+const SP = '<w:spacing w:before="0" w:after="200"/>';
+const LONG_BODY =
+  '<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:r><w:rPr><w:b/><w:color w:val="1F4E79"/><w:sz w:val="48"/></w:rPr><w:t>GPS LOGO</w:t></w:r></w:p>' +
+  ['Gulf Petrol Supplies LLC (Bunkers)', '(A Fujairah National Group Company)', 'FNG Building No. 2, Al Mina Road,', 'P.O. Box 121, Fujairah, U.A.E'].map(t => P(t, '<w:sz w:val="20"/>', '<w:ind w:left="5000"/><w:spacing w:after="0"/>')).join('') +
+  P('') + P('To: The Master: {{VESSEL_NAME}}', '<w:u w:val="single"/>') + P('') +
+  LONG_PARAS.map(t => P(t, '<w:color w:val="1F4E79"/><w:sz w:val="22"/>', '<w:jc w:val="both"/>' + SP)).join('');
+async function templateB64(body) {
   const z = new JSZip();
   z.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
   z.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
-  z.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${BODY}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1418"/></w:sectPr></w:body></w:document>`);
+  z.file('word/document.xml', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><w:body>${body || BODY}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1418"/></w:sectPr></w:body></w:document>`);
   return (await z.generateAsync({ type: 'nodebuffer' })).toString('base64');
 }
 
@@ -83,6 +110,30 @@ async function templateB64() {
     check('⬇ Download .docx downloads the same formatted file again (with the preview\'s edit and the letterhead formatting)', r.sameDocx && r.xmlEdit, { sameDocx: r.sameDocx, xmlEdit: r.xmlEdit, names: r.names });
     check('the PDF is named Calling_Instructions_M_T_ELANDRA_SEA.pdf', r.names.includes('Calling_Instructions_M_T_ELANDRA_SEA.pdf'), { names: r.names, err: r.err });
     check('the PDF is the document drawn page by page: 2 pages (the page break kept), each an image of the page, A4 like the template', r.head === '%PDF-' && r.pages === 2 && r.images === 2 && Math.abs(mb[2] - 595.3) < 2 && Math.abs(mb[3] - 841.9) < 2, { pages: r.pages, images: r.images, media: r.media, err: r.err });
+    // a letter longer than one page, no page break in the file: Word carries it over to page 2
+    const b64long = await templateB64(LONG_BODY);
+    const r2 = await A.page.evaluate(async (b64) => {
+      const z = await JSZip.loadAsync(_base64ToAb(b64));
+      const blob = await z.generateAsync({ type: 'blob' });
+      const pdf = await _ciDocxToPdfBlob(blob);
+      const pb = new Uint8Array(await pdf.arrayBuffer());
+      let txt = ''; for (let i = 0; i < pb.length; i++) txt += String.fromCharCode(pb[i]);
+      let b64out = ''; for (let i = 0; i < pb.length; i += 0x8000) b64out += String.fromCharCode.apply(null, pb.subarray(i, i + 0x8000));
+      // the layout used: which block opens page 2
+      const box = document.createElement('div'); box.style.cssText = 'position:fixed;left:-100000px;top:0;'; document.body.appendChild(box);
+      const ab = await blob.arrayBuffer(); const lib = await _ciLoadDocxPreview();
+      const set = new Set(); let pages = await _ciRenderDocxPages(lib, ab, box, set);
+      for (let g = 0; g < 50; g++) { let k = -1; for (const p of pages) { k = _ciOverflowIndex(p); if (k >= 0) break; } if (k < 0) break; set.add(k); pages = await _ciRenderDocxPages(lib, ab, box, set); }
+      const firstP2 = pages[1] ? (pages[1].querySelector('article > :not([data-ci-brk])') || {}).textContent : '';
+      const fits = pages.map(p => { const i = _ciPageInfo(p); return [...p.querySelectorAll(':scope > article > *')].every(b => b.getBoundingClientRect().bottom <= i.bottom + 0.5); });
+      box.remove();
+      const imgs = [...txt.matchAll(/\/Width (\d+)\s*\/Height (\d+)/g)].map(m => [+m[1], +m[2]]);
+      return { pages: (txt.match(/\/Type \/Page\b/g) || []).length, imgs, firstP2, fits, nPages: pages.length, pdfB64: btoa(b64out) };
+    }, b64long);
+    if (process.env.PDF_OUT2 && r2.pdfB64) fs.writeFileSync(process.env.PDF_OUT2, Buffer.from(r2.pdfB64, 'base64'));
+    check('a letter longer than one page (no page break in the file) comes out on 2 A4 pages, the overflow carried to page 2 — not squeezed onto one', r2.pages === 2 && r2.nPages === 2 && r2.fits.every(Boolean), { pages: r2.pages, fits: r2.fits });
+    check('…each page image has the A4 shape (text not stretched or squashed)', r2.imgs.length === 2 && r2.imgs.every(([w, h]) => Math.abs(h / w - 297 / 210) < 0.01), r2.imgs);
+    check('…page 2 starts at a whole paragraph', /^(Note|LAST-ON|Please|If your|Vessels)/.test((r2.firstP2 || '').trim()), r2.firstP2);
     const errs = U.realErrors(A);
     check('no page errors', errs.length === 0, errs.slice(0, 3));
   } catch (e) { check('threw', false, String(e && e.stack || e).split('\n').slice(0, 4).join(' | ')); }
