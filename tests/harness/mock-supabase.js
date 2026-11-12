@@ -95,7 +95,9 @@
     window.__mockSessionExpire = function (emit) { if (emit === false) { signedIn = false; window.__mockAuthSignedOut = true; } else setSignedIn(false, 'SIGNED_OUT'); };
     return {
       auth: {
-        getSession: function () { return Promise.resolve({ data: { session: signedIn ? session : null }, error: null }); },
+        // window.__mockSessionError = {name, message}: a signed-out getSession reports it, the way
+        // supabase-js does when the refresh is refused ({session:null, error}).
+        getSession: function () { return Promise.resolve({ data: { session: signedIn ? session : null }, error: !signedIn && window.__mockSessionError ? window.__mockSessionError : null }); },
         refreshSession: function () { return Promise.resolve({ data: { session: signedIn ? session : null }, error: null }); },
         signInWithPassword: function () { setSignedIn(true, 'SIGNED_IN'); return Promise.resolve({ data: { session: session, user: session.user }, error: null }); },
         signOut: function () { setSignedIn(false, 'SIGNED_OUT'); return Promise.resolve({ error: null }); },
@@ -103,7 +105,7 @@
         getUser: function () { return Promise.resolve({ data: { user: signedIn ? session.user : null }, error: null }); }
       },
       from: function (t) { return new Query(t); },
-      rpc: function (name, args) { return call({ uid: uid, action: 'rpc', name: name, args: args }); },
+      rpc: function (name, args) { return call({ uid: window.__mockAuthSignedOut ? null : uid, action: 'rpc', name: name, args: args }); },
       storage: {
         from: function () {
           return {

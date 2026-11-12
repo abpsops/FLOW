@@ -106,25 +106,33 @@ function _updateSyncUI() {
 const FLOW_SIGNED_OUT_MSG = 'Signed out — sign in again to sync (the changes on this device are kept)';
 async function _ensureFreshSession() {
   if (!supabaseClient) return;
-  let lost = '';
+  // The sign-in form is up: nothing goes out until the user signs in again.
+  if (typeof _flowSessionLost !== 'undefined' && _flowSessionLost) throw new Error(FLOW_SIGNED_OUT_MSG);
+  // Any doubt about the sign-in fails the call: supabase-js sends a request it has no
+  // valid token for with the anonymous key, and the cloud then answers "no workspace".
+  let lost = '', net = null;
+  const msg = function(e) { return (e && e.message) || String(e); };
   try {
     const { data, error } = await supabaseClient.auth.getSession();
-    if (error) return; // the real call below surfaces it (offline, …)
-    if (!data || !data.session) lost = 'no session';
-    else {
+    const has = !!(data && data.session);
+    if (!has) {
+      if (error && _isNetworkAuthError(error)) net = error; // refresh failed for want of a network
+      else lost = error ? 'session refused: ' + msg(error) : 'no session';
+    } else {
       const expiresAt = data.session.expires_at; // unix seconds
       const nowSec = Math.floor(Date.now() / 1000);
       if (!expiresAt || expiresAt <= nowSec + 60) {
         const r = await supabaseClient.auth.refreshSession();
-        if (r && r.error && !_isNetworkAuthError(r.error)) lost = 'refresh refused: ' + (r.error.message || r.error);
-        else if (r && !r.error && (!r.data || !r.data.session)) lost = 'refresh gave no session';
+        if (r && r.error) { if (_isNetworkAuthError(r.error)) { if (!expiresAt || expiresAt <= nowSec) net = r.error; } else lost = 'refresh refused: ' + msg(r.error); }
+        else if (!r || !r.data || !r.data.session) lost = 'refresh gave no session';
       }
     }
-  } catch(e) { /* real call below will surface any genuine problem */ }
-  if (lost && navigator.onLine !== false) {
-    if (typeof _flowSessionLostGate === 'function') _flowSessionLostGate(lost);
+  } catch(e) { if (_isNetworkAuthError(e)) net = e; else lost = 'session check failed: ' + msg(e); }
+  if (lost) {
+    if (navigator.onLine !== false && typeof _flowSessionLostGate === 'function') _flowSessionLostGate(lost);
     throw new Error(FLOW_SIGNED_OUT_MSG);
   }
+  if (net) throw new Error('Could not reach the sign-in service — ' + msg(net));
 }
 
 // Compare-and-swap write. Never a blind upsert: an UPDATE only matches the
@@ -170,7 +178,11 @@ async function _jbGetRow() {
     .eq('id', ABPS_WORKSPACE_ID)
     .maybeSingle();
   if (error) throw new Error(`Supabase load failed: ${error.message}`);
-  if (!data || !data.payload) return null;
+  if (!data || !data.payload) {
+    // "No workspace" only counts while still signed in (the sign-in can go during the request).
+    await _ensureFreshSession();
+    return null;
+  }
   return { payload: data.payload, version: Number(data.version) || Number(data.payload.version) || 0 };
 }
 

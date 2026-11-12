@@ -6368,16 +6368,21 @@ function _normEmail(s) { return (s || '').trim().toLowerCase(); }
 const LAST_LOGIN_LS_KEY = 'abps_last_login_v1'; // { uid, at }
 const ROLE_CACHE_LS_KEY = 'abps_role_cache_v1'; // { uid, role } — last role the server confirmed
 let _flowOfflineLaunch = false;
-let _flowSessionLost = false, _flowLoggingOut = false;
+let _flowSessionLost = false, _flowLoggingOut = false, _flowLostUid = null;
 // The sign-in has gone while the app is open (expired or revoked — e.g. a tab left
 // open overnight): show the sign-in form over the app. Nothing is cleared: the
 // changes on this device stay (a failed save flags them unsynced) and are merged
 // into the shared workspace once signed in again (_flowResumeAfterSignIn).
 function _flowSessionLostGate(reason) {
-  if (_flowSessionLost || _flowLoggingOut) return;
+  // Only over a running app: before it starts, the first sign-in form is already there.
+  if (_flowSessionLost || _flowLoggingOut || !_abpsAppStarted) return;
   const gate = document.getElementById('operator-gate');
   if (!gate) return;
   _flowSessionLost = true;
+  _flowLostUid = (_readLastLogin() || {}).uid || null;
+  // A full-screen element (the wallboard's screen mode) would hide the form.
+  try { const fs = document.fullscreenElement || document.webkitFullscreenElement, exit = document.exitFullscreen || document.webkitExitFullscreen; if (fs && exit) { const p = exit.call(document); if (p && p.catch) p.catch(function() {}); } } catch (e) {}
+  const pw = document.getElementById('og-password'); if (pw) { pw.value = ''; pw.type = 'password'; }
   console.warn('ABPS: the sign-in was lost (' + reason + ') — asking to sign in again.');
   try { if (typeof _rtStop === 'function') _rtStop(); } catch (e) {}
   gate.style.transition = ''; gate.style.opacity = '1'; gate.style.display = '';
@@ -6385,10 +6390,11 @@ function _flowSessionLostGate(reason) {
   if (err) { err.textContent = 'Your sign-in has expired. Sign in again to keep syncing — the changes on this device are kept and are saved to the shared workspace after you sign in.'; err.style.display = ''; }
   setTimeout(function() { const e = document.getElementById('og-email'); if (e) e.focus(); }, 100);
 }
-// Signed in again after _flowSessionLostGate: carry on where the app was (no reload):
-// the role, live updates, then a pull that merges this device's changes and saves them.
+// Signed in again after _flowSessionLostGate with the same account: carry on where the app
+// was (no reload, same role): live updates, then a pull that merges this device's changes
+// and saves them. (Another account reloads instead — see _handleOperatorLogin.)
+function _flowReload() { location.reload(); }
 async function _flowResumeAfterSignIn() {
-  try { await _fetchAndApplyUserRole(); } catch (e) {}
   try { if (typeof _rtStart === 'function') _rtStart(); } catch (e) {}
   try { await _pollOnce(true); } catch (e) {}
   try { if (typeof _isMarkedUnsynced === 'function' && _isMarkedUnsynced() && !isTrader()) await saveSharedState(); } catch (e) {}
@@ -6515,7 +6521,15 @@ async function _handleOperatorLogin(ev) {
   }
 
   _flowOfflineLaunch = false;
-  _recordSuccessfulLogin(data.session.user && data.session.user.id);
+  passEl.value = ''; passEl.type = 'password'; // the shared password is not left in the form
+  const newUid = data.session.user && data.session.user.id;
+  _recordSuccessfulLogin(newUid);
+  if (_flowSessionLost && _flowLostUid && newUid && newUid !== _flowLostUid) {
+    // Another account (maybe another role): start afresh. This device's unsynced changes
+    // stay in its local store and are merged by the normal start-up.
+    _flowReload();
+    return false;
+  }
   if (_flowSessionLost) { // signed in again while the app was open: resume it, don't start it twice
     _flowSessionLost = false;
     errEl.style.display = 'none';
@@ -6956,6 +6970,7 @@ function _isMissingRpcError(err) {
 async function _emailLogFetchRemote(logId) {
   if (!_syncReady()) return { ok: false, unavailable: true, payload: null };
   try {
+    await _ensureFreshSession(); // signed out, the log would read as "nothing sent yet"
     const { data, error } = await supabaseClient
       .from('abps_workspace').select('payload').eq('id', logId).maybeSingle();
     if (error) return { ok: false, error: error.message || String(error), payload: null };
@@ -6966,6 +6981,7 @@ async function _emailLogFetchRemote(logId) {
 async function _emailLogWriteEntry(logId, nomUid, entry) {
   if (!_syncReady()) return { ok: false, error: 'cloud sync unavailable' };
   try {
+    await _ensureFreshSession();
     const { error } = await supabaseClient.rpc('log_nomination_email', { log_id: logId, nom_uid: nomUid, entry: entry });
     if (!error) return { ok: true };
     if (!_isMissingRpcError(error)) return { ok: false, error: error.message || String(error) };
@@ -7615,25 +7631,33 @@ function _updateSyncUI() {
 const FLOW_SIGNED_OUT_MSG = 'Signed out — sign in again to sync (the changes on this device are kept)';
 async function _ensureFreshSession() {
   if (!supabaseClient) return;
-  let lost = '';
+  // The sign-in form is up: nothing goes out until the user signs in again.
+  if (typeof _flowSessionLost !== 'undefined' && _flowSessionLost) throw new Error(FLOW_SIGNED_OUT_MSG);
+  // Any doubt about the sign-in fails the call: supabase-js sends a request it has no
+  // valid token for with the anonymous key, and the cloud then answers "no workspace".
+  let lost = '', net = null;
+  const msg = function(e) { return (e && e.message) || String(e); };
   try {
     const { data, error } = await supabaseClient.auth.getSession();
-    if (error) return; // the real call below surfaces it (offline, …)
-    if (!data || !data.session) lost = 'no session';
-    else {
+    const has = !!(data && data.session);
+    if (!has) {
+      if (error && _isNetworkAuthError(error)) net = error; // refresh failed for want of a network
+      else lost = error ? 'session refused: ' + msg(error) : 'no session';
+    } else {
       const expiresAt = data.session.expires_at; // unix seconds
       const nowSec = Math.floor(Date.now() / 1000);
       if (!expiresAt || expiresAt <= nowSec + 60) {
         const r = await supabaseClient.auth.refreshSession();
-        if (r && r.error && !_isNetworkAuthError(r.error)) lost = 'refresh refused: ' + (r.error.message || r.error);
-        else if (r && !r.error && (!r.data || !r.data.session)) lost = 'refresh gave no session';
+        if (r && r.error) { if (_isNetworkAuthError(r.error)) { if (!expiresAt || expiresAt <= nowSec) net = r.error; } else lost = 'refresh refused: ' + msg(r.error); }
+        else if (!r || !r.data || !r.data.session) lost = 'refresh gave no session';
       }
     }
-  } catch(e) { /* real call below will surface any genuine problem */ }
-  if (lost && navigator.onLine !== false) {
-    if (typeof _flowSessionLostGate === 'function') _flowSessionLostGate(lost);
+  } catch(e) { if (_isNetworkAuthError(e)) net = e; else lost = 'session check failed: ' + msg(e); }
+  if (lost) {
+    if (navigator.onLine !== false && typeof _flowSessionLostGate === 'function') _flowSessionLostGate(lost);
     throw new Error(FLOW_SIGNED_OUT_MSG);
   }
+  if (net) throw new Error('Could not reach the sign-in service — ' + msg(net));
 }
 
 // Compare-and-swap write. Never a blind upsert: an UPDATE only matches the
@@ -7679,7 +7703,11 @@ async function _jbGetRow() {
     .eq('id', ABPS_WORKSPACE_ID)
     .maybeSingle();
   if (error) throw new Error(`Supabase load failed: ${error.message}`);
-  if (!data || !data.payload) return null;
+  if (!data || !data.payload) {
+    // "No workspace" only counts while still signed in (the sign-in can go during the request).
+    await _ensureFreshSession();
+    return null;
+  }
   return { payload: data.payload, version: Number(data.version) || Number(data.payload.version) || 0 };
 }
 
@@ -8566,6 +8594,7 @@ async function _traderSave() {
     return true; // vessels unchanged — nothing for a trader to write
   }
   _markUnsynced(true);
+  await _ensureFreshSession(); // signed out: the sign-in form, no write as the anonymous role
   let vessels = state.vessels;
   for (let attempt = 0; attempt < 4; attempt++) {
     const version = _nextVersion();
@@ -10880,7 +10909,7 @@ window.addEventListener('online', function() {
 // waiting for whatever the user does next to be the thing that discovers
 // the expired token and shows the sync-failed banner.
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible' && _syncReady()) {
+  if (document.visibilityState === 'visible' && _syncReady() && _abpsAppStarted) {
     _ensureFreshSession().catch(function() {}); // signed out: it brings up the sign-in form
   }
 });
@@ -25986,6 +26015,7 @@ async function init() {
         <button onclick="ciDownloadPDF()" id="ci-pdf-btn" style="display:none;padding:11px 20px;background:linear-gradient(135deg,var(--red),#E74C3C);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">
           ⬇ Download .docx
         </button>
+        <button onclick="ciDownloadCallingPdf(this)" id="ci-pdf2-btn" style="display:none;padding:11px 20px;background:linear-gradient(135deg,var(--red),#E74C3C);color:#fff;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:DM Sans,sans-serif">⬇ Download PDF</button>
         <button onclick="ciCopyOutput()" id="ci-copy-btn2" style="display:none;padding:11px 16px;background:var(--surface);border:none;box-shadow:var(--sh-sm);border-radius:10px;font-size:12px;cursor:pointer;font-family:DM Sans,sans-serif;color:var(--ink);font-weight:600">
            Copy Text
         </button>
@@ -26327,6 +26357,7 @@ function ciOpenForVessel(vid) {
 
   document.getElementById('ci-output-wrap').style.display = 'none';
   document.getElementById('ci-pdf-btn').style.display     = 'none';
+  document.getElementById('ci-pdf2-btn').style.display    = 'none';
   document.getElementById('ci-copy-btn2').style.display   = 'none';
   document.getElementById('ci-modal-error').style.display = 'none';
   document.getElementById('ci-output-text').textContent   = '';
@@ -26476,6 +26507,7 @@ async function ciGenerate() {
   document.getElementById('ci-out-vessel-label').textContent = ctx.vessel;
   document.getElementById('ci-output-wrap').style.display    = '';
   document.getElementById('ci-pdf-btn').style.display        = '';
+  document.getElementById('ci-pdf2-btn').style.display       = '';
   document.getElementById('ci-copy-btn2').style.display      = '';
 
   genBtn.disabled = true; genBtn.textContent = '⏳ Generating…';
@@ -26967,6 +26999,7 @@ async function ciConfirmAndGenerate(){
   document.getElementById('ci-out-vessel-label').textContent=ctx.vessel;
   document.getElementById('ci-output-wrap').style.display='';
   document.getElementById('ci-pdf-btn').style.display='';
+  document.getElementById('ci-pdf2-btn').style.display='';
   document.getElementById('ci-copy-btn2').style.display='';
   var genBtn=document.getElementById('ci-gen-btn');
   if(genBtn){genBtn.disabled=true;genBtn.textContent='Generating…';}
@@ -27018,6 +27051,41 @@ async function ciDownloadPDF() {
   }
 }
 
+// ─── Download as PDF — the same text as the .docx (the generated document, with any
+// edits made before generating), as a real text PDF on A4: long lines wrap, blank lines
+// are kept, pages break as needed and are numbered. ───
+async function ciDownloadCallingPdf(btn) {
+  const ctx = _ciVesselCtx;
+  const outEl = document.getElementById('ci-output-text');
+  const txt = outEl ? outEl.textContent.replace(/\r/g, '').replace(/\s+$/, '') : '';
+  if (!ctx || !txt) return;
+  const errEl = document.getElementById('ci-modal-error');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
+  try {
+    const jsPDF = await _loadJsPDF();
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 18, LH = 5.2;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10.5); pdf.setTextColor(0, 0, 0);
+    let y = M;
+    txt.split('\n').forEach(function(line) {
+      const parts = line.trim() ? pdf.splitTextToSize(line.replace(/\t/g, '    '), W - 2 * M) : [''];
+      parts.forEach(function(part) {
+        if (y + LH > H - M) { pdf.addPage(); y = M; }
+        if (part) pdf.text(part, M, y + 4);
+        y += LH;
+      });
+    });
+    const pages = pdf.internal.getNumberOfPages();
+    if (pages > 1) for (let i = 1; i <= pages; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(120, 120, 120); pdf.text('Page ' + i + ' of ' + pages, W / 2, H - 8, { align: 'center' }); }
+    const name = 'Calling_Instructions_' + String(ctx.vessel || 'Vessel').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf';
+    await _flowSaveOrShareBlob(pdf.output('blob'), name);
+  } catch (err) {
+    if (errEl) { errEl.textContent = 'Could not create the PDF: ' + ((err && err.message) || err); errEl.style.display = ''; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}
 </script>
 
 

@@ -96,6 +96,60 @@ const signIn = p => p.evaluate(async () => {
     check('S3 after signing in, saving works again', !g2.shown && w && (U.row(db).payload.state.vessels || []).some(v => v.name === 'AFTER'), g2);
   });
 
+  await scenario(browser, 'S4 refresh refused (getSession reports an error)', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({}), realtime: false });
+    const A = await openT(db);
+    await A.page.evaluate(() => _waitForSaveIdle());
+    const w0 = writes(db).length;
+    const r = await A.page.evaluate(async () => {
+      const before = { base: !!_lastSyncedPayload, v: _lastKnownVersion };
+      window.__mockSessionError = { name: 'AuthApiError', message: 'Invalid Refresh Token: Refresh Token Not Found', status: 400 };
+      window.__mockSessionExpire(false);
+      await _pollOnce(true);
+      return { before, after: { base: !!_lastSyncedPayload, v: _lastKnownVersion } };
+    });
+    const g = await gate(A.page);
+    check('S4 a refused refresh (session null + error) is a sign-out: the base and version stay, the form comes up, nothing written', r.after.base && r.after.v === r.before.v && g.shown && writes(db).length === w0, { r, g });
+  });
+
+  await scenario(browser, 'S5 first sign-in form + switching tabs', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({}), realtime: false });
+    const A = await U.open(browser, db, 'user-operator', { signedOut: true });
+    try {
+      await A.page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+      await A.page.waitForTimeout(300);
+      const pre = await A.page.evaluate(() => ({ started: _abpsAppStarted, lost: _flowSessionLost }));
+      await signIn(A.page);
+      await A.page.waitForTimeout(800);
+      const post = await A.page.evaluate(() => ({ started: _abpsAppStarted, cards: document.querySelectorAll('.vcard[id^="vessel-"]').length, pw: document.getElementById('og-password').value }));
+      check('S5 switching tabs on the first sign-in form is not a "lost sign-in": signing in starts the app normally, the password is cleared', !pre.started && !pre.lost && post.started && post.cards === 2 && post.pw === '', { pre, post });
+    } finally { await A.ctx.close(); }
+  });
+
+  await scenario(browser, 'S6 another account signs in on the form', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({}), realtime: false });
+    const A = await openT(db);
+    const r = await A.page.evaluate(async () => {
+      let reloaded = 0; _flowReload = function() { reloaded++; };
+      window.__mockSessionExpire();
+      await new Promise(r => setTimeout(r, 100));
+      localStorage.setItem(LAST_LOGIN_LS_KEY, JSON.stringify({ uid: 'someone-else', at: new Date().toISOString() })); // the lost session was another account
+      _flowLostUid = 'someone-else';
+      document.getElementById('og-email').value = 'ops@test'; document.getElementById('og-password').value = 'x';
+      await _handleOperatorLogin({ preventDefault() {} });
+      return { reloaded, pw: document.getElementById('og-password').value };
+    });
+    check('S6 a different account signing in on the form starts the app afresh (reload), not a resume under the old role', r.reloaded === 1 && r.pw === '', r);
+  });
+
+  await scenario(browser, 'S7 e-mail log while signed out', async (openT) => {
+    const db = H.createDb({ workspace: U.seedPayload({}), realtime: false });
+    db.tables.abps_workspace.set('nomination_email_log', { id: 'nomination_email_log', payload: { n1: { sentAt: '2026-11-01T08:00:00Z' } }, version: 1, updated_at: new Date().toISOString() });
+    const A = await openT(db);
+    const r = await A.page.evaluate(async () => { window.__mockSessionExpire(false); const f = await _emailLogFetchRemote('nomination_email_log'); return { ok: f.ok, payload: f.payload }; });
+    check('S7 the sent-e-mail log is not read as "nothing sent" while signed out (the read fails instead)', r.ok === false && r.payload === null, r);
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);

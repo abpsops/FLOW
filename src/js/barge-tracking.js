@@ -533,7 +533,7 @@ window.addEventListener('online', function() {
 // waiting for whatever the user does next to be the thing that discovers
 // the expired token and shows the sync-failed banner.
 document.addEventListener('visibilitychange', function() {
-  if (document.visibilityState === 'visible' && _syncReady()) {
+  if (document.visibilityState === 'visible' && _syncReady() && _abpsAppStarted) {
     _ensureFreshSession().catch(function() {}); // signed out: it brings up the sign-in form
   }
 });

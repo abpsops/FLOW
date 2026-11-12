@@ -27,7 +27,7 @@ function seed(extraLoadings) {
   s.state.loadingDeals = [{ id: 'deal_1', supplier: 'ARAMCO <b>x</b>', terminal: 'VOPAK TERMINAL', grade: 'VLSFO', qty: 45000, date: '2026-11-01', ref: 'CTR-77', notes: '', status: 'open', createdAt: 1, updatedAt: 1 }];
   s.state.loadingRecords = [
     // an older lifting: completed before BL dates existed (no blDate), BL qty entered
-    ld('l_old', 4500, -200, -190, { completed: true, completedAt: NOW - 189 * 3600000, blQty: 4312 }),
+    ld('l_old', 4500, -200, -190, { completed: true, completedAt: Date.parse('2026-10-25T08:00:00Z'), blQty: 4312 }), // a fixed day before the fixed BL dates below (a relative one overtook them on 12 Nov)
     ld('l_a', 4400, -30, -20),            // ended, to be completed with a BL date
     ld('l_b', 4000, 40, 50, { barge: 'FNSA 10' }), // scheduled
   ].concat(extraLoadings || []);

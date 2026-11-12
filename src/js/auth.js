@@ -50,16 +50,21 @@ function _normEmail(s) { return (s || '').trim().toLowerCase(); }
 const LAST_LOGIN_LS_KEY = 'abps_last_login_v1'; // { uid, at }
 const ROLE_CACHE_LS_KEY = 'abps_role_cache_v1'; // { uid, role } — last role the server confirmed
 let _flowOfflineLaunch = false;
-let _flowSessionLost = false, _flowLoggingOut = false;
+let _flowSessionLost = false, _flowLoggingOut = false, _flowLostUid = null;
 // The sign-in has gone while the app is open (expired or revoked — e.g. a tab left
 // open overnight): show the sign-in form over the app. Nothing is cleared: the
 // changes on this device stay (a failed save flags them unsynced) and are merged
 // into the shared workspace once signed in again (_flowResumeAfterSignIn).
 function _flowSessionLostGate(reason) {
-  if (_flowSessionLost || _flowLoggingOut) return;
+  // Only over a running app: before it starts, the first sign-in form is already there.
+  if (_flowSessionLost || _flowLoggingOut || !_abpsAppStarted) return;
   const gate = document.getElementById('operator-gate');
   if (!gate) return;
   _flowSessionLost = true;
+  _flowLostUid = (_readLastLogin() || {}).uid || null;
+  // A full-screen element (the wallboard's screen mode) would hide the form.
+  try { const fs = document.fullscreenElement || document.webkitFullscreenElement, exit = document.exitFullscreen || document.webkitExitFullscreen; if (fs && exit) { const p = exit.call(document); if (p && p.catch) p.catch(function() {}); } } catch (e) {}
+  const pw = document.getElementById('og-password'); if (pw) { pw.value = ''; pw.type = 'password'; }
   console.warn('ABPS: the sign-in was lost (' + reason + ') — asking to sign in again.');
   try { if (typeof _rtStop === 'function') _rtStop(); } catch (e) {}
   gate.style.transition = ''; gate.style.opacity = '1'; gate.style.display = '';
@@ -67,10 +72,11 @@ function _flowSessionLostGate(reason) {
   if (err) { err.textContent = 'Your sign-in has expired. Sign in again to keep syncing — the changes on this device are kept and are saved to the shared workspace after you sign in.'; err.style.display = ''; }
   setTimeout(function() { const e = document.getElementById('og-email'); if (e) e.focus(); }, 100);
 }
-// Signed in again after _flowSessionLostGate: carry on where the app was (no reload):
-// the role, live updates, then a pull that merges this device's changes and saves them.
+// Signed in again after _flowSessionLostGate with the same account: carry on where the app
+// was (no reload, same role): live updates, then a pull that merges this device's changes
+// and saves them. (Another account reloads instead — see _handleOperatorLogin.)
+function _flowReload() { location.reload(); }
 async function _flowResumeAfterSignIn() {
-  try { await _fetchAndApplyUserRole(); } catch (e) {}
   try { if (typeof _rtStart === 'function') _rtStart(); } catch (e) {}
   try { await _pollOnce(true); } catch (e) {}
   try { if (typeof _isMarkedUnsynced === 'function' && _isMarkedUnsynced() && !isTrader()) await saveSharedState(); } catch (e) {}
@@ -197,7 +203,15 @@ async function _handleOperatorLogin(ev) {
   }
 
   _flowOfflineLaunch = false;
-  _recordSuccessfulLogin(data.session.user && data.session.user.id);
+  passEl.value = ''; passEl.type = 'password'; // the shared password is not left in the form
+  const newUid = data.session.user && data.session.user.id;
+  _recordSuccessfulLogin(newUid);
+  if (_flowSessionLost && _flowLostUid && newUid && newUid !== _flowLostUid) {
+    // Another account (maybe another role): start afresh. This device's unsynced changes
+    // stay in its local store and are merged by the normal start-up.
+    _flowReload();
+    return false;
+  }
   if (_flowSessionLost) { // signed in again while the app was open: resume it, don't start it twice
     _flowSessionLost = false;
     errEl.style.display = 'none';

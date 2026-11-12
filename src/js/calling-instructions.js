@@ -320,6 +320,7 @@ function ciOpenForVessel(vid) {
 
   document.getElementById('ci-output-wrap').style.display = 'none';
   document.getElementById('ci-pdf-btn').style.display     = 'none';
+  document.getElementById('ci-pdf2-btn').style.display    = 'none';
   document.getElementById('ci-copy-btn2').style.display   = 'none';
   document.getElementById('ci-modal-error').style.display = 'none';
   document.getElementById('ci-output-text').textContent   = '';
@@ -469,6 +470,7 @@ async function ciGenerate() {
   document.getElementById('ci-out-vessel-label').textContent = ctx.vessel;
   document.getElementById('ci-output-wrap').style.display    = '';
   document.getElementById('ci-pdf-btn').style.display        = '';
+  document.getElementById('ci-pdf2-btn').style.display       = '';
   document.getElementById('ci-copy-btn2').style.display      = '';
 
   genBtn.disabled = true; genBtn.textContent = '⏳ Generating…';
@@ -960,6 +962,7 @@ async function ciConfirmAndGenerate(){
   document.getElementById('ci-out-vessel-label').textContent=ctx.vessel;
   document.getElementById('ci-output-wrap').style.display='';
   document.getElementById('ci-pdf-btn').style.display='';
+  document.getElementById('ci-pdf2-btn').style.display='';
   document.getElementById('ci-copy-btn2').style.display='';
   var genBtn=document.getElementById('ci-gen-btn');
   if(genBtn){genBtn.disabled=true;genBtn.textContent='Generating…';}
@@ -1011,3 +1014,38 @@ async function ciDownloadPDF() {
   }
 }
 
+// ─── Download as PDF — the same text as the .docx (the generated document, with any
+// edits made before generating), as a real text PDF on A4: long lines wrap, blank lines
+// are kept, pages break as needed and are numbered. ───
+async function ciDownloadCallingPdf(btn) {
+  const ctx = _ciVesselCtx;
+  const outEl = document.getElementById('ci-output-text');
+  const txt = outEl ? outEl.textContent.replace(/\r/g, '').replace(/\s+$/, '') : '';
+  if (!ctx || !txt) return;
+  const errEl = document.getElementById('ci-modal-error');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
+  try {
+    const jsPDF = await _loadJsPDF();
+    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+    const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 18, LH = 5.2;
+    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10.5); pdf.setTextColor(0, 0, 0);
+    let y = M;
+    txt.split('\n').forEach(function(line) {
+      const parts = line.trim() ? pdf.splitTextToSize(line.replace(/\t/g, '    '), W - 2 * M) : [''];
+      parts.forEach(function(part) {
+        if (y + LH > H - M) { pdf.addPage(); y = M; }
+        if (part) pdf.text(part, M, y + 4);
+        y += LH;
+      });
+    });
+    const pages = pdf.internal.getNumberOfPages();
+    if (pages > 1) for (let i = 1; i <= pages; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(120, 120, 120); pdf.text('Page ' + i + ' of ' + pages, W / 2, H - 8, { align: 'center' }); }
+    const name = 'Calling_Instructions_' + String(ctx.vessel || 'Vessel').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf';
+    await _flowSaveOrShareBlob(pdf.output('blob'), name);
+  } catch (err) {
+    if (errEl) { errEl.textContent = 'Could not create the PDF: ' + ((err && err.message) || err); errEl.style.display = ''; }
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
+}

@@ -236,6 +236,7 @@ async function _traderSave() {
     return true; // vessels unchanged — nothing for a trader to write
   }
   _markUnsynced(true);
+  await _ensureFreshSession(); // signed out: the sign-in form, no write as the anonymous role
   let vessels = state.vessels;
   for (let attempt = 0; attempt < 4; attempt++) {
     const version = _nextVersion();

@@ -70,6 +70,7 @@ function _isMissingRpcError(err) {
 async function _emailLogFetchRemote(logId) {
   if (!_syncReady()) return { ok: false, unavailable: true, payload: null };
   try {
+    await _ensureFreshSession(); // signed out, the log would read as "nothing sent yet"
     const { data, error } = await supabaseClient
       .from('abps_workspace').select('payload').eq('id', logId).maybeSingle();
     if (error) return { ok: false, error: error.message || String(error), payload: null };
@@ -80,6 +81,7 @@ async function _emailLogFetchRemote(logId) {
 async function _emailLogWriteEntry(logId, nomUid, entry) {
   if (!_syncReady()) return { ok: false, error: 'cloud sync unavailable' };
   try {
+    await _ensureFreshSession();
     const { error } = await supabaseClient.rpc('log_nomination_email', { log_id: logId, nom_uid: nomUid, entry: entry });
     if (!error) return { ok: true };
     if (!_isMissingRpcError(error)) return { ok: false, error: error.message || String(error) };

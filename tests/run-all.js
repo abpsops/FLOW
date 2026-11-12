@@ -65,6 +65,7 @@ const SUITES = [
   ['fix-loading-report', 'suites/fix2/loading-report.test.js', 'Monthly loading report: completed loadings by BL date, per supplier / per date / each lifting, Excel and PDF'],
   ['fix-bdn-date', 'suites/fix2/bdn-date.test.js', 'BDN date per grade (calendar, no time) in the Checklist and Saved Records; Monthly Report Excel/PDF shows it instead of the supply date'],
   ['fix-session-lost', 'suites/fix2/session-lost.test.js', 'sign-in expires while the app is open: sign-in form instead of an empty workspace, nothing written, resume and merge after signing in'],
+  ['fix-calling-pdf', 'suites/fix2/calling-pdf.test.js', 'Calling Instructions: Download PDF next to Download .docx, same text incl. preview edits, wrapped lines, numbered pages'],
   ['fix-deals', 'suites/fix2/deals.test.js', 'Loading Deals: bulk purchases drawn down by loadings (BL quantity on completion), linked automatically, synced, closed/removed; What-if Planner gone'],
   ['vessel-ids', 'suites/nominations/ids.test.js', 'IMO + MMSI on nominations: rules, card states, auto-move, look up, legacy move, sync, Needs Attention, warnings, placeholders, import'],
 ];
