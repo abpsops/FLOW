@@ -270,6 +270,7 @@ function ciLaycanStr(lcStr) {
 
 // ─── Open modal for a specific vessel ───
 function ciOpenForVessel(vid) {
+  _ciLastDocx = null; // the previous vessel's document is not this one's
   const nameEl  = document.getElementById(`v${vid}-name`);
   const typeEl  = document.getElementById(`v${vid}-type`);
   const vlsfoEl = document.getElementById(`v${vid}-vlsfo`);
@@ -328,6 +329,7 @@ function ciOpenForVessel(vid) {
 }
 
 function ciCloseModal() {
+  _ciLastDocx = null;
   document.getElementById('ci-modal').style.display = 'none';
   _ciVesselCtx = null;
 }
@@ -573,7 +575,7 @@ async function ciCloneDocxAndDownload(arrayBuffer, ctx) {
   });
 
   ciTriggerDownload(
-    new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }),
+    _ciRememberDocx(new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), ctx.vessel),
     'Calling_Instructions_' + ctx.vessel.replace(/\s+/g,'_') + '.docx'
   );
 }
@@ -610,7 +612,7 @@ async function ciCloneDocxWithEditsAndDownload(arrayBuffer, ctx, baselineText, e
   });
 
   ciTriggerDownload(
-    new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }),
+    _ciRememberDocx(new Blob([outBuf], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }), ctx.vessel),
     'Calling_Instructions_' + ctx.vessel.replace(/\s+/g,'_') + '.docx'
   );
 }
@@ -859,6 +861,10 @@ async function _flowSaveOrShareBlob(blob, filename) {
   return true;
 }
 
+// The .docx last generated in this dialog (with the template's design and the preview's
+// edits): the ⬇ Download .docx button downloads it again and ⬇ Download PDF prints it.
+let _ciLastDocx = null;
+function _ciRememberDocx(blob, vessel) { _ciLastDocx = { blob: blob, vessel: vessel }; return blob; }
 function ciTriggerDownload(blob, filename) {
   return _flowSaveOrShareBlob(blob, filename);
 }
@@ -915,7 +921,7 @@ async function ciDownloadFromText(tplText, ctx) {
 // (ciDownloadFromText() re-runs ciApplyTemplate(), which would otherwise
 // silently overwrite those same lines back to the original template values.)
 async function ciDownloadRawText(text, vessel) {
-  const blob = await _ciBuildDocxBlobFromText(text);
+  const blob = _ciRememberDocx(await _ciBuildDocxBlobFromText(text), vessel);
   ciTriggerDownload(blob, 'Calling_Instructions_' + vessel.replace(/\s+/g,'_') + '.docx');
 }
 
@@ -1007,42 +1013,76 @@ async function ciDownloadPDF() {
   const txt = outEl ? outEl.textContent.trim() : '';
   if (!txt) return;
   try {
-    await ciDownloadRawText(txt, ctx.vessel);
+    if (_ciLastDocx && _ciLastDocx.vessel === ctx.vessel) await ciTriggerDownload(_ciLastDocx.blob, 'Calling_Instructions_' + ctx.vessel.replace(/\s+/g,'_') + '.docx');
+    else await ciDownloadRawText(txt, ctx.vessel);
   } catch(err) {
     const errEl = document.getElementById('ci-modal-error');
     errEl.textContent = ' ' + err.message; errEl.style.display = '';
   }
 }
 
-// ─── Download as PDF — the same text as the .docx (the generated document, with any
-// edits made before generating), as a real text PDF on A4: long lines wrap, blank lines
-// are kept, pages break as needed and are numbered. ───
+// ─── Download as PDF — the generated .docx itself (letterhead, fonts, layout, the
+// preview's edits), drawn page by page in the browser (docx-preview) and saved as a
+// PDF with the same page size. ───
+async function _ciLoadDocxPreview() {
+  if (window.docx && typeof window.docx.renderAsync === 'function') return window.docx;
+  await ciLoadJSZip(); // docx-preview reads the file with the JSZip global
+  return new Promise(function(resolve, reject) {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/docx-preview@0.3.7/dist/docx-preview.min.js';
+    s.onload = function() { window.docx && window.docx.renderAsync ? resolve(window.docx) : reject(new Error('The document viewer did not load.')); };
+    s.onerror = function() { reject(new Error('Could not load the document viewer. Check your internet connection.')); };
+    document.head.appendChild(s);
+  });
+}
+async function _ciDocxToPdfBlob(docxBlob) {
+  const docxLib = await _ciLoadDocxPreview();
+  const h2c = await _loadHtml2Canvas();
+  const jsPDF = await _loadJsPDF();
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:-100000px;top:0;background:#fff;';
+  document.body.appendChild(box);
+  try {
+    await docxLib.renderAsync(await docxBlob.arrayBuffer(), box, box, {
+      className: 'ci-docx', inWrapper: false, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
+      breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, useBase64URL: true,
+    });
+    const pages = Array.prototype.slice.call(box.querySelectorAll('section.ci-docx'));
+    if (!pages.length) throw new Error('The document has no pages to print.');
+    if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+    let pdf = null;
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      page.style.margin = '0'; page.style.boxShadow = 'none';
+      const wMm = page.offsetWidth * 25.4 / 96, hMm = page.offsetHeight * 25.4 / 96;
+      const canvas = await h2c(page, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: page.offsetWidth, height: page.offsetHeight });
+      const orient = wMm > hMm ? 'landscape' : 'portrait';
+      if (!pdf) pdf = new jsPDF({ orientation: orient, unit: 'mm', format: [wMm, hMm] });
+      else pdf.addPage([wMm, hMm], orient);
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, wMm, hMm);
+    }
+    return pdf.output('blob');
+  } finally {
+    box.remove();
+  }
+}
 async function ciDownloadCallingPdf(btn) {
   const ctx = _ciVesselCtx;
-  const outEl = document.getElementById('ci-output-text');
-  const txt = outEl ? outEl.textContent.replace(/\r/g, '').replace(/\s+$/, '') : '';
-  if (!ctx || !txt) return;
+  if (!ctx) return;
   const errEl = document.getElementById('ci-modal-error');
   const label = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = 'Preparing…'; }
   try {
-    const jsPDF = await _loadJsPDF();
-    const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-    const W = pdf.internal.pageSize.getWidth(), H = pdf.internal.pageSize.getHeight(), M = 18, LH = 5.2;
-    pdf.setFont('helvetica', 'normal'); pdf.setFontSize(10.5); pdf.setTextColor(0, 0, 0);
-    let y = M;
-    txt.split('\n').forEach(function(line) {
-      const parts = line.trim() ? pdf.splitTextToSize(line.replace(/\t/g, '    '), W - 2 * M) : [''];
-      parts.forEach(function(part) {
-        if (y + LH > H - M) { pdf.addPage(); y = M; }
-        if (part) pdf.text(part, M, y + 4);
-        y += LH;
-      });
-    });
-    const pages = pdf.internal.getNumberOfPages();
-    if (pages > 1) for (let i = 1; i <= pages; i++) { pdf.setPage(i); pdf.setFontSize(8); pdf.setTextColor(120, 120, 120); pdf.text('Page ' + i + ' of ' + pages, W / 2, H - 8, { align: 'center' }); }
+    let docxBlob = _ciLastDocx && _ciLastDocx.vessel === ctx.vessel ? _ciLastDocx.blob : null;
+    if (!docxBlob) { // not generated yet in this dialog: the text shown, as a plain document
+      const outEl = document.getElementById('ci-output-text');
+      const txt = outEl ? outEl.textContent.trim() : '';
+      if (!txt) return;
+      docxBlob = await _ciBuildDocxBlobFromText(txt);
+    }
+    const pdfBlob = await _ciDocxToPdfBlob(docxBlob);
     const name = 'Calling_Instructions_' + String(ctx.vessel || 'Vessel').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '') + '.pdf';
-    await _flowSaveOrShareBlob(pdf.output('blob'), name);
+    await _flowSaveOrShareBlob(pdfBlob, name);
   } catch (err) {
     if (errEl) { errEl.textContent = 'Could not create the PDF: ' + ((err && err.message) || err); errEl.style.display = ''; }
   } finally {

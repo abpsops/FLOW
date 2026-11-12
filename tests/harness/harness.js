@@ -72,6 +72,7 @@ const CDN_MAP = [
   [/exceljs\/4\.4\.0\/exceljs\.min\.js/, vendor('exceljs', 'dist/exceljs.min.js')],
   [/chartjs-plugin-datalabels\/2\.2\.0\/chartjs-plugin-datalabels\.min\.js/, vendor('chartjs-plugin-datalabels', 'dist/chartjs-plugin-datalabels.min.js')],
   [/jszip\/3\.10\.1\/jszip\.min\.js/, vendor('jszip', 'dist/jszip.min.js')],
+  [/docx-preview@0\.3\.7\/dist\/docx-preview\.min\.js/, vendor('docx-preview', 'dist/docx-preview.min.js')],
   [/@emailjs\/browser@[^/]+\/dist\/email\.min\.js/, vendor('@emailjs/browser', 'dist/email.min.js')],
   // Import nomination OCR (lazy-loaded): library, worker, WebAssembly core, English model.
   [/tesseract\.js@6\.0\.1\/dist\/tesseract\.min\.js/, vendor('tesseract.js', 'dist/tesseract.min.js')],

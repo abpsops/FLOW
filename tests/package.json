@@ -19,6 +19,7 @@
     "@tesseract.js-data/eng": "1.0.0",
     "chart.js": "4.4.0",
     "chartjs-plugin-datalabels": "2.2.0",
+    "docx-preview": "0.3.7",
     "exceljs": "4.4.0",
     "flatpickr": "4.6.13",
     "html2canvas": "1.4.1",
