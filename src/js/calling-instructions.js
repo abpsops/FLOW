@@ -1035,31 +1035,99 @@ async function _ciLoadDocxPreview() {
     document.head.appendChild(s);
   });
 }
+// Word moves text that does not fit on a page to the next page; docx-preview only breaks
+// pages where the file has a page break. So the document is laid out, the first block
+// (paragraph / table) that runs past a page's bottom margin gets a page break before it,
+// and it is laid out again until every page fits — the same pages as in Word.
+const _CI_PDF_OPTS = { className: 'ci-docx', inWrapper: false, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
+  breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, useBase64URL: true };
+async function _ciRenderDocxPages(docxLib, buf, box, breaks) {
+  const doc = await docxLib.parseAsync(buf.slice(0), _CI_PDF_OPTS);
+  const body = doc.documentPart && doc.documentPart.body;
+  const kids = (body && body.children) || [];
+  const out = [];
+  kids.forEach(function(el, i) {
+    if (el && (el.type === 'paragraph' || el.type === 'table')) { el.cssStyle = el.cssStyle || {}; el.cssStyle['$data-ci-i'] = String(i); }
+    if (breaks.has(i)) out.push({ type: 'paragraph', children: [{ type: 'run', children: [{ type: 'break', break: 'page' }] }], cssStyle: { '$data-ci-brk': '1' } });
+    out.push(el);
+  });
+  if (body) body.children = out;
+  await docxLib.renderDocument(doc, box, box, _CI_PDF_OPTS);
+  return Array.prototype.slice.call(box.querySelectorAll('section.ci-docx'));
+}
+function _ciPageInfo(page) {
+  const cs = getComputedStyle(page);
+  const pageH = parseFloat(cs.minHeight) || page.offsetHeight;
+  let bottom = page.getBoundingClientRect().top + pageH - (parseFloat(cs.paddingBottom) || 0);
+  const foot = page.querySelector(':scope > footer');
+  if (foot) {
+    const fs = getComputedStyle(foot);
+    bottom -= Math.max(0, foot.getBoundingClientRect().height + (parseFloat(fs.marginTop) || 0) + (parseFloat(fs.marginBottom) || 0));
+  }
+  return { pageH: pageH, bottom: bottom };
+}
+// the body index of the first block that runs past the page's bottom margin (not the first
+// block on the page — that one stays, it has nowhere better to go), or -1 when the page fits
+function _ciOverflowIndex(page) {
+  const info = _ciPageInfo(page);
+  const blocks = Array.prototype.slice.call(page.querySelectorAll(':scope > article > *'))
+    .filter(function(b) { return !b.hasAttribute('data-ci-brk') && b.getBoundingClientRect().height > 0; });
+  for (let j = 0; j < blocks.length; j++) {
+    if (blocks[j].getBoundingClientRect().bottom <= info.bottom + 0.5) continue;
+    for (let k = Math.max(j, 1); k < blocks.length; k++) {
+      const m = blocks[k].hasAttribute('data-ci-i') ? blocks[k] : blocks[k].querySelector('[data-ci-i]');
+      if (m) return parseInt(m.getAttribute('data-ci-i'), 10);
+    }
+    return -1;
+  }
+  return -1;
+}
 async function _ciDocxToPdfBlob(docxBlob) {
   const docxLib = await _ciLoadDocxPreview();
   const h2c = await _loadHtml2Canvas();
   const jsPDF = await _loadJsPDF();
+  const buf = await docxBlob.arrayBuffer();
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;left:-100000px;top:0;background:#fff;';
   document.body.appendChild(box);
   try {
-    await docxLib.renderAsync(await docxBlob.arrayBuffer(), box, box, {
-      className: 'ci-docx', inWrapper: false, ignoreWidth: false, ignoreHeight: false, ignoreFonts: false,
-      breakPages: true, renderHeaders: true, renderFooters: true, renderFootnotes: true, useBase64URL: true,
-    });
-    const pages = Array.prototype.slice.call(box.querySelectorAll('section.ci-docx'));
-    if (!pages.length) throw new Error('The document has no pages to print.');
+    const breaks = new Set();
+    let pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
     if (document.fonts && document.fonts.ready) { try { await document.fonts.ready; } catch (e) {} }
+    for (let guard = 0; guard < 400; guard++) {
+      let idx = -1;
+      for (let i = 0; i < pages.length && idx < 0; i++) { const k = _ciOverflowIndex(pages[i]); if (k >= 0 && !breaks.has(k)) idx = k; }
+      if (idx < 0) break;
+      breaks.add(idx);
+      pages = await _ciRenderDocxPages(docxLib, buf, box, breaks);
+    }
+    if (!pages.length) throw new Error('The document has no pages to print.');
     let pdf = null;
-    for (let i = 0; i < pages.length; i++) {
-      const page = pages[i];
-      page.style.margin = '0'; page.style.boxShadow = 'none';
-      const wMm = page.offsetWidth * 25.4 / 96, hMm = page.offsetHeight * 25.4 / 96;
-      const canvas = await h2c(page, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: page.offsetWidth, height: page.offsetHeight });
+    const addImg = function(canvas, wMm, hMm) {
       const orient = wMm > hMm ? 'landscape' : 'portrait';
       if (!pdf) pdf = new jsPDF({ orientation: orient, unit: 'mm', format: [wMm, hMm] });
       else pdf.addPage([wMm, hMm], orient);
       pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 0, 0, wMm, hMm);
+    };
+    for (let i = 0; i < pages.length; i++) {
+      const page = pages[i];
+      page.style.margin = '0'; page.style.boxShadow = 'none';
+      // a page that starts after a break: no space before its first line, as in Word
+      const first = page.querySelector(':scope > article > :not([data-ci-brk])');
+      if (i > 0 && first) first.style.marginTop = '0';
+      const pageH = _ciPageInfo(page).pageH, w = page.offsetWidth, fullH = page.offsetHeight;
+      const wMm = w * 25.4 / 96, hMm = pageH * 25.4 / 96;
+      const canvas = await h2c(page, { backgroundColor: '#ffffff', scale: 2, useCORS: true, logging: false, width: w, height: fullH });
+      // one PDF page per document page at the page's real size; a block taller than a whole
+      // page (nothing to move it to) carries on over the next PDF pages instead of being squeezed
+      const sliceH = Math.round(canvas.height * pageH / fullH);
+      for (let y = 0; y < canvas.height - 2; y += sliceH) {
+        if (y === 0 && sliceH >= canvas.height - 2) { addImg(canvas, wMm, hMm); break; }
+        const c = document.createElement('canvas'); c.width = canvas.width; c.height = sliceH;
+        const g = c.getContext('2d'); g.fillStyle = '#ffffff'; g.fillRect(0, 0, c.width, c.height);
+        g.drawImage(canvas, 0, y, canvas.width, Math.min(sliceH, canvas.height - y), 0, 0, canvas.width, Math.min(sliceH, canvas.height - y));
+        addImg(c, wMm, hMm);
+      }
     }
     return pdf.output('blob');
   } finally {
