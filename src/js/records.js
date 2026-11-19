@@ -267,7 +267,74 @@ function _trRefreshCardBanners() {
   document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
     const cid = card.id.replace('vessel-', '');
     if (document.getElementById('v' + cid + '-track-record')) renderVesselTrackRecordBanner('v' + cid + '-name', 'v' + cid + '-track-record');
+    _trImoSuggest(cid, false);
   });
+}
+/* ─── IMO from the Track Record (nomination card) ───
+   A vessel supplied before carries the IMO it was supplied under in the
+   Delivery Log. Typing its name on a card fills an EMPTY IMO box with it —
+   only when the Track Record knows exactly one IMO for that name. Never
+   overwritten: a different number already in the box stays, with a
+   "Track Record: IMO … — use it" link under it. Two or more IMOs for the
+   same name (two ships, one name): nothing is filled, each is listed with
+   its last supply to pick from. A card that only loads (not typed) shows the
+   link, never fills (no write by itself). */
+const _trAutoImo = {}; // card id → the IMO filled in by itself (taken back if the name then changes)
+function _trImosForName(name) {
+  const key = _trVesselKey(name);
+  if (!key) return [];
+  const seen = {}, out = [];
+  (_trIndex().byKey.get(key) || []).filter(function(d) { return !d.orphanDispute; })
+    .slice().sort(function(a, b) { return _trEntryTime(b.entry) - _trEntryTime(a.entry); })
+    .forEach(function(d) {
+      const v = _vidNorm(d.entry.imo || '');
+      if (!_imoValid(v) || seen[v]) return;
+      seen[v] = 1; out.push({ imo: v, entry: d.entry });
+    });
+  return out;
+}
+function _trSetImo(id, v) {
+  const el = document.getElementById('v' + id + '-imo');
+  if (!el || el.value === v) return;
+  el.value = v;
+  vidCommit(id, 'imo'); // the same path as typing it: checks, badge, save
+  renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record');
+}
+function _trUseImo(id, v) {
+  if (!_imoValid(String(v))) return;
+  delete _trAutoImo[id];
+  _trSetImo(id, String(v));
+  _trImoSuggest(id, false);
+}
+// typed = the name was just typed (may fill); otherwise only the link is shown.
+function _trImoSuggest(id, typed) {
+  const nameEl = document.getElementById('v' + id + '-name'), imoEl = document.getElementById('v' + id + '-imo'), box = document.getElementById('v' + id + '-trimo');
+  if (!nameEl || !imoEl || !box) return;
+  const imos = _trImosForName(nameEl.value);
+  const cur = _vidNorm(imoEl.value);
+  const auto = !!_trAutoImo[id] && cur === _trAutoImo[id];
+  let html = '';
+  if (typed && (!cur || auto)) {
+    if (imos.length === 1) {
+      _trAutoImo[id] = imos[0].imo;
+      _trSetImo(id, imos[0].imo);
+      html = '<span class="vid-tr-filled">IMO filled in from the Track Record — supplied ' + esc(_trDay(imos[0].entry)) + '</span>';
+    } else if (auto) { // the name changed: the IMO filled in for the old one goes
+      delete _trAutoImo[id];
+      _trSetImo(id, '');
+    }
+  }
+  const now = _vidNorm(imoEl.value);
+  if (!html && imos.length && !imos.some(function(x) { return x.imo === now; })) {
+    const btns = imos.map(function(x) {
+      return '<button type="button" class="vid-tr-use" onclick="_trUseImo(' + Number(id) + ',\'' + esc(x.imo) + '\')" title="Put this IMO in the box">IMO ' + esc(x.imo) + '</button>' +
+        (imos.length > 1 ? ' <span class="vid-tr-when">(last supplied ' + esc(_trDay(x.entry)) + ')</span>' : '');
+    }).join(' · ');
+    html = imos.length > 1
+      ? '<span class="vid-tr-many">Track Record has ' + imos.length + ' ships by this name — pick one: ' + btns + '</span>'
+      : '<span class="vid-tr-hint">Track Record: ' + btns + ' — use it</span>';
+  }
+  if (box.innerHTML !== html) box.innerHTML = html;
 }
 // Bell → the nomination card.
 function _trGoTo(cid) {

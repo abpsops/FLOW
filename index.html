@@ -9220,7 +9220,7 @@ function _readLoadingForm() {
   if (xfer) {
     return Object.assign({
       kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty,
-      startAt: start.toISOString(), endAt: end.toISOString(),
+      startAt: start.toISOString(), endAt: end.toISOString(), reqStartAt: start.toISOString(),
       preOpsHours: 0, pumpHours: pumpHrs, postOpsHours: 0, hoseHours: xd.hose, estimatedHours: totalHrs,
       endOverridden: !!endOverride, surveyor: surveyor, notes: notes,
     }, startWin ? { startWin: startWin } : {});
@@ -9305,11 +9305,85 @@ function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, f
   );
 }
 
+/* ─── Barge transfers go after the vessel supplies ───
+   A transfer that has not started is placed in the first gap at or after the
+   start asked for (reqStartAt) where both its barges are free — after the
+   supplies of the current schedule, Unavailable blocks, Loadings and earlier
+   transfers (placeTransfers). Its saved start/end move with it, so the
+   calendar, timelines, Free Windows and the other devices all see the same
+   times. `records` is not changed: the placed list is returned.
+   Returns { records, moves: [{id, from, to, start, end, req}] }. */
+function _xferPlaceAll(records, sched, barges) {
+  const now = Date.now();
+  const recs = records || [];
+  const todo = recs.filter(function(r) { return _isTransfer(r) && !r.deletedAt && !r.completed && new Date(r.startAt).getTime() > now; });
+  if (!todo.length) return { records: recs, moves: [] };
+  const bl = barges || _bargeConfig || [];
+  const jobs = (sched || []).filter(function(j) { return j && !(typeof _isScheduleItemCompleted === 'function' && _isScheduleItemCompleted(j)); });
+  const transfers = todo.map(function(r) {
+    const st = new Date(r.startAt).getTime(), en = new Date(r.endAt).getTime();
+    const req = new Date(r.reqStartAt || r.startAt).getTime();
+    return { id: r.id, from: r.fromBarge || '', to: _resolveRecordBargeName(r), req: new Date(Math.max(req, now)), durMs: en - st };
+  }).filter(function(t) { return isFinite(t.req.getTime()) && t.durMs > 0; })
+    .sort(function(a, b) { return (a.req - b.req) || String(a.id).localeCompare(String(b.id)); });
+  const busyFor = function(name) {
+    const b = bl.find(function(x) { return x.name === name; });
+    const out = _blocksForBarge(b ? b.id : null, name).map(function(bk) { return { s: new Date(bk.start), e: new Date(bk.end) }; });
+    recs.forEach(function(r) {
+      if (!r || r.deletedAt || r.completed) return;
+      if (_isTransfer(r)) { // one already under way stays where it is
+        if (new Date(r.startAt).getTime() <= now && (r.fromBarge === name || _resolveRecordBargeName(r) === name)) out.push({ s: new Date(r.startAt), e: new Date(r.endAt) });
+      } else if (_resolveRecordBargeName(r) === name) out.push({ s: new Date(r.startAt), e: new Date(r.endAt) });
+    });
+    return out.filter(function(x) { return x.e.getTime() > now && x.e > x.s; });
+  };
+  const placed = placeTransfers({ transfers: transfers, sched: jobs, busyFor: busyFor,
+    travelHrs: (_calcParams && _calcParams.travelHrs) || 0, contHrs: _contingencyHrs() });
+  const byId = {}; placed.forEach(function(p) { byId[p.id] = p; });
+  const moves = [];
+  const out = recs.map(function(r) {
+    const p = r && byId[r.id];
+    if (!p) return r;
+    const sIso = p.start.toISOString(), eIso = p.end.toISOString();
+    if (r.startAt === sIso && r.endAt === eIso) return r;
+    const next = Object.assign({}, r, { startAt: sIso, endAt: eIso, reqStartAt: r.reqStartAt || r.startAt, updatedAt: Date.now() });
+    delete next.startWin; // a moved transfer starts at an exact time
+    moves.push({ id: r.id, from: r.fromBarge || '', to: _resolveRecordBargeName(r), start: p.start, end: p.end, req: new Date(next.reqStartAt) });
+    return next;
+  });
+  return { records: out, moves: moves };
+}
+// After Generate schedule: place the transfers after the supplies just planned
+// and keep the moves (the schedule's own save sends them to the cloud).
+function _xferApplyPlacement(sched, barges) {
+  if (typeof isTrader === 'function' && isTrader()) return []; // a trader can't save Loadings
+  const res = _xferPlaceAll(_loadingRecords, sched, barges);
+  if (!res.moves.length) return [];
+  res.records.forEach(function(r, i) { _loadingRecords[i] = r; });
+  if (typeof _saveLoadingToLocal === 'function') _saveLoadingToLocal();
+  return res.moves;
+}
+// "Moved after the vessel supplies — asked for 22 Nov 2026 06:00" (or '' when it starts as asked)
+function _xferMovedNote(r) {
+  if (!_isTransfer(r) || !r.reqStartAt || r.completed) return '';
+  const req = new Date(r.reqStartAt), st = new Date(r.startAt);
+  if (isNaN(req.getTime()) || isNaN(st.getTime()) || st.getTime() === req.getTime()) return '';
+  return 'Moved after the vessel supplies — asked for ' + fmt24(req);
+}
+function _xferMovesToast(moves) {
+  if (moves && moves.length && typeof showToast === 'function')
+    showToast('Supplies first: ' + moves.map(function(m) { return 'transfer ' + m.from + ' → ' + m.to + ' moved to ' + fmt24(m.start) + ' – ' + fmt24(m.end); }).join('; ') + '.', 'info', 10000);
+}
+
 function addLoadingRecord() {
-  const data = _readLoadingForm();
+  let data = _readLoadingForm();
   if (!data) return;
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, null, data.fromBarge)) return;
-  const rec = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
+  const rec0 = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
+  // A transfer goes after the vessel supplies: checked and saved at the place it gets.
+  const placed = _isTransfer(rec0) ? _xferPlaceAll((_loadingRecords || []).concat([rec0]), _lastSched, _bargeConfig) : null;
+  const rec = placed ? placed.records[placed.records.length - 1] : rec0;
+  if (!_confirmLoadingConflicts(rec.barge, rec.startAt, rec.endAt, null, rec.fromBarge)) return;
+  if (placed) { placed.records.slice(0, -1).forEach(function(r, i) { _loadingRecords[i] = r; }); _xferMovesToast(placed.moves); }
   _loadingRecords.push(rec);
   saveLoadingRecords();
   _clearLoadingForm();
@@ -9324,7 +9398,8 @@ function editLoadingRecord(id) {
   _loadingEditingId = id;
   _loadingEditingSeen = rec.updatedAt || null;
 
-  const start = new Date(rec.startAt);
+  // a transfer moved after the supplies opens with the start that was asked for
+  const start = new Date(_isTransfer(rec) && rec.reqStartAt ? rec.reqStartAt : rec.startAt);
   const kindEl = document.getElementById('ld-kind');
   if (kindEl) { kindEl.value = _isTransfer(rec) ? 'transfer' : 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
@@ -9359,16 +9434,25 @@ function updateLoadingRecord(id) {
   if (!data) return;
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
-  if (!_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id, data.fromBarge)) return;
+  if (!_isTransfer(data) && !_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id, data.fromBarge)) return;
   // The form's fields replace the record's; everything else the record carries
   // (Completed + its BL figure set on another device meanwhile, a tombstone…)
   // is kept. Fields the form left out on purpose are cleared.
-  const next = Object.assign({}, _loadingRecords[idx], data, { id: id, updatedAt: Date.now() });
+  let next = Object.assign({}, _loadingRecords[idx], data, { id: id, updatedAt: Date.now() });
   if (!data.startWin) delete next.startWin;
   if (!data.dealId) delete next.dealId;
-  if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; }
+  if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; delete next.reqStartAt; }
   else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
-  _loadingRecords[idx] = next;
+  // A transfer goes after the vessel supplies (the start typed is the earliest it may start).
+  let placed = null;
+  if (_isTransfer(next)) {
+    const list = _loadingRecords.slice(); list[idx] = next;
+    placed = _xferPlaceAll(list, _lastSched, _bargeConfig);
+    next = placed.records[idx];
+    if (!_confirmLoadingConflicts(next.barge, next.startAt, next.endAt, id, next.fromBarge)) return;
+  }
+  if (placed) { placed.records.forEach(function(r, i) { _loadingRecords[i] = r; }); _xferMovesToast(placed.moves); }
+  else _loadingRecords[idx] = next;
   saveLoadingRecords();
   cancelLoadingEdit();
   renderLoadingList();
@@ -10093,6 +10177,7 @@ function renderLoadingList() {
             + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
+            + (_xferMovedNote(r) ? '<div class="ld-xfer-moved" style="font-size:10.5px;color:var(--xfer);margin-top:1px">' + esc(_xferMovedNote(r)) + '</div>' : '')
           + '</div>'
           + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
             + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'
@@ -14582,6 +14667,7 @@ function vidInput(id, which) {
   _vidRender(id);
   clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 1500);
   _vidSyncAlertsSoon();
+  if (typeof _trImoSuggest === 'function') _trImoSuggest(id, false);
 }
 // Box left / changed: normalise ("IMO 9321483" → "9321483") and move a misplaced number.
 function vidCommit(id, which) {
@@ -15839,7 +15925,7 @@ function addVessel(def = {}) {
     </div>
   </div>
   <div class="g4 mb10 vrow-ids">
-    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record')},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
+    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record');_trImoSuggest(${id},true)},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
     <div class="field vid-field" role="group" aria-labelledby="v${id}-ids-lbl">
       <label id="v${id}-ids-lbl" for="v${id}-imo" title="At least one of the two is required">IMO Number / MMSI <span class="vid-req" aria-hidden="true">*</span><span class="vid-sub"> — at least one</span></label>
       <div class="vid-pair">
@@ -15847,6 +15933,7 @@ function addVessel(def = {}) {
         <div class="vid-box vid-box-mmsi"><span class="vid-mini" aria-hidden="true">MMSI</span><input type="text" class="vid-in" id="v${id}-mmsi" value="${esc(ids.mmsi)}" placeholder="9 digits" inputmode="numeric" autocomplete="off" spellcheck="false" aria-label="MMSI (9 digits)" aria-describedby="v${id}-idmsg" oninput="vidInput(${id},'mmsi')" onchange="vidCommit(${id},'mmsi')" onblur="vidCommit(${id},'mmsi')"></div>
       </div>
       <div class="vid-msg" id="v${id}-idmsg" aria-live="polite"></div>
+      <div class="vid-tr" id="v${id}-trimo" aria-live="polite"></div>
       <div class="vid-look" id="v${id}-idlook"><span>Look up</span><a id="v${id}-look-vf" target="_blank" rel="noopener" title="Find the ship on VesselFinder (new tab) to copy its MMSI / IMO">VesselFinder</a><a id="v${id}-look-mt" target="_blank" rel="noopener" title="Find the ship on MarineTraffic (new tab) to copy its MMSI / IMO">MarineTraffic</a></div>
     </div>
     <div class="field">
@@ -15963,7 +16050,7 @@ function addVessel(def = {}) {
   // Show the track record immediately for a restored/existing nomination
   // too, not just when someone types a new name — a card can load with a
   // vessel name already filled in from saved state.
-  if (name) { renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record'); if (typeof _trSyncAlertsSoon === 'function') _trSyncAlertsSoon(); }
+  if (name) { renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record'); _trImoSuggest(id, false); if (typeof _trSyncAlertsSoon === 'function') _trSyncAlertsSoon(); }
   // Fix #3: if this card is being restored from saved state and its
   // nomination already has emailSent=true in the (already-loaded) local
   // log cache, lock the button immediately so it never flashes as
@@ -16072,7 +16159,11 @@ function getVessels(quiet) {
    them as a plain object so it never reads app state itself. */
 function _planCtxLive() {
   const hoseHrs = _calcParams.hoseHrs, travelHrs = _calcParams.travelHrs;
-  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name)) };
+  // Vessel supplies come first: a barge transfer that has not started yet does
+  // not hold a supply back — it is moved after the supplies instead
+  // (_xferApplyPlacement). One already under way keeps both barges busy.
+  const nowT = Date.now();
+  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name).filter(bk => new Date(bk.start).getTime() <= nowT)) };
 }
 
 /* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its
@@ -16258,6 +16349,42 @@ function planSchedule(inp) {
   return { sequence, sched, vAl, mAl, blockMoves, totV, totM, bargeState, meta };
 }
 
+/* ─── Barge transfers after the supplies ───
+   Pure. Vessel supplies have priority: each transfer goes in the first gap
+   where BOTH its barges are free for its whole length, at or after the start
+   asked for — clear of every supply (ETC + contingency, travel either side),
+   Unavailable block, Loading and earlier transfer on either barge.
+     transfers [{id, from, to, req: Date, durMs}]  in the order to place them
+     sched     the schedule's jobs {bargeLabel, bargeStart, etc, refuelSlot}
+     busyFor   name -> [{s: Date, e: Date}] other fixed commitments
+   Returns [{id, start: Date, end: Date}]. */
+function placeTransfers(inp) {
+  const H = 3600000, tr = (inp.travelHrs || 0) * H, cont = (inp.contHrs || 0) * H;
+  const busy = {};
+  const add = (name, s, e) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e }); };
+  (inp.sched || []).forEach(j => {
+    const s = new Date(j.bargeStart).getTime(), e0 = new Date(j.refuelSlot && j.refuelSlot.rfEnd ? j.refuelSlot.rfEnd : j.etc).getTime();
+    if (isFinite(s) && isFinite(e0)) add(j.bargeLabel, s - tr, e0 + cont + tr);
+  });
+  const names = {};
+  (inp.transfers || []).forEach(t => { names[t.from] = 1; names[t.to] = 1; });
+  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr)));
+  const out = [];
+  (inp.transfers || []).forEach(t => {
+    let s = new Date(t.req).getTime();
+    const d = Math.max(0, t.durMs || 0);
+    for (let guard = 0; guard < 1000; guard++) {
+      const hits = [].concat(busy[t.from] || [], busy[t.to] || []).filter(x => s < x.e && s + d > x.s);
+      if (!hits.length) break;
+      s = Math.max.apply(null, hits.map(x => x.e));
+    }
+    out.push({ id: t.id, start: new Date(s), end: new Date(s + d) });
+    // a later transfer on either barge waits for this one (travel either side)
+    add(t.from, s - tr, s + d + tr); if (t.to !== t.from) add(t.to, s - tr, s + d + tr);
+  });
+  return out;
+}
+
 /* ─── CALCULATE ─── */
 let _calculating = false; // Guard: prevent concurrent schedule generation (Issue 1 fix)
 function calculate() {
@@ -16317,6 +16444,9 @@ function calculate() {
     opening[b.id] = { v: openV, m: openM };
   });
   const { sched, vAl, mAl, blockMoves, totV, totM, bargeState } = planSchedule({ vessels, barges, opening, params: _planCtxLive() });
+  // Barge transfers go after the supplies just planned (saved times move with them).
+  let xferMoves = [];
+  try { xferMoves = _xferApplyPlacement(sched, barges); } catch (e) { console.warn('ABPS: placing barge transfers failed', e); }
 
   _bargeStates = bargeState; _bargeConfig = barges;
   // Compute aggregate last ETC across all barges (latest cursor = overall last completion)
@@ -16341,6 +16471,7 @@ function calculate() {
   // Sync all modules after schedule generation
   setTimeout(refreshAllModules, 100);
   showToast('Schedule generated — ' + vessels.length + ' vessel' + (vessels.length!==1?'s':'') + ' across ' + barges.length + ' barge' + (barges.length!==1?'s':''), 'success');
+  _xferMovesToast(xferMoves);
   if (blockMoves.length) {
     showToast('Unavailable blocks moved ' + blockMoves.length + ' job' + (blockMoves.length !== 1 ? 's' : '') + ': ' +
       blockMoves.map(m => m.vessel + ' on ' + m.barge + ' waits for "' + m.reason + '" until ' + fmt24(m.to)).join('; ') + '. Check laycans.', 'warning', 10000);
@@ -16612,6 +16743,7 @@ function buildTL(items, containerId, loadingsForBarge) {
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
+        ${_xferMovedNote(rec) ? `<div class="tl-xfer-moved" style="font-size:11px;color:var(--xfer);margin-top:8px">${esc(_xferMovedNote(rec))}</div>` : ''}
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;
       tl.appendChild(ld);
@@ -16632,6 +16764,7 @@ function buildTL(items, containerId, loadingsForBarge) {
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
+        ${_xferMovedNote(rec) ? `<div class="tl-xfer-moved" style="font-size:11px;color:var(--xfer);margin-top:8px">${esc(_xferMovedNote(rec))}</div>` : ''}
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;
       tl.appendChild(ld);
@@ -21991,7 +22124,74 @@ function _trRefreshCardBanners() {
   document.querySelectorAll('#vc .vcard[id^="vessel-"]').forEach(function(card) {
     const cid = card.id.replace('vessel-', '');
     if (document.getElementById('v' + cid + '-track-record')) renderVesselTrackRecordBanner('v' + cid + '-name', 'v' + cid + '-track-record');
+    _trImoSuggest(cid, false);
   });
+}
+/* ─── IMO from the Track Record (nomination card) ───
+   A vessel supplied before carries the IMO it was supplied under in the
+   Delivery Log. Typing its name on a card fills an EMPTY IMO box with it —
+   only when the Track Record knows exactly one IMO for that name. Never
+   overwritten: a different number already in the box stays, with a
+   "Track Record: IMO … — use it" link under it. Two or more IMOs for the
+   same name (two ships, one name): nothing is filled, each is listed with
+   its last supply to pick from. A card that only loads (not typed) shows the
+   link, never fills (no write by itself). */
+const _trAutoImo = {}; // card id → the IMO filled in by itself (taken back if the name then changes)
+function _trImosForName(name) {
+  const key = _trVesselKey(name);
+  if (!key) return [];
+  const seen = {}, out = [];
+  (_trIndex().byKey.get(key) || []).filter(function(d) { return !d.orphanDispute; })
+    .slice().sort(function(a, b) { return _trEntryTime(b.entry) - _trEntryTime(a.entry); })
+    .forEach(function(d) {
+      const v = _vidNorm(d.entry.imo || '');
+      if (!_imoValid(v) || seen[v]) return;
+      seen[v] = 1; out.push({ imo: v, entry: d.entry });
+    });
+  return out;
+}
+function _trSetImo(id, v) {
+  const el = document.getElementById('v' + id + '-imo');
+  if (!el || el.value === v) return;
+  el.value = v;
+  vidCommit(id, 'imo'); // the same path as typing it: checks, badge, save
+  renderVesselTrackRecordBanner('v' + id + '-name', 'v' + id + '-track-record');
+}
+function _trUseImo(id, v) {
+  if (!_imoValid(String(v))) return;
+  delete _trAutoImo[id];
+  _trSetImo(id, String(v));
+  _trImoSuggest(id, false);
+}
+// typed = the name was just typed (may fill); otherwise only the link is shown.
+function _trImoSuggest(id, typed) {
+  const nameEl = document.getElementById('v' + id + '-name'), imoEl = document.getElementById('v' + id + '-imo'), box = document.getElementById('v' + id + '-trimo');
+  if (!nameEl || !imoEl || !box) return;
+  const imos = _trImosForName(nameEl.value);
+  const cur = _vidNorm(imoEl.value);
+  const auto = !!_trAutoImo[id] && cur === _trAutoImo[id];
+  let html = '';
+  if (typed && (!cur || auto)) {
+    if (imos.length === 1) {
+      _trAutoImo[id] = imos[0].imo;
+      _trSetImo(id, imos[0].imo);
+      html = '<span class="vid-tr-filled">IMO filled in from the Track Record — supplied ' + esc(_trDay(imos[0].entry)) + '</span>';
+    } else if (auto) { // the name changed: the IMO filled in for the old one goes
+      delete _trAutoImo[id];
+      _trSetImo(id, '');
+    }
+  }
+  const now = _vidNorm(imoEl.value);
+  if (!html && imos.length && !imos.some(function(x) { return x.imo === now; })) {
+    const btns = imos.map(function(x) {
+      return '<button type="button" class="vid-tr-use" onclick="_trUseImo(' + Number(id) + ',\'' + esc(x.imo) + '\')" title="Put this IMO in the box">IMO ' + esc(x.imo) + '</button>' +
+        (imos.length > 1 ? ' <span class="vid-tr-when">(last supplied ' + esc(_trDay(x.entry)) + ')</span>' : '');
+    }).join(' · ');
+    html = imos.length > 1
+      ? '<span class="vid-tr-many">Track Record has ' + imos.length + ' ships by this name — pick one: ' + btns + '</span>'
+      : '<span class="vid-tr-hint">Track Record: ' + btns + ' — use it</span>';
+  }
+  if (box.innerHTML !== html) box.innerHTML = html;
 }
 // Bell → the nomination card.
 function _trGoTo(cid) {
@@ -27845,6 +28045,13 @@ function _emailShowPasteReminder() {
 .vid-msg .vid-warn{color:var(--amber);font-weight:600}
 .vid-msg .vid-hint{color:var(--muted)}
 .vid-msg .vid-note{color:var(--azure);font-weight:600}
+/* IMO from the Track Record (records.js _trImoSuggest) */
+.vid-tr{font-size:10.5px;line-height:1.5;min-width:0;overflow-wrap:anywhere}
+.vid-tr:empty{display:none}
+.vid-tr .vid-tr-filled{color:var(--green);font-weight:600}
+.vid-tr .vid-tr-hint,.vid-tr .vid-tr-many{color:var(--sub)}
+.vid-tr .vid-tr-when{color:var(--muted)}
+.vid-tr .vid-tr-use{font:inherit;font-weight:700;color:var(--azure);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline}
 .vid-look{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:10.5px;color:var(--muted);min-width:0}
 .vid-look[hidden]{display:none}
 .vid-look a{color:var(--azure);font-weight:600;text-decoration:none;white-space:nowrap}

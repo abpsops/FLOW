@@ -3,7 +3,8 @@
      and deal are hidden; duration = qty ÷ the giving barge's pump rate for the grade + hose-up
    • saved with the loadings (kind:'transfer'); orange ticket on the calendar ("TRANSFER",
      "FNSA 10 → FNSA 11"), orange entry on BOTH barges' timelines, orange row in the list
-   • both barges are busy: the planner moves a vessel on either barge out of the window,
+   • both barges are busy — but vessel supplies come first: Generate schedule supplies the
+     vessels at their ETA and moves the transfer after them (see fix2/transfer-after-supply);
      Free Windows / Availability see it, a loading on either barge warns (once)
    • the stock forecast is not changed, no deal link, no BL: Done just completes it (ROB by hand)
    • edit (switch type back), sync to another device, merge recompute with the barge's rate,
@@ -133,19 +134,24 @@ function seed(loadings, extra) {
       addVessel(); addVessel();
       const cards = [...document.querySelectorAll('.vcard[id^="vessel-"]')].map(c => c.id.replace('vessel-', ''));
       [['ON TEN', '1'], ['ON ELEVEN', '2']].forEach(([n, b], i) => { const id = cards[i]; document.getElementById('v' + id + '-name').value = n; document.getElementById('v' + id + '-vlsfo').value = '300'; document.getElementById('v' + id + '-eta').value = f(mid); document.getElementById('v' + id + '-barge').value = b; });
+      const req = rec.startAt;
       calculate();
-      const end = new Date(rec.endAt).getTime();
-      const out = _lastSched.map(i => ({ n: i.name, b: i.bargeLabel, startAfterEnd: new Date(i.bargeStart).getTime() >= end, start: new Date(i.bargeStart).toISOString() }));
+      const moved = _loadingRecords.find(x => x.id === 'x1');
+      const lastEtc = Math.max(..._lastSched.map(i => new Date(i.etc).getTime()));
+      const pad = (_contingencyHrs() + ((_calcParams && _calcParams.travelHrs) || 0)) * 3600000;
+      const out = _lastSched.map(i => ({ n: i.name, b: i.bargeLabel, atEta: Math.abs(new Date(i.bargeStart).getTime() - mid.getTime()) < 60000, start: new Date(i.bargeStart).toISOString() }));
       const tl10 = _getBargeTimeline(1, 'FNSA 10').filter(o => o.transferId === 'x1').length, tl11 = _getBargeTimeline(2, 'FNSA 11').filter(o => o.transferId === 'x1').length;
       const blocksList = _blocksForBarge(1, 'FNSA 10').length + _blocksForBarge(2, 'FNSA 11').length; // not listed with the Unavailable blocks
       const r = _freeWindowsWeekRange();
       const fw = [1, 2].map(id => { const rows = computeFreeWindows(id, id === 1 ? 'FNSA 10' : 'FNSA 11', r.weekStart, r.weekEnd);
-        return { freeInside: rows.some(w => !w.kind && new Date(w.start) < new Date(rec.endAt) && new Date(w.end) > new Date(rec.startAt)), busy: rows.some(w => w.kind === 'block' && /Barge transfer FNSA 10 → FNSA 11/.test(w.label)) }; });
-      return { out, tl10, tl11, blocksList, fwInside: fw, end: rec.endAt };
+        return { freeInside: rows.some(w => !w.kind && new Date(w.start) < new Date(moved.endAt) && new Date(w.end) > new Date(moved.startAt)), busy: rows.some(w => w.kind === 'block' && /Barge transfer FNSA 10 → FNSA 11/.test(w.label)) }; });
+      return { out, tl10, tl11, blocksList, fwInside: fw, req, reqSaved: moved.reqStartAt, start: moved.startAt, afterSupplies: new Date(moved.startAt).getTime() >= lastEtc + pad,
+        span: (new Date(moved.endAt) - new Date(moved.startAt)) / 3600000 };
     });
-    check('X3 the planner moves a vessel on FNSA 10 AND one on FNSA 11 out of the transfer window', p.out.length === 2 && p.out.every(x => x.startAfterEnd), p);
+    check('X3 supplies first: the vessels on FNSA 10 and FNSA 11 are supplied at their ETA, inside the transfer\'s planned window', p.out.length === 2 && p.out.every(x => x.atEta), p);
+    check('X3 …and the transfer moves after both supplies (ETC + contingency + travel), same length; the start asked for is kept', p.afterSupplies && p.span === 11 && p.reqSaved === p.req && p.start !== p.req, p);
     check('X3 both barges\' timelines (Availability Check / Free Windows / conflicts) carry the transfer; not listed as Unavailable blocks', p.tl10 === 1 && p.tl11 === 1 && p.blocksList === 0, p);
-    check('X3 Free Windows shows the transfer as busy and offers no free window overlapping it, on either barge', p.fwInside.every(x => !x.freeInside && x.busy), p.fwInside);
+    check('X3 Free Windows shows the transfer (at its new time) as busy and offers no free window overlapping it, on either barge', p.fwInside.every(x => !x.freeInside && x.busy), p.fwInside);
     const w = await A.page.evaluate(async () => {
       showPage('loading');
       const rec = _loadingRecords.find(x => x.id === 'x1'); const s = new Date(new Date(rec.startAt).getTime() + 2 * 3600000);
@@ -162,9 +168,10 @@ function seed(loadings, extra) {
       document.getElementById('ld-from-barge').value = 'FNSA 11'; document.getElementById('ld-barge').value = 'FNSA 10'; document.getElementById('ld-qty').value = '200';
       document.getElementById('ld-start-date').value = _localDateInputStr(s); document.getElementById('ld-start-time').value = _localTimeInputStr(s);
       window.__confirms = []; addLoadingRecord(); await _waitForSaveIdle();
-      return window.__confirms.slice();
+      const x1 = _loadingRecords.find(x => x.id === 'x1'), x2 = _loadingRecords.find(x => x.kind === 'transfer' && x.id !== 'x1');
+      return { confirms: window.__confirms.slice(), after: new Date(x2.startAt) >= new Date(x1.endAt), req: x2.reqStartAt === s.toISOString() };
     });
-    check('X3 a second transfer overlapping it warns for both barges', w2.length === 1 && /FNSA 11 is already committed/.test(w2[0]) && /FNSA 10 is already committed/.test(w2[0]) && /Save this transfer anyway/.test(w2[0]), w2);
+    check('X3 a second transfer typed over it is placed after it (no overlap, nothing to warn about); the start typed is kept', w2.confirms.length === 0 && w2.after && w2.req, w2);
   });
 
   await scenario('X4 no stock, no deal, Done without BL', async (openT) => {
