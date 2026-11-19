@@ -148,6 +148,42 @@ function planSchedule(inp) {
   return { sequence, sched, vAl, mAl, blockMoves, totV, totM, bargeState, meta };
 }
 
+/* ─── Barge transfers after the supplies ───
+   Pure. Vessel supplies have priority: each transfer goes in the first gap
+   where BOTH its barges are free for its whole length, at or after the start
+   asked for — clear of every supply (ETC + contingency, travel either side),
+   Unavailable block, Loading and earlier transfer on either barge.
+     transfers [{id, from, to, req: Date, durMs}]  in the order to place them
+     sched     the schedule's jobs {bargeLabel, bargeStart, etc, refuelSlot}
+     busyFor   name -> [{s: Date, e: Date}] other fixed commitments
+   Returns [{id, start: Date, end: Date}]. */
+function placeTransfers(inp) {
+  const H = 3600000, tr = (inp.travelHrs || 0) * H, cont = (inp.contHrs || 0) * H;
+  const busy = {};
+  const add = (name, s, e) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e }); };
+  (inp.sched || []).forEach(j => {
+    const s = new Date(j.bargeStart).getTime(), e0 = new Date(j.refuelSlot && j.refuelSlot.rfEnd ? j.refuelSlot.rfEnd : j.etc).getTime();
+    if (isFinite(s) && isFinite(e0)) add(j.bargeLabel, s - tr, e0 + cont + tr);
+  });
+  const names = {};
+  (inp.transfers || []).forEach(t => { names[t.from] = 1; names[t.to] = 1; });
+  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr)));
+  const out = [];
+  (inp.transfers || []).forEach(t => {
+    let s = new Date(t.req).getTime();
+    const d = Math.max(0, t.durMs || 0);
+    for (let guard = 0; guard < 1000; guard++) {
+      const hits = [].concat(busy[t.from] || [], busy[t.to] || []).filter(x => s < x.e && s + d > x.s);
+      if (!hits.length) break;
+      s = Math.max.apply(null, hits.map(x => x.e));
+    }
+    out.push({ id: t.id, start: new Date(s), end: new Date(s + d) });
+    // a later transfer on either barge waits for this one (travel either side)
+    add(t.from, s - tr, s + d + tr); if (t.to !== t.from) add(t.to, s - tr, s + d + tr);
+  });
+  return out;
+}
+
 /* ─── CALCULATE ─── */
 let _calculating = false; // Guard: prevent concurrent schedule generation (Issue 1 fix)
 function calculate() {
@@ -207,6 +243,9 @@ function calculate() {
     opening[b.id] = { v: openV, m: openM };
   });
   const { sched, vAl, mAl, blockMoves, totV, totM, bargeState } = planSchedule({ vessels, barges, opening, params: _planCtxLive() });
+  // Barge transfers go after the supplies just planned (saved times move with them).
+  let xferMoves = [];
+  try { xferMoves = _xferApplyPlacement(sched, barges); } catch (e) { console.warn('ABPS: placing barge transfers failed', e); }
 
   _bargeStates = bargeState; _bargeConfig = barges;
   // Compute aggregate last ETC across all barges (latest cursor = overall last completion)
@@ -231,6 +270,7 @@ function calculate() {
   // Sync all modules after schedule generation
   setTimeout(refreshAllModules, 100);
   showToast('Schedule generated — ' + vessels.length + ' vessel' + (vessels.length!==1?'s':'') + ' across ' + barges.length + ' barge' + (barges.length!==1?'s':''), 'success');
+  _xferMovesToast(xferMoves);
   if (blockMoves.length) {
     showToast('Unavailable blocks moved ' + blockMoves.length + ' job' + (blockMoves.length !== 1 ? 's' : '') + ': ' +
       blockMoves.map(m => m.vessel + ' on ' + m.barge + ' waits for "' + m.reason + '" until ' + fmt24(m.to)).join('; ') + '. Check laycans.', 'warning', 10000);
@@ -502,6 +542,7 @@ function buildTL(items, containerId, loadingsForBarge) {
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
+        ${_xferMovedNote(rec) ? `<div class="tl-xfer-moved" style="font-size:11px;color:var(--xfer);margin-top:8px">${esc(_xferMovedNote(rec))}</div>` : ''}
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;
       tl.appendChild(ld);
@@ -522,6 +563,7 @@ function buildTL(items, containerId, loadingsForBarge) {
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
         </div>
+        ${_xferMovedNote(rec) ? `<div class="tl-xfer-moved" style="font-size:11px;color:var(--xfer);margin-top:8px">${esc(_xferMovedNote(rec))}</div>` : ''}
         ${rec.notes ? `<div style="font-size:11px;color:var(--sub);margin-top:8px">${esc(rec.notes)}</div>` : ''}
       </div>`;
       tl.appendChild(ld);

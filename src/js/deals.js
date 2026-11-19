@@ -632,6 +632,7 @@ function renderLoadingList() {
             + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
             + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
+            + (_xferMovedNote(r) ? '<div class="ld-xfer-moved" style="font-size:10.5px;color:var(--xfer);margin-top:1px">' + esc(_xferMovedNote(r)) + '</div>' : '')
           + '</div>'
           + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'
             + '<div class="ld-when">' + startTxt + ' → ' + fmtD(end) + '</div>'

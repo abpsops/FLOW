@@ -680,7 +680,11 @@ function getVessels(quiet) {
    them as a plain object so it never reads app state itself. */
 function _planCtxLive() {
   const hoseHrs = _calcParams.hoseHrs, travelHrs = _calcParams.travelHrs;
-  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name)) };
+  // Vessel supplies come first: a barge transfer that has not started yet does
+  // not hold a supply back — it is moved after the supplies instead
+  // (_xferApplyPlacement). One already under way keeps both barges busy.
+  const nowT = Date.now();
+  return { hoseHrs, travelHrs, blocksFor: b => _blocksForBarge(b.id, b.name).concat(_transferBlocksForBarge(b.id, b.name).filter(bk => new Date(bk.start).getTime() <= nowT)) };
 }
 
 /* Earliest start ≥ `start` for a job on `barge` that doesn't touch any of its
