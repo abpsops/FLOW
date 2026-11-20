@@ -63,7 +63,7 @@ const SUITES = [
   ['fix-lifting-report', 'suites/fix2/lifting-report.test.js', 'Loading Deals: BL date + quantity on each lifting, deal card in BL-date order with left after, lifting report as Excel and PDF'],
   ['fix-barge-transfer', 'suites/fix2/barge-transfer.test.js', 'Barge transfer (barge to barge) on the Loading page: pump-rate window, orange on calendar / timelines, both barges busy, no stock / deal / BL'],
   ['fix-trackrecord-imo', 'suites/fix2/trackrecord-imo.test.js', 'Nomination card: typing a vessel supplied before fills its IMO from the Track Record (empty box only; two IMOs for one name → pick)'],
-  ['fix-transfer-after-supply', 'suites/fix2/transfer-after-supply.test.js', 'Vessel supplies first: a barge transfer moves to after the supplies on both barges (saved times move, start typed kept)'],
+  ['fix-transfer-after-supply', 'suites/fix2/transfer-after-supply.test.js', 'Vessel supplies first: a barge transfer moves to after the supplies on both barges, the discharging barge loads after the transfer (saved times move, start typed kept)'],
   ['fix-loading-report', 'suites/fix2/loading-report.test.js', 'Monthly loading report: completed loadings by BL date, per supplier / per date / each lifting, Excel and PDF'],
   ['fix-bdn-date', 'suites/fix2/bdn-date.test.js', 'BDN date per grade (calendar, no time) in the Checklist and Saved Records; Monthly Report Excel/PDF shows it instead of the supply date'],
   ['fix-session-lost', 'suites/fix2/session-lost.test.js', 'sign-in expires while the app is open: sign-in form instead of an empty workspace, nothing written, resume and merge after signing in'],

@@ -11,6 +11,9 @@
    • one already under way still holds the vessels back
    • adding / editing a transfer places it at once against the current schedule; the edit form
      opens with the start typed; once the supply is gone it goes back to the start typed
+   • the barge that DISCHARGES loads after the transfer (it needs the room): its loading does not
+     hold the transfer back, it moves to right after it (start typed kept, back once the transfer
+     is gone); a loading of the barge that RECEIVES stays put and the transfer waits for it
    node suites/fix2/transfer-after-supply.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -153,6 +156,59 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const B = await openT(db, 'user-operator2');
     const b = await B.page.evaluate(() => { const r = _loadingRecords.find(x => x.id === 'x1'); return { start: new Date(r.startAt).getTime(), note: _xferMovedNote(r) }; });
     check('T5 another device opens with the transfer at its new time, marked as moved', b.start === g.x1.start && /Moved after the vessel supplies/.test(b.note), { b, a: g.x1 });
+  });
+
+  // FNSA 10 loading 5,000 MT: a 12h window
+  const loading = (id, barge, h, hrs, extra) => Object.assign({ id, barge, terminal: 'VOPAK', grade: 'VLSFO', qty: 5000, startAt: iso(h), endAt: iso(h + hrs), preOpsHours: 2.5, postOpsHours: 3.5, pumpHours: 6, estimatedHours: hrs, endOverridden: false, surveyor: '', notes: '', updatedAt: NOW }, extra || {});
+  const recAt = (page, id) => page.evaluate(id => { const r = _loadingRecords.find(x => x.id === id); return r && { start: new Date(r.startAt).getTime(), end: new Date(r.endAt).getTime(), req: r.reqStartAt || null, note: _xferMovedNote(r), deleted: !!r.deletedAt }; }, id);
+
+  await scenario('T6 the discharging barge loads after the transfer', async (openT) => {
+    // as on 22 Nov: transfer FNSA 10 → FNSA 11 typed at +23h (inside HAYAT), FNSA 10 loading typed at +34h (12h)
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), loading('l10', 'FNSA 10', 34, 12)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l = await recAt(A.page, 'l10');
+    const xStart = g.hayat.etc + 2 * HR;
+    check('T6 the transfer goes right after HAYAT — FNSA 10\'s loading does not hold it back', g.x1.start === xStart && g.x1.end === xStart + 11 * HR, { x1: g.x1, expected: new Date(xStart).toISOString() });
+    check('T6 FNSA 10\'s loading moves to right after the transfer (+ travel), same length; the start typed is kept', l.start === g.x1.end + HR && l.end - l.start === 12 * HR && l.req === iso(34), { l, x1end: g.x1.end });
+    check('T6 the loading says it was moved after the barge transfer; a message says so', /^Moved after the barge transfer — asked for /.test(l.note) && g.toasts.some(t => /Transfer first: Loading on FNSA 10 moved to/.test(t)), { note: l.note, toasts: g.toasts });
+    const cloud = (U.row(db).payload.state.loadingRecords || []).find(r => r.id === 'l10');
+    check('T6 the loading\'s new times reach the cloud', cloud && new Date(cloud.startAt).getTime() === l.start && cloud.reqStartAt === iso(34), cloud);
+    const g2 = await generate(A.page); const l2 = await recAt(A.page, 'l10');
+    check('T6 generating again moves nothing', g2.x1.start === g.x1.start && l2.start === l.start, { g2: g2.x1, l2 });
+    // the transfer is removed: the loading goes back to the start typed
+    const back = await A.page.evaluate(async () => { const r = _loadingRecords.find(x => x.id === 'x1'); r.deletedAt = Date.now(); r.updatedAt = Date.now(); return true; });
+    await generate(A.page); const l3 = await recAt(A.page, 'l10');
+    check('T6 once the transfer is gone, generating again puts the loading back at the start typed', back && l3.start === at(34) && l3.note === '', l3);
+  });
+
+  await scenario('T7 a loading of the receiving barge', async (openT) => {
+    // FNSA 11 loads at +31h for 5h, right where the transfer would go: the transfer waits for it
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), loading('l11', 'FNSA 11', 31, 5)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l = await recAt(A.page, 'l11');
+    check('T7 a loading of the receiving barge stays where it is; the transfer goes after it (+ travel)', l.start === at(31) && l.req === null && g.x1.start === at(36) + HR, { l, x1: g.x1 });
+  });
+
+  await scenario('T8 a loading added on the discharging barge', async (openT) => {
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const r = await A.page.evaluate(async (s0) => {
+      showPage('loading');
+      const k = document.getElementById('ld-kind'); k.value = 'loading'; k.dispatchEvent(new Event('change'));
+      document.getElementById('ld-barge').value = 'FNSA 10'; document.getElementById('ld-terminal').value = 'GPS'; document.getElementById('ld-qty').value = '900';
+      const s = new Date(s0);
+      document.getElementById('ld-start-date').value = _localDateInputStr(s); document.getElementById('ld-start-time').value = _localTimeInputStr(s);
+      window.__confirms = []; addLoadingRecord(); await _waitForSaveIdle();
+      const l = _loadingRecords.find(x => x.terminal === 'GPS');
+      editLoadingRecord(l.id);
+      const typed = document.getElementById('ld-start-time').value; cancelLoadingEdit();
+      return { start: new Date(l.startAt).getTime(), req: l.reqStartAt, confirms: window.__confirms.length, typed };
+    }, new Date(g.x1.start + HR).toISOString());
+    const typedLocal = new Date(g.x1.start + HR + 4 * HR);
+    check('T8 a loading typed on FNSA 10 inside the transfer is placed after it at once (no warning); Edit opens with the start typed', r.start === g.x1.end + HR && r.req === new Date(g.x1.start + HR).toISOString() && r.confirms === 0 && r.typed === String(typedLocal.getUTCHours()).padStart(2, '0') + ':' + String(typedLocal.getUTCMinutes()).padStart(2, '0'), r);
   });
 
   await browser.close();

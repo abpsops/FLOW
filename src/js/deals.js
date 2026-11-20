@@ -649,6 +649,7 @@ function renderLoadingList() {
           + '<div style="font-size:13px;font-weight:700;color:var(--ink);' + (r.completed ? 'text-decoration:line-through' : '') + '">' + esc(r.terminal || '—') + '</div>'
           + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.completed && r.blQty != null ? ' planned · <b>BL ' + Number(r.blQty).toLocaleString() + ' MT</b>' + (r.blDate ? ' · BL date ' + esc(_dealDateStr(r.blDate)) : '') : '') + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
           + (r.dealId ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Deal: ' + (_dealById(r.dealId) ? esc(_dealLabel(_dealById(r.dealId))) : 'removed — link it again on the Loading Deals page') + '</div>' : '')
+          + (_xferMovedNote(r) ? '<div class="ld-moved" style="font-size:10.5px;color:var(--xfer);margin-top:1px">' + esc(_xferMovedNote(r)) + '</div>' : '')
           + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px;display:flex;align-items:center;gap:4px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Surveyor: ' + esc(r.surveyor) + '</div>' : '')
         + '</div>'
         + '<div style="font-size:11.5px;color:var(--ink);text-align:right;min-width:170px">'

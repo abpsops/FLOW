@@ -333,20 +333,28 @@ function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, f
   );
 }
 
-/* ─── Barge transfers go after the vessel supplies ───
+/* ─── Barge transfers go after the vessel supplies; Loadings of the
+   discharging barge go after the transfer ───
    A transfer that has not started is placed in the first gap at or after the
    start asked for (reqStartAt) where both its barges are free — after the
-   supplies of the current schedule, Unavailable blocks, Loadings and earlier
-   transfers (placeTransfers). Its saved start/end move with it, so the
-   calendar, timelines, Free Windows and the other devices all see the same
-   times. `records` is not changed: the placed list is returned.
-   Returns { records, moves: [{id, from, to, start, end, req}] }. */
+   supplies of the current schedule, Unavailable blocks, earlier transfers and
+   the Loadings of the barge that RECEIVES (placeTransfers). The barge that
+   DISCHARGES has to give the fuel first to have room to load: a Loading of
+   that barge which would overlap the transfer moves to right after it
+   (+ travel), keeping its length; once nothing is in its way any more it
+   goes back to the start asked for (reqStartAt). Saved start/end move with
+   them, so the calendar, timelines, Free Windows and the other devices all
+   see the same times. `records` is not changed: the placed list is returned.
+   Returns { records, moves: [{id, kind, from, to, barge, start, end, req}] }. */
 function _xferPlaceAll(records, sched, barges) {
-  const now = Date.now();
+  const H = 3600000, now = Date.now();
   const recs = records || [];
-  const todo = recs.filter(function(r) { return _isTransfer(r) && !r.deletedAt && !r.completed && new Date(r.startAt).getTime() > now; });
-  if (!todo.length) return { records: recs, moves: [] };
+  const live = function(r) { return r && !r.deletedAt && !r.completed; };
+  const todo = recs.filter(function(r) { return _isTransfer(r) && live(r) && new Date(r.startAt).getTime() > now; });
+  const loads = recs.filter(function(r) { return live(r) && !_isTransfer(r) && new Date(r.startAt).getTime() > now; });
+  if (!todo.length && !loads.some(function(r) { return r.reqStartAt; })) return { records: recs, moves: [] };
   const bl = barges || _bargeConfig || [];
+  const tr = ((_calcParams && _calcParams.travelHrs) || 0) * H;
   const jobs = (sched || []).filter(function(j) { return j && !(typeof _isScheduleItemCompleted === 'function' && _isScheduleItemCompleted(j)); });
   const transfers = todo.map(function(r) {
     const st = new Date(r.startAt).getTime(), en = new Date(r.endAt).getTime();
@@ -358,31 +366,66 @@ function _xferPlaceAll(records, sched, barges) {
     const b = bl.find(function(x) { return x.name === name; });
     const out = _blocksForBarge(b ? b.id : null, name).map(function(bk) { return { s: new Date(bk.start), e: new Date(bk.end) }; });
     recs.forEach(function(r) {
-      if (!r || r.deletedAt || r.completed) return;
+      if (!live(r)) return;
       if (_isTransfer(r)) { // one already under way stays where it is
         if (new Date(r.startAt).getTime() <= now && (r.fromBarge === name || _resolveRecordBargeName(r) === name)) out.push({ s: new Date(r.startAt), e: new Date(r.endAt) });
-      } else if (_resolveRecordBargeName(r) === name) out.push({ s: new Date(r.startAt), e: new Date(r.endAt) });
+      } else if (_resolveRecordBargeName(r) === name) {
+        // where the Loading sits in this pass (it may itself move for a transfer)
+        const at = loadPos[r.id];
+        out.push({ s: at ? at.start : new Date(r.startAt), e: at ? at.end : new Date(r.endAt), kind: 'loading' });
+      }
     });
     return out.filter(function(x) { return x.e.getTime() > now && x.e > x.s; });
   };
-  const placed = placeTransfers({ transfers: transfers, sched: jobs, busyFor: busyFor,
-    travelHrs: (_calcParams && _calcParams.travelHrs) || 0, contHrs: _contingencyHrs() });
+  // Transfers and Loadings depend on each other (a moved Loading can hold back a
+  // transfer that RECEIVES on that barge): placed again until nothing moves.
+  let loadPos = {}, placed = [], loadAt = {};
+  for (let pass = 0; pass < 6; pass++) {
+    placed = transfers.length ? placeTransfers({ transfers: transfers, sched: jobs, busyFor: busyFor,
+      travelHrs: (_calcParams && _calcParams.travelHrs) || 0, contHrs: _contingencyHrs() }) : [];
+    loadAt = placeLoads(placed);
+    const same = Object.keys(loadAt).every(function(k) { return loadPos[k] && loadPos[k].start.getTime() === loadAt[k].start.getTime(); });
+    loadPos = loadAt;
+    if (same && pass > 0) break;
+  }
   const byId = {}; placed.forEach(function(p) { byId[p.id] = p; });
+  function placeLoads(placedNow) {
+  // every transfer that keeps a discharging barge busy: placed now, or under way
+  const xferWins = placedNow.map(function(p) { const t = transfers.find(function(x) { return x.id === p.id; }); return { from: t.from, s: p.start.getTime(), e: p.end.getTime() }; })
+    .concat(recs.filter(function(r) { return _isTransfer(r) && live(r) && new Date(r.startAt).getTime() <= now; })
+      .map(function(r) { return { from: r.fromBarge || '', s: new Date(r.startAt).getTime(), e: new Date(r.endAt).getTime() }; }));
+  const loadAt = {};
+  loads.forEach(function(r) {
+    const st = new Date(r.startAt).getTime(), dur = new Date(r.endAt).getTime() - st;
+    if (!(dur > 0)) return;
+    const name = _resolveRecordBargeName(r);
+    let s = r.reqStartAt ? Math.max(new Date(r.reqStartAt).getTime(), now) : st;
+    for (let guard = 0; guard < 100; guard++) {
+      const hit = xferWins.filter(function(x) { return x.from === name && s < x.e + tr && s + dur > x.s - tr; });
+      if (!hit.length) break;
+      s = Math.max.apply(null, hit.map(function(x) { return x.e + tr; }));
+    }
+    if (isFinite(s)) loadAt[r.id] = { start: new Date(s), end: new Date(s + dur) };
+  });
+  return loadAt;
+  }
   const moves = [];
   const out = recs.map(function(r) {
-    const p = r && byId[r.id];
+    const p = r && (byId[r.id] || loadAt[r.id]);
     if (!p) return r;
     const sIso = p.start.toISOString(), eIso = p.end.toISOString();
     if (r.startAt === sIso && r.endAt === eIso) return r;
     const next = Object.assign({}, r, { startAt: sIso, endAt: eIso, reqStartAt: r.reqStartAt || r.startAt, updatedAt: Date.now() });
-    delete next.startWin; // a moved transfer starts at an exact time
-    moves.push({ id: r.id, from: r.fromBarge || '', to: _resolveRecordBargeName(r), start: p.start, end: p.end, req: new Date(next.reqStartAt) });
+    delete next.startWin; // a moved transfer / Loading starts at an exact time
+    moves.push({ id: r.id, kind: _isTransfer(r) ? 'transfer' : 'loading', from: r.fromBarge || '', to: _resolveRecordBargeName(r), barge: _resolveRecordBargeName(r),
+      start: p.start, end: p.end, req: new Date(next.reqStartAt), back: sIso === new Date(next.reqStartAt).toISOString() });
     return next;
   });
   return { records: out, moves: moves };
 }
 // After Generate schedule: place the transfers after the supplies just planned
-// and keep the moves (the schedule's own save sends them to the cloud).
+// (and the discharging barges' Loadings after them) and keep the moves (the
+// schedule's own save sends them to the cloud).
 function _xferApplyPlacement(sched, barges) {
   if (typeof isTrader === 'function' && isTrader()) return []; // a trader can't save Loadings
   const res = _xferPlaceAll(_loadingRecords, sched, barges);
@@ -391,27 +434,34 @@ function _xferApplyPlacement(sched, barges) {
   if (typeof _saveLoadingToLocal === 'function') _saveLoadingToLocal();
   return res.moves;
 }
-// "Moved after the vessel supplies — asked for 22 Nov 2026 06:00" (or '' when it starts as asked)
+// "Moved after the vessel supplies — asked for 22 Nov 2026 06:00" (transfer) /
+// "Moved after the barge transfer — asked for …" (Loading); '' when it starts as asked.
 function _xferMovedNote(r) {
-  if (!_isTransfer(r) || !r.reqStartAt || r.completed) return '';
+  if (!r || !r.reqStartAt || r.completed) return '';
   const req = new Date(r.reqStartAt), st = new Date(r.startAt);
   if (isNaN(req.getTime()) || isNaN(st.getTime()) || st.getTime() === req.getTime()) return '';
-  return 'Moved after the vessel supplies — asked for ' + fmt24(req);
+  return (_isTransfer(r) ? 'Moved after the vessel supplies' : 'Moved after the barge transfer') + ' — asked for ' + fmt24(req);
 }
 function _xferMovesToast(moves) {
-  if (moves && moves.length && typeof showToast === 'function')
-    showToast('Supplies first: ' + moves.map(function(m) { return 'transfer ' + m.from + ' → ' + m.to + ' moved to ' + fmt24(m.start) + ' – ' + fmt24(m.end); }).join('; ') + '.', 'info', 10000);
+  if (!moves || !moves.length || typeof showToast !== 'function') return;
+  const x = moves.filter(function(m) { return m.kind !== 'loading'; }), l = moves.filter(function(m) { return m.kind === 'loading'; });
+  const parts = [];
+  if (x.length) parts.push('Supplies first: ' + x.map(function(m) { return 'transfer ' + m.from + ' → ' + m.to + ' moved to ' + fmt24(m.start) + ' – ' + fmt24(m.end); }).join('; '));
+  if (l.length) parts.push('Transfer first: ' + l.map(function(m) { return 'Loading on ' + m.barge + (m.back ? ' back at ' : ' moved to ') + fmt24(m.start) + ' – ' + fmt24(m.end); }).join('; '));
+  showToast(parts.join('. ') + '.', 'info', 10000);
 }
 
 function addLoadingRecord() {
   let data = _readLoadingForm();
   if (!data) return;
   const rec0 = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
-  // A transfer goes after the vessel supplies: checked and saved at the place it gets.
-  const placed = _isTransfer(rec0) ? _xferPlaceAll((_loadingRecords || []).concat([rec0]), _lastSched, _bargeConfig) : null;
-  const rec = placed ? placed.records[placed.records.length - 1] : rec0;
+  // A transfer goes after the vessel supplies, a Loading of a discharging barge
+  // after its transfer: checked and saved at the place it gets.
+  const placed = _xferPlaceAll((_loadingRecords || []).concat([rec0]), _lastSched, _bargeConfig);
+  const rec = placed.records[placed.records.length - 1];
   if (!_confirmLoadingConflicts(rec.barge, rec.startAt, rec.endAt, null, rec.fromBarge)) return;
-  if (placed) { placed.records.slice(0, -1).forEach(function(r, i) { _loadingRecords[i] = r; }); _xferMovesToast(placed.moves); }
+  placed.records.slice(0, -1).forEach(function(r, i) { _loadingRecords[i] = r; });
+  _xferMovesToast(placed.moves);
   _loadingRecords.push(rec);
   saveLoadingRecords();
   _clearLoadingForm();
@@ -426,8 +476,8 @@ function editLoadingRecord(id) {
   _loadingEditingId = id;
   _loadingEditingSeen = rec.updatedAt || null;
 
-  // a transfer moved after the supplies opens with the start that was asked for
-  const start = new Date(_isTransfer(rec) && rec.reqStartAt ? rec.reqStartAt : rec.startAt);
+  // a transfer / Loading moved for another job opens with the start that was asked for
+  const start = new Date(rec.reqStartAt && !rec.completed ? rec.reqStartAt : rec.startAt);
   const kindEl = document.getElementById('ld-kind');
   if (kindEl) { kindEl.value = _isTransfer(rec) ? 'transfer' : 'loading'; _ldKindChanged(); }
   _populateLoadingBargeSelect();
@@ -462,7 +512,7 @@ function updateLoadingRecord(id) {
   if (!data) return;
   const idx = (_loadingRecords || []).findIndex(function(r) { return r.id === id; });
   if (idx === -1) { cancelLoadingEdit(); return; }
-  if (!_isTransfer(data) && !_confirmLoadingConflicts(data.barge, data.startAt, data.endAt, id, data.fromBarge)) return;
+
   // The form's fields replace the record's; everything else the record carries
   // (Completed + its BL figure set on another device meanwhile, a tombstone…)
   // is kept. Fields the form left out on purpose are cleared.
@@ -471,16 +521,14 @@ function updateLoadingRecord(id) {
   if (!data.dealId) delete next.dealId;
   if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; delete next.reqStartAt; }
   else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
-  // A transfer goes after the vessel supplies (the start typed is the earliest it may start).
-  let placed = null;
-  if (_isTransfer(next)) {
-    const list = _loadingRecords.slice(); list[idx] = next;
-    placed = _xferPlaceAll(list, _lastSched, _bargeConfig);
-    next = placed.records[idx];
-    if (!_confirmLoadingConflicts(next.barge, next.startAt, next.endAt, id, next.fromBarge)) return;
-  }
-  if (placed) { placed.records.forEach(function(r, i) { _loadingRecords[i] = r; }); _xferMovesToast(placed.moves); }
-  else _loadingRecords[idx] = next;
+  // A transfer goes after the vessel supplies, a Loading of a discharging barge
+  // after its transfer (the start typed is the earliest it may start).
+  const list = _loadingRecords.slice(); list[idx] = next;
+  const placed = _xferPlaceAll(list, _lastSched, _bargeConfig);
+  next = placed.records[idx];
+  if (!_confirmLoadingConflicts(next.barge, next.startAt, next.endAt, id, next.fromBarge)) return;
+  placed.records.forEach(function(r, i) { _loadingRecords[i] = r; });
+  _xferMovesToast(placed.moves);
   saveLoadingRecords();
   cancelLoadingEdit();
   renderLoadingList();
