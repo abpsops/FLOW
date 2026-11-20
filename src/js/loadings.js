@@ -452,6 +452,14 @@ function _xferApplyPlacement(sched, barges) {
   if (typeof _saveLoadingToLocal === 'function') _saveLoadingToLocal();
   return res.moves;
 }
+// "15h (11h pumping at 400 MT/h + 4h ops)" — a transfer's window and what it is made of.
+function _xferDurationText(r) {
+  const hrs = (new Date(r.endAt) - new Date(r.startAt)) / 3600000;
+  if (!(hrs > 0)) return '—';
+  const pump = Number(r.pumpHours) || 0, ops = Number(r.hoseHours) || 0;
+  const rate = pump > 0 ? Math.round((Number(r.qty) || 0) / pump) : 0;
+  return _formatDurationHours(hrs) + (pump > 0 ? ' (' + _formatDurationHours(pump) + ' pumping' + (rate ? ' at ' + rate + ' MT/h' : '') + (ops > 0 ? ' + ' + _formatDurationHours(ops) + ' ops' : '') + ')' : '');
+}
 // "Moved after the vessel supplies — asked for 22 Nov 2026 06:00" (transfer) /
 // "Moved after the barge transfer — asked for …" (Loading); '' when it starts as asked.
 function _xferMovedNote(r) {

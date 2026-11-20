@@ -541,6 +541,7 @@ function buildTL(items, containerId, loadingsForBarge) {
         <div class="tlm">
           <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
+          <div class="tmi tmi-xfer-dur"><label>Duration</label><span>${esc(_xferDurationText(rec))}</span></div>
           <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
           <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
