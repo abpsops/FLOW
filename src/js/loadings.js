@@ -59,15 +59,21 @@ function updateLoadingConfig() {
    links to no deal, and has no BL. Both barges are busy for its window: it
    counts as an Unavailable block for each of them (planner, Availability
    Check, Free Windows, conflict warnings — see _transferBlocksForBarge).
-   Duration = quantity ÷ the giving barge's pump rate for the grade + hose-up. */
+   Duration = quantity ÷ the transfer rate (VLSFO 400 MT/h, LSMGO the giving
+   barge's MGO rate) + 4h pre / post ops. */
 function _isTransfer(r) { return !!r && r.kind === 'transfer'; }
 function _ldKind() { const el = document.getElementById('ld-kind'); return el && el.value === 'transfer' ? 'transfer' : 'loading'; }
+// Barge to barge goes faster than to a ship: VLSFO at 400 MT/h, and 4h of
+// pre / post ops in all (hook-up, hose, paperwork) instead of the 6h hose-up
+// of a vessel supply. LSMGO keeps the giving barge's own MGO rate.
+const XFER_RATE_VLSFO = 400;
+const XFER_OPS_HRS = 4;
 function _xferRate(fromBargeName, grade) {
   const b = (typeof getBarges === 'function' ? getBarges() : (_bargeConfig || [])).find(function(x) { return x.name === fromBargeName; });
   if (!b) return 0;
-  return Number(grade === 'LSMGO' ? b.mtph : b.vtph) || 0;
+  return grade === 'LSMGO' ? (Number(b.mtph) || 0) : XFER_RATE_VLSFO;
 }
-function _xferHoseHrs() { return Number((_calcParams || {}).hoseHrs) || 0; }
+function _xferHoseHrs() { return XFER_OPS_HRS; }
 function _xferDuration(fromBargeName, grade, qty) {
   const rate = _xferRate(fromBargeName, grade);
   const pump = rate > 0 && qty > 0 ? qty / rate : 0;
@@ -119,7 +125,7 @@ function _recalcLoadingEstimate() {
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
   if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : '') : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
-  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. hose-up ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
+  if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. pre/post ops ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
 
   if (compEl) {
     if (totalHrs > 0 && startDateStr) {
@@ -356,10 +362,19 @@ function _xferPlaceAll(records, sched, barges) {
   const bl = barges || _bargeConfig || [];
   const tr = ((_calcParams && _calcParams.travelHrs) || 0) * H;
   const jobs = (sched || []).filter(function(j) { return j && !(typeof _isScheduleItemCompleted === 'function' && _isScheduleItemCompleted(j)); });
+  // a transfer's length follows the transfer rate and ops hours of today (a
+  // record saved with older figures is brought up to date; a hand-set end stays)
+  const calc = {};
+  todo.forEach(function(r) {
+    if (r.endOverridden) return;
+    const xd = _xferDuration(r.fromBarge || '', r.grade, Number(r.qty) || 0);
+    if (xd.total > 0) calc[r.id] = { pump: xd.pump, hose: xd.hose, total: xd.total, frame: r.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(r.startWin) : 0 };
+  });
   const transfers = todo.map(function(r) {
     const st = new Date(r.startAt).getTime(), en = new Date(r.endAt).getTime();
     const req = new Date(r.reqStartAt || r.startAt).getTime();
-    return { id: r.id, from: r.fromBarge || '', to: _resolveRecordBargeName(r), req: new Date(Math.max(req, now)), durMs: en - st };
+    const c = calc[r.id];
+    return { id: r.id, from: r.fromBarge || '', to: _resolveRecordBargeName(r), req: new Date(Math.max(req, now)), durMs: c ? Math.round((c.frame + c.total) * H) : en - st };
   }).filter(function(t) { return isFinite(t.req.getTime()) && t.durMs > 0; })
     .sort(function(a, b) { return (a.req - b.req) || String(a.id).localeCompare(String(b.id)); });
   const busyFor = function(name) {
@@ -414,8 +429,11 @@ function _xferPlaceAll(records, sched, barges) {
     const p = r && (byId[r.id] || loadAt[r.id]);
     if (!p) return r;
     const sIso = p.start.toISOString(), eIso = p.end.toISOString();
-    if (r.startAt === sIso && r.endAt === eIso) return r;
-    const next = Object.assign({}, r, { startAt: sIso, endAt: eIso, reqStartAt: r.reqStartAt || r.startAt, updatedAt: Date.now() });
+    const c = calc[r.id];
+    const figs = c && (r.pumpHours !== c.pump || r.hoseHours !== c.hose || r.estimatedHours !== c.total) ? { pumpHours: c.pump, hoseHours: c.hose, estimatedHours: c.total } : null;
+    if (r.startAt === sIso && r.endAt === eIso && !figs) return r;
+    if (r.startAt === sIso) return Object.assign({}, r, { endAt: eIso, updatedAt: Date.now() }, figs || {}); // only its length changed
+    const next = Object.assign({}, r, { startAt: sIso, endAt: eIso, reqStartAt: r.reqStartAt || r.startAt, updatedAt: Date.now() }, figs || {});
     delete next.startWin; // a moved transfer / Loading starts at an exact time
     moves.push({ id: r.id, kind: _isTransfer(r) ? 'transfer' : 'loading', from: r.fromBarge || '', to: _resolveRecordBargeName(r), barge: _resolveRecordBargeName(r),
       start: p.start, end: p.end, req: new Date(next.reqStartAt), back: sIso === new Date(next.reqStartAt).toISOString() });

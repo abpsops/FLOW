@@ -1,6 +1,7 @@
 /* Barge transfer (self cargo discharge, barge to barge) — a new type on the Loading page.
    • Type "Barge transfer": From barge (discharges) → To barge (receives); terminal, ops hours
-     and deal are hidden; duration = qty ÷ the giving barge's pump rate for the grade + hose-up
+     and deal are hidden; duration = qty ÷ the transfer rate (VLSFO 400 MT/h, LSMGO the giving
+     barge's MGO rate) + 4h pre / post ops
    • saved with the loadings (kind:'transfer'); orange ticket on the calendar ("TRANSFER",
      "FNSA 10 → FNSA 11"), orange entry on BOTH barges' timelines, orange row in the list
    • both barges are busy — but vessel supplies come first: Generate schedule supplies the
@@ -69,13 +70,13 @@ function seed(loadings, extra) {
         pump: document.getElementById('ld-pump-duration-display').value, dur: document.getElementById('ld-duration-display').value };
     });
     check('X1 choosing "Barge transfer" shows From barge and hides terminal, pre/post ops and deal', !f.before.from && f.before.terminal && f.after.from && !f.after.terminal && !f.after.preOps && !f.after.deal && /To barge/.test(f.label) && f.btn === 'Add Transfer', f);
-    check('X1 the estimate uses the giving barge\'s pump rate + hose-up (1,500 MT ÷ 300 = 5h, + 6h hose)', f.pump === '5h at 300 MT/h' && /^11h \(incl\. hose-up 6h\)$/.test(f.dur), f);
+    check('X1 the estimate uses the transfer rate + pre/post ops (1,500 MT ÷ 400 = 3h 45m, + 4h ops)', f.pump === '3h 45m at 400 MT/h' && /^7h 45m \(incl\. pre\/post ops 4h\)$/.test(f.dur), f);
     const r = await A.page.evaluate(async () => {
       submitLoadingForm(); await _waitForSaveIdle();
       const rec = _loadingRecords.find(x => x.kind === 'transfer');
       return rec && { kind: rec.kind, from: rec.fromBarge, to: rec.barge, terminal: rec.terminal, hrs: rec.estimatedHours, pump: rec.pumpHours, hose: rec.hoseHours, span: (new Date(rec.endAt) - new Date(rec.startAt)) / 3600000, deal: 'dealId' in rec, h: new Date(rec.startAt).getHours(), alerts: window.__alerts.slice(), confirms: window.__confirms.length };
     });
-    check('X1 Add Transfer saves {kind:transfer, FNSA 10 → FNSA 11}, 11h window, no terminal, no deal', r && r.kind === 'transfer' && r.from === 'FNSA 10' && r.to === 'FNSA 11' && r.terminal === '' && r.hrs === 11 && r.pump === 5 && r.hose === 6 && r.span === 11 && !r.deal && r.h === 8 && !r.alerts.length && !r.confirms, r);
+    check('X1 Add Transfer saves {kind:transfer, FNSA 10 → FNSA 11}, 7h 45m window, no terminal, no deal', r && r.kind === 'transfer' && r.from === 'FNSA 10' && r.to === 'FNSA 11' && r.terminal === '' && r.hrs === 7.75 && r.pump === 3.75 && r.hose === 4 && r.span === 7.75 && !r.deal && r.h === 8 && !r.alerts.length && !r.confirms, r);
     const saved = (U.row(db).payload.state.loadingRecords || []).find(x => x.kind === 'transfer');
     check('X1 it reaches the cloud', !!saved && saved.fromBarge === 'FNSA 10', saved);
     const v = await A.page.evaluate(async () => {
@@ -149,7 +150,7 @@ function seed(loadings, extra) {
         span: (new Date(moved.endAt) - new Date(moved.startAt)) / 3600000 };
     });
     check('X3 supplies first: the vessels on FNSA 10 and FNSA 11 are supplied at their ETA, inside the transfer\'s planned window', p.out.length === 2 && p.out.every(x => x.atEta), p);
-    check('X3 …and the transfer moves after both supplies (ETC + contingency + travel), same length; the start asked for is kept', p.afterSupplies && p.span === 11 && p.reqSaved === p.req && p.start !== p.req, p);
+    check('X3 …and the transfer moves after both supplies (ETC + contingency + travel), 7h 45m long (1,500 ÷ 400 + 4h ops); the start asked for is kept', p.afterSupplies && p.span === 7.75 && p.reqSaved === p.req && p.start !== p.req, p);
     check('X3 both barges\' timelines (Availability Check / Free Windows / conflicts) carry the transfer; not listed as Unavailable blocks', p.tl10 === 1 && p.tl11 === 1 && p.blocksList === 0, p);
     check('X3 Free Windows shows the transfer (at its new time) as busy and offers no free window overlapping it, on either barge', p.fwInside.every(x => !x.freeInside && x.busy), p.fwInside);
     const w = await A.page.evaluate(async () => {
@@ -213,7 +214,7 @@ function seed(loadings, extra) {
       const r2 = _loadingRecords.find(x => x.id === 'x1');
       return { r1: [r1.qty, r1.estimatedHours, r1.kind], r2: { kind: r2.kind, from: r2.fromBarge, hose: r2.hoseHours, terminal: r2.terminal, est: r2.estimatedHours }, btn: document.getElementById('loading-submit-btn-label').textContent };
     });
-    check('X5 updating the quantity recomputes the window (3,000 ÷ 300 + 6 = 16h)', u.r1[0] === 3000 && u.r1[1] === 16 && u.r1[2] === 'transfer', u);
+    check('X5 updating the quantity recomputes the window (3,000 ÷ 400 + 4 = 11h 30m)', u.r1[0] === 3000 && u.r1[1] === 11.5 && u.r1[2] === 'transfer', u);
     check('X5 switching it back to a terminal loading drops kind / from barge / hose and uses the terminal rate', u.r2.kind === undefined && u.r2.from === undefined && u.r2.hose === undefined && u.r2.terminal === 'VOPAK' && u.r2.est === 16, u);
   });
 
@@ -234,7 +235,7 @@ function seed(loadings, extra) {
       const r = _loadingRecords.find(x => x.kind === 'transfer' && x.fromBarge === 'FNSA 11');
       return r && { est: r.estimatedHours, grade: r.grade, cal: [...document.querySelectorAll('.cal-ticket-transfer')].map(t => t.textContent.replace(/\s+/g, ' ')).join(' | ') };
     });
-    check('X6 another device gets the transfer (LSMGO 200 ÷ 100 + 6 = 8h) and shows it orange on its calendar', b && b.est === 8 && b.grade === 'LSMGO' && /FNSA 11 → FNSA 10/.test(b.cal), b);
+    check('X6 another device gets the transfer (LSMGO 200 ÷ 100 + 4 = 6h) and shows it orange on its calendar', b && b.est === 6 && b.grade === 'LSMGO' && /FNSA 11 → FNSA 10/.test(b.cal), b);
     const m = await A.page.evaluate(() => {
       const base = { id: 'x1', kind: 'transfer', fromBarge: 'FNSA 11', barge: 'FNSA 10', grade: 'VLSFO', qty: 1000, startAt: '2026-12-01T08:00:00.000Z', endAt: '2026-12-01T18:00:00.000Z', preOpsHours: 0, postOpsHours: 0, pumpHours: 4, hoseHours: 6, estimatedHours: 10, endOverridden: false };
       const L = Object.assign({}, base, { qty: 2000, pumpHours: 8, estimatedHours: 14, endAt: '2026-12-01T22:00:00.000Z' });
@@ -243,7 +244,7 @@ function seed(loadings, extra) {
       const out = _mergeLoadingDerived(merged, { state: { loadingRecords: [L] } }, { state: { loadingRecords: [R] } }).state.loadingRecords[0];
       return { pump: out.pumpHours, est: out.estimatedHours, end: out.endAt };
     });
-    check('X6 merging a quantity change with a start change recomputes with the GIVING barge\'s rate (2,000 ÷ 250 + 6 = 14h)', m.pump === 8 && m.est === 14 && m.end === '2026-12-02T00:00:00.000Z', m);
+    check('X6 merging a quantity change with a start change recomputes with the transfer rate (2,000 ÷ 400 + the record\'s 6h = 11h)', m.pump === 5 && m.est === 11 && m.end === '2026-12-01T21:00:00.000Z', m);
     const x = await A.page.evaluate(() => {
       showPage('loading'); const row = [...document.querySelectorAll('#loading-list .ld-row-transfer')].find(r => /self|img/.test(r.textContent));
       showPage('schedule'); calculate();

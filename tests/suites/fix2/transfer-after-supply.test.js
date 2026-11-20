@@ -11,6 +11,8 @@
    • one already under way still holds the vessels back
    • adding / editing a transfer places it at once against the current schedule; the edit form
      opens with the start typed; once the supply is gone it goes back to the start typed
+   • a transfer is qty ÷ 400 MT/h (VLSFO) + 4h ops: 4,400 MT = 15h fits the 16h gap after HAYAT
+     (a record saved with the old 6h / 300 MT/h figures is brought up to date)
    • the barge that DISCHARGES loads after the transfer (it needs the room): its loading does not
      hold the transfer back, it moves to right after it (start typed kept, back once the transfer
      is gone); a loading of the barge that RECEIVES stays put and the transfer waits for it
@@ -37,7 +39,7 @@ const BARGES = [
   { id: 2, name: 'FNSA 11', vrob: 3000, mrob: 400, vcap: 8000, mcap: 1000, vbuf: 200, mbuf: 50, vtph: 250, mtph: 100, vrfr: 750, mrfr: 275 },
 ];
 const vessel = (nomUid, name, h, qty, bargeId) => ({ nomUid, name, imo: '', area: 'FUJ-A', type: 'VLSFO', qty, mgo: 0, spec: 'ISO 8217:2010', agent: 'AG', manifold: 'VESSEL MANIFOLD', remarks: '', lc: '', eta: eta(h), paq: 'no', bargeId: String(bargeId), refuelChk: false, rfv: 0, rfm: 0, rfvr: 750, rfmr: 275 });
-// 1,500 MT at FNSA 10's 300 MT/h = 5h + 6h hose-up = 11h
+// 1,500 MT VLSFO at the transfer rate 400 MT/h = 3h 45m + 4h ops = 7h 45m (saved with the old 11h: brought up to date)
 const xfer = (id, s, extra) => Object.assign({ id, kind: 'transfer', fromBarge: 'FNSA 10', barge: 'FNSA 11', terminal: '', grade: 'VLSFO', qty: 1500, startAt: iso(s), endAt: iso(s + 11), preOpsHours: 0, pumpHours: 5, postOpsHours: 0, hoseHours: 6, estimatedHours: 11, endOverridden: false, surveyor: '', notes: '', updatedAt: NOW }, extra || {});
 function seed(vessels, loadings) {
   const s = U.seedPayload({ vessels });
@@ -77,7 +79,7 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const g = await generate(A.page);
     check('T1 HAYAT is supplied at its ETA on FNSA 11 (not pushed behind the transfer)', g.hayat && g.hayat.barge === 'FNSA 11' && Math.abs(g.hayat.start - at(20)) < 60000, { hayat: g.hayat, eta: at(20) });
     const after = g.hayat.etc + 2 * HR; // + 1h contingency + 1h travel
-    check('T1 the transfer moves to right after HAYAT (ETC + contingency + travel), still 11h long', g.x1 && g.x1.start === after && g.x1.end - g.x1.start === 11 * HR, { x1: g.x1, expected: new Date(after).toISOString() });
+    check('T1 the transfer moves to right after HAYAT (ETC + contingency + travel), 7h 45m long (1,500 ÷ 400 + 4h ops)', g.x1 && g.x1.start === after && g.x1.end - g.x1.start === 7.75 * HR, { x1: g.x1, expected: new Date(after).toISOString() });
     check('T1 the start that was typed is kept on the transfer', g.x1.req === iso(23), g.x1);
     check('T1 FNSA 11\'s timeline reads JIN YU FU TONG, HAYAT, then the transfer', g.tl.length === 3 && /JIN YU FU TONG/.test(g.tl[0]) && /HAYAT/.test(g.tl[1]) && /Barge transfer — FNSA 10 → FNSA 11/.test(g.tl[2]), g.tl);
     check('T1 the transfer card says it was moved after the supplies and what was asked for', g.note.length === 1 && /^Moved after the vessel supplies — asked for /.test(g.note[0]), g.note);
@@ -130,13 +132,13 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const ed = await A.page.evaluate(async (id) => {
       editLoadingRecord(id);
       const d = document.getElementById('ld-start-date').value, t = document.getElementById('ld-start-time').value;
-      document.getElementById('ld-qty').value = '1800'; // 6h + 6h hose
+      document.getElementById('ld-qty').value = '1800'; // 4h 30m + 4h ops
       submitLoadingForm(); await _waitForSaveIdle();
       const r = _loadingRecords.find(x => x.id === id);
       return { d, t, start: new Date(r.startAt).getTime(), hrs: (new Date(r.endAt) - new Date(r.startAt)) / 3600000, req: r.reqStartAt };
     }, add.id);
     const typed = new Date(at(22) + 4 * HR);
-    check('T4 Edit opens with the start that was typed (not the moved one); saving keeps it after HAYAT with the new length', ed.t === String(typed.getUTCHours()).padStart(2, '0') + ':' + String(typed.getUTCMinutes()).padStart(2, '0') && ed.start === after && ed.hrs === 12 && ed.req === iso(22), ed);
+    check('T4 Edit opens with the start that was typed (not the moved one); saving keeps it after HAYAT with the new length', ed.t === String(typed.getUTCHours()).padStart(2, '0') + ':' + String(typed.getUTCMinutes()).padStart(2, '0') && ed.start === after && ed.hrs === 8.5 && ed.req === iso(22), ed);
     // HAYAT now comes two days later: the transfer goes back to the start typed
     const back = await A.page.evaluate(async ([id, etaLate]) => {
       showPage('schedule');
@@ -169,7 +171,7 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const g = await generate(A.page);
     const l = await recAt(A.page, 'l10');
     const xStart = g.hayat.etc + 2 * HR;
-    check('T6 the transfer goes right after HAYAT — FNSA 10\'s loading does not hold it back', g.x1.start === xStart && g.x1.end === xStart + 11 * HR, { x1: g.x1, expected: new Date(xStart).toISOString() });
+    check('T6 the transfer goes right after HAYAT — FNSA 10\'s loading does not hold it back', g.x1.start === xStart && g.x1.end === xStart + 7.75 * HR, { x1: g.x1, expected: new Date(xStart).toISOString() });
     check('T6 FNSA 10\'s loading moves to right after the transfer (+ travel), same length; the start typed is kept', l.start === g.x1.end + HR && l.end - l.start === 12 * HR && l.req === iso(34), { l, x1end: g.x1.end });
     check('T6 the loading says it was moved after the barge transfer; a message says so', /^Moved after the barge transfer — asked for /.test(l.note) && g.toasts.some(t => /Transfer first: Loading on FNSA 10 moved to/.test(t)), { note: l.note, toasts: g.toasts });
     const cloud = (U.row(db).payload.state.loadingRecords || []).find(r => r.id === 'l10');
@@ -209,6 +211,20 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     }, new Date(g.x1.start + HR).toISOString());
     const typedLocal = new Date(g.x1.start + HR + 4 * HR);
     check('T8 a loading typed on FNSA 10 inside the transfer is placed after it at once (no warning); Edit opens with the start typed', r.start === g.x1.end + HR && r.req === new Date(g.x1.start + HR).toISOString() && r.confirms === 0 && r.typed === String(typedLocal.getUTCHours()).padStart(2, '0') + ':' + String(typedLocal.getUTCMinutes()).padStart(2, '0'), r);
+  });
+
+  await scenario('T9 4,400 MT fits the gap after HAYAT', async (openT) => {
+    // HAYAT on FNSA 11 ends +29h (+ 1h contingency + 1h travel = +31h); HUA CHUANG 66 comes at +48h
+    // (+ 1h travel before it): a 16h gap. 4,400 MT saved with the old figures (÷ 300 + 6h = 20h 40m)
+    // would not fit; at 400 MT/h + 4h ops = 15h it does.
+    const big = xfer('x1', 23, { qty: 4400, pumpHours: 4400 / 300, hoseHours: 6, estimatedHours: 4400 / 300 + 6, endAt: iso(23 + 4400 / 300 + 6) });
+    const db = H.createDb({ workspace: seed(SHIPS().concat([vessel('n3', 'HUA CHUANG 66', 48, 150, 2)]), [big]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const r = await A.page.evaluate(() => { const r = _loadingRecords.find(x => x.id === 'x1'); return { pump: r.pumpHours, hose: r.hoseHours, est: r.estimatedHours }; });
+    const hua = await A.page.evaluate(() => { const j = _lastSched.find(x => x.name === 'HUA CHUANG 66'); return new Date(j.bargeStart).getTime(); });
+    check('T9 the transfer is 15h now (11h at 400 MT/h + 4h ops) and goes right after HAYAT, before HUA CHUANG 66', g.x1.start === g.hayat.etc + 2 * HR && g.x1.end - g.x1.start === 15 * HR && r.pump === 11 && r.hose === 4 && r.est === 15, { x1: g.x1, r, hayatEtc: g.hayat.etc });
+    check('T9 HUA CHUANG 66 is still supplied at its ETA', Math.abs(hua - at(48)) < 60000, { hua, eta: at(48) });
   });
 
   await browser.close();
