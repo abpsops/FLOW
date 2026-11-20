@@ -130,9 +130,10 @@ function _mergeLoadingDerived(merged, ld, rd) {
     const q = Number(m.qty) || 0;
     let rate, total, pump;
     if (m.kind === 'transfer') {
-      // A barge transfer pumps at the giving barge's rate, then hose-up.
+      // A barge transfer pumps at the transfer rate (VLSFO 400 MT/h, LSMGO the
+      // giving barge's MGO rate), then its pre / post ops hours.
       const fb = (merged.state.barges || []).find(function(b) { return b && b.name === m.fromBarge; });
-      rate = Number(fb && (m.grade === 'LSMGO' ? fb.mtph : fb.vtph)) || 0;
+      rate = m.grade === 'LSMGO' ? (Number(fb && fb.mtph) || 0) : (typeof XFER_RATE_VLSFO !== 'undefined' ? XFER_RATE_VLSFO : Number(fb && fb.vtph) || 0);
       if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
       if (!rate) return m;
       pump = q > 0 ? q / rate : 0;
