@@ -224,6 +224,8 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const r = await A.page.evaluate(() => { const r = _loadingRecords.find(x => x.id === 'x1'); return { pump: r.pumpHours, hose: r.hoseHours, est: r.estimatedHours }; });
     const hua = await A.page.evaluate(() => { const j = _lastSched.find(x => x.name === 'HUA CHUANG 66'); return new Date(j.bargeStart).getTime(); });
     check('T9 the transfer is 15h now (11h at 400 MT/h + 4h ops) and goes right after HAYAT, before HUA CHUANG 66', g.x1.start === g.hayat.etc + 2 * HR && g.x1.end - g.x1.start === 15 * HR && r.pump === 11 && r.hose === 4 && r.est === 15, { x1: g.x1, r, hayatEtc: g.hayat.etc });
+    const dur = await A.page.evaluate(() => [...document.querySelectorAll('#tl-2 .tli-transfer .tmi-xfer-dur')].map(e => e.textContent.replace(/\s+/g, ' ').trim()));
+    check('T9 the transfer card shows its duration: 15h (11h pumping at 400 MT/h + 4h ops)', dur.length === 1 && dur[0] === 'Duration15h (11h pumping at 400 MT/h + 4h ops)', dur);
     check('T9 HUA CHUANG 66 is still supplied at its ETA', Math.abs(hua - at(48)) < 60000, { hua, eta: at(48) });
   });
 
