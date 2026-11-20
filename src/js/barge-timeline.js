@@ -242,7 +242,19 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
       return;
     }
     if (op.start >= lookEnd) return;
-    if (op.kind === 'block') items.push({ kind: 'block', start: op.start, end: op.etc, busyEnd: op.etc, label: 'Unavailable — ' + (op.reason || 'blocked'), reason: op.reason || '', blockId: op.blockId });
+    if (op.kind === 'block') {
+      var bi = { kind: 'block', start: op.start, end: op.etc, busyEnd: op.etc, label: 'Unavailable — ' + (op.reason || 'blocked'), reason: op.reason || '', blockId: op.blockId };
+      // A barge transfer moves stock: the receiving barge gets it at the end
+      // (like a Loading), the discharging barge gives it at the start (like
+      // a supply). Both ROBs are still set by hand once it is Done.
+      var xr = op.transferId ? (_loadingRecords || []).find(function(r) { return r && r.id === op.transferId; }) : null;
+      if (xr && Number(xr.qty) > 0) {
+        bi.transferId = xr.id; bi.grade = xr.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'; bi.qty = Number(xr.qty) || 0;
+        if (_resolveRecordBargeName(xr) === bargeName) { bi.xferIn = true; bi.peer = xr.fromBarge || ''; }
+        else if (xr.fromBarge === bargeName) { bi.xferOut = true; bi.peer = _resolveRecordBargeName(xr); }
+      }
+      items.push(bi);
+    }
     else items.push({ kind: 'vessel', start: op.start, end: op.etc, busyEnd: _opBusyEnd(op), label: 'Vessel — ' + op.vessel, vessel: op.vessel, nomUid: op.nomUid, sno: op.sno, nomV: qV(op), nomM: qM(op) });
   });
   // A loading whose window has passed but that nobody marked Completed: the
@@ -284,10 +296,12 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   items.sort(function(a, b) { return (a.start - b.start) || (a.end - b.end); });
 
   // Vessel supply deducts (at its start — conservative), Loading tops up
-  // (capped at tank capacity) at its end.
+  // (capped at tank capacity) at its end; a barge transfer does both — out of
+  // the discharging barge at its start, into the receiving one at its end.
   function apply(it, s) {
     if (it.kind === 'vessel') { s.v = Math.max(0, s.v - it.nomV); s.m = Math.max(0, s.m - it.nomM); }
-    else if (it.kind === 'loading') {
+    else if (it.xferOut) { if (it.grade === 'LSMGO') s.m = Math.max(0, s.m - it.qty); else s.v = Math.max(0, s.v - it.qty); }
+    else if (it.kind === 'loading' || it.xferIn) {
       if (it.grade === 'LSMGO') s.m = mcap ? Math.min(mcap, s.m + it.qty) : s.m + it.qty;
       else s.v = vcap ? Math.min(vcap, s.v + it.qty) : s.v + it.qty;
     }
@@ -298,7 +312,7 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     var s = { v: v, m: m }, minV = v, minM = m, stopV = false, stopM = false;
     for (var k = idx; k < items.length && !(stopV && stopM); k++) {
       var it = items[k];
-      if (it.kind === 'loading') { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
+      if (it.kind === 'loading' || it.xferIn) { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
       apply(it, s);
       if (!stopV) minV = Math.min(minV, s.v);
       if (!stopM) minM = Math.min(minM, s.m);

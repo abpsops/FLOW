@@ -55,7 +55,8 @@ function updateLoadingConfig() {
 /* ── Barge transfers (self cargo discharge, barge to barge) ──
    A record with kind:'transfer': fromBarge discharges `qty` of `grade` into
    barge. It lives with the loadings (same list, calendar, sync) but is not a
-   loading: it adds no stock in the forecast (both ROBs are updated by hand),
+   loading: in the stock forecast it counts as loaded on the receiving barge at its
+   end and as given by the discharging barge at its start (both ROBs are set by hand once Done),
    links to no deal, and has no BL. Both barges are busy for its window: it
    counts as an Unavailable block for each of them (planner, Availability
    Check, Free Windows, conflict warnings — see _transferBlocksForBarge).
