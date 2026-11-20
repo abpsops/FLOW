@@ -158,7 +158,7 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
     proj.apply(it, s);
     // Stock moves at a job's start and a loading's end (an overlap/conflict
     // can't make the line run backwards in time).
-    var t = it.kind === 'loading' ? it.end : it.start;
+    var t = (it.kind === 'loading' || it.xferIn) ? it.end : it.start;
     if (t < lastT) t = lastT;
     if (t > end) t = end;
     lastT = t;
@@ -166,6 +166,7 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
       start: it.start, end: it.end, v: s.v, m: s.m, dv: s.v - before.v, dm: s.m - before.m, beforeV: before.v, beforeM: before.m };
     if (it.kind === 'vessel') { ev.vessel = it.vessel; ev.nomUid = it.nomUid; ev.nomV = it.nomV; ev.nomM = it.nomM; }
     if (it.kind === 'loading') { ev.grade = it.grade; ev.qty = it.qty; }
+    if (it.xferIn || it.xferOut) { ev.xfer = it.xferIn ? 'in' : 'out'; ev.peer = it.peer; ev.grade = it.grade; ev.qty = it.qty; }
     events.push(ev);
   });
   var series = {};
@@ -196,7 +197,8 @@ function _rlAnalyse(b, proj, now, end, liveROBs) {
     var steps = [];
     proj.items.forEach(function(it, idx) {
       if (it.kind === 'vessel' && it[gi.nom] > 0) steps.push({ t: it.start, kind: 'vessel', q: it[gi.nom], it: it, idx: idx });
-      else if (it.kind === 'loading' && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
+      else if ((it.kind === 'loading' || it.xferIn) && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
+      else if (it.xferOut && it.grade === gi.g) steps.push({ t: it.start, kind: 'xferout', q: it.qty, it: it, idx: idx });
     });
     return { gi: gi, buf: proj[gi.buf], cap: proj[gi.cap], steps: steps, hyps: [], lastIdx: -1, done: false };
   });
@@ -211,6 +213,7 @@ function _rlAnalyse(b, proj, now, end, liveROBs) {
     var run = proj.start[g.gi.k], seq = merged(g);
     for (var i = 0; i < seq.length; i++) {
       var st = seq[i];
+      if (st.kind === 'xferout') { run = Math.max(0, run) - st.q; continue; } // given to another barge
       if (st.kind !== 'vessel') { run = add(g, Math.max(0, run), st.q); continue; }
       var before = Math.max(0, run);
       run = before - st.q;
@@ -224,12 +227,13 @@ function _rlAnalyse(b, proj, now, end, liveROBs) {
   function sizeAt(g, T) {
     var seq = merged(g), run = proj.start[g.gi.k], i = 0;
     for (; i < seq.length && seq[i].t < T; i++) {
-      run = seq[i].kind === 'vessel' ? Math.max(0, run) - seq[i].q : add(g, Math.max(0, run), seq[i].q);
+      run = (seq[i].kind === 'vessel' || seq[i].kind === 'xferout') ? Math.max(0, run) - seq[i].q : add(g, Math.max(0, run), seq[i].q);
     }
     var stock = Math.max(0, run), low = stock, jobs = 0, until = end, untilWhy = 'horizon';
     for (; i < seq.length; i++) {
       var s2 = seq[i];
       if (s2.t >= end) break;
+      if (s2.kind === 'xferout') { low -= s2.q; continue; }
       if (s2.kind !== 'vessel') { until = s2.t; untilWhy = s2.kind === 'loading' ? 'loading' : 'reload'; break; }
       low -= s2.q; jobs++;
     }
@@ -463,7 +467,12 @@ function _rlChartHtml(fc) {
       tip = 'Loading — ' + e.label + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.qty.toLocaleString() + ' MT ' + e.grade;
       return '<span class="' + cls + ' rl-mk-load" style="left:' + pct(e.end) + '%;border-color:' + col + '" title="' + esc(tip) + '"></span>';
     }
-    tip = 'Unavailable — ' + e.label + ' · ' + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
+    if (e.xfer === 'in') {
+      col = e.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
+      tip = 'Barge transfer from ' + e.peer + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.qty.toLocaleString() + ' MT ' + e.grade;
+      return '<span class="' + cls + ' rl-mk-load rl-mk-xfer" style="left:' + pct(e.end) + '%;border-color:var(--xfer)" title="' + esc(tip) + '"></span>';
+    }
+    tip = (e.xfer === 'out' ? 'Barge transfer to ' + e.peer + ' · −' + e.qty.toLocaleString() + ' MT ' + e.grade + ' · ' : 'Unavailable — ' + e.label + ' · ') + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
     return '<span class="' + cls + ' rl-mk-block" style="left:' + pct(e.start) + '%" title="' + esc(tip) + '"></span>';
   }).join('');
   var rbl = fc.recs.filter(function(r) { return r.reloadBy > fc.now && r.reloadBy < fc.end; }).map(function(r) {
@@ -520,7 +529,7 @@ function rlCompleteLoading(id) {
 }
 function _rlEventListHtml(fc) {
   var rows = fc.events.filter(function(e) { return e.kind !== 'now'; }).map(function(e) {
-    var when = esc(_rlFmt(e.kind === 'overdue' ? e.jobStart : e.kind === 'loading' ? e.end : e.start));
+    var when = esc(_rlFmt(e.kind === 'overdue' ? e.jobStart : (e.kind === 'loading' || e.xfer === 'in') ? e.end : e.start));
     var after = 'VLSFO ' + _rlMT(e.v) + ' · LSMGO ' + _rlMT(e.m);
     if (e.kind === 'vessel' || e.kind === 'overdue') {
       var q = [e.dv ? '−' + _rlMT(-e.dv) + ' VLSFO' : '', e.dm ? '−' + _rlMT(-e.dm) + ' LSMGO' : ''].filter(Boolean).join(', ') || 'no fuel';
@@ -532,6 +541,8 @@ function _rlEventListHtml(fc) {
         (e.counted ? ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is' : ' — ' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' not counted (' + esc(e.why) + ')') +
         ' → ' + esc(after) + _rlDoneBtn(e) + '</li>';
     }
+    if (e.xfer === 'in') return '<li class="rl-xfer">' + when + ' — Barge transfer from ' + esc(e.peer) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
+    if (e.xfer === 'out') return '<li class="rl-xfer">' + when + ' — Barge transfer to ' + esc(e.peer) + ': −' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' (until ' + esc(_rlFmt(e.end)) + ') → ' + esc(after) + '</li>';
     return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
   });
   return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +

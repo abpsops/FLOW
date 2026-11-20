@@ -13,6 +13,8 @@
      opens with the start typed; once the supply is gone it goes back to the start typed
    • a transfer is qty ÷ 400 MT/h (VLSFO) + 4h ops: 4,400 MT = 15h fits the 16h gap after HAYAT
      (a record saved with the old 6h / 300 MT/h figures is brought up to date)
+   • the stock forecast counts it: the receiving barge as loaded at its end, the discharging one
+     gives it at its start (reload advice / Free Windows' available-to-promise follow)
    • the barge that DISCHARGES loads after the transfer (it needs the room): its loading does not
      hold the transfer back, it moves to right after it (start typed kept, back once the transfer
      is gone); a loading of the barge that RECEIVES stays put and the transfer waits for it
@@ -227,6 +229,25 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const dur = await A.page.evaluate(() => [...document.querySelectorAll('#tl-2 .tli-transfer .tmi-xfer-dur')].map(e => e.textContent.replace(/\s+/g, ' ').trim()));
     check('T9 the transfer card shows its duration: 15h (11h pumping at 400 MT/h + 4h ops)', dur.length === 1 && dur[0] === 'Duration15h (11h pumping at 400 MT/h + 4h ops)', dur);
     check('T9 HUA CHUANG 66 is still supplied at its ETA', Math.abs(hua - at(48)) < 60000, { hua, eta: at(48) });
+  });
+
+  await scenario('T10 the transfer counts in the stock forecast', async (openT) => {
+    // FNSA 11: 3,000 MT VLSFO − JIN YU FU TONG 400 − HAYAT 750 = 1,850; GREEN SACHI (+48h) needs 2,000
+    // → short without the transfer; with 1,500 MT from FNSA 10 (after HAYAT) it has enough.
+    const db = H.createDb({ workspace: seed(SHIPS().concat([vessel('n4', 'GREEN SACHI', 48, 2000, 2)]), [xfer('x1', 23)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    const f = await A.page.evaluate(() => {
+      const fc11 = _bargeStockForecast(2, 7 * 24), fc10 = _bargeStockForecast(1, 7 * 24);
+      const x11 = fc11.events.find(e => e.xfer === 'in'), x10 = fc10.events.find(e => e.xfer === 'out');
+      const gs = fc11.events.find(e => e.kind === 'vessel' && e.vessel === 'GREEN SACHI');
+      const list = document.createElement('div'); list.innerHTML = _rlEventListHtml(fc11);
+      return { recs11: fc11.recs.map(r => r.grade), inQ: x11 && x11.dv, afterGs: gs && gs.v, outQ: x10 && x10.dv, v10: x10 && x10.v,
+        line: [...list.querySelectorAll('li.rl-xfer')].map(li => li.textContent) };
+    });
+    check('T10 the receiving barge counts the transfer as loaded at its end: GREEN SACHI is covered, no VLSFO reload asked for', f.inQ === 1500 && f.afterGs === 1350 && !f.recs11.includes('VLSFO'), f);
+    check('T10 the discharging barge gives it at the start: FNSA 10\'s stock goes down by 1,500', f.outQ === -1500 && f.v10 === 4500, f);
+    check('T10 the forecast\'s events list it as a barge transfer', f.line.length === 1 && /Barge transfer from FNSA 10: \+1,500 MT VLSFO/.test(f.line[0]), f.line);
   });
 
   await browser.close();
