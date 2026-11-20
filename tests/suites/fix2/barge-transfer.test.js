@@ -5,7 +5,7 @@
      "FNSA 10 → FNSA 11"), orange entry on BOTH barges' timelines, orange row in the list
    • both barges are busy — but vessel supplies come first: Generate schedule supplies the
      vessels at their ETA and moves the transfer after them (see fix2/transfer-after-supply);
-     Free Windows / Availability see it, a loading on either barge warns (once)
+     Free Windows / Availability see it; a loading on the giving barge waits for it
    • the stock forecast is not changed, no deal link, no BL: Done just completes it (ROB by hand)
    • edit (switch type back), sync to another device, merge recompute with the barge's rate,
      trader view, hostile names stay text, two different barges required
@@ -159,9 +159,10 @@ function seed(loadings, extra) {
       document.getElementById('ld-barge').value = 'FNSA 10'; document.getElementById('ld-terminal').value = 'GPS'; document.getElementById('ld-qty').value = '900';
       document.getElementById('ld-start-date').value = _localDateInputStr(s); document.getElementById('ld-start-time').value = _localTimeInputStr(s);
       window.__confirms = []; addLoadingRecord(); await _waitForSaveIdle();
-      return window.__confirms.slice();
+      const l = _loadingRecords.find(x => x.terminal === 'GPS'), x1 = _loadingRecords.find(x => x.id === 'x1');
+      return { confirms: window.__confirms.slice(), afterX1: new Date(l.startAt).getTime() - new Date(x1.endAt).getTime(), req: l.reqStartAt === s.toISOString(), x1Kept: x1.startAt === rec.startAt, note: _xferMovedNote(l) };
     });
-    check('X3 a loading on the giving barge inside the window warns once, naming the transfer', w.length === 1 && /FNSA 10 is already committed/.test(w[0]) && (w[0].match(/Barge transfer FNSA 10 → FNSA 11/g) || []).length === 1 && !/Barge unavailable/.test(w[0]), w);
+    check('X3 a loading on the giving barge typed inside the window waits for the transfer: moved to its end + travel, the start typed kept, nothing to warn about', w.confirms.length === 0 && w.afterX1 === 3600000 && w.req && w.x1Kept && /^Moved after the barge transfer — asked for /.test(w.note), w);
     const w2 = await A.page.evaluate(async () => {
       const rec = _loadingRecords.find(x => x.id === 'x1'); const s = new Date(new Date(rec.startAt).getTime() + 1 * 3600000);
       const k = document.getElementById('ld-kind'); k.value = 'transfer'; k.dispatchEvent(new Event('change'));

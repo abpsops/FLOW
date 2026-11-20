@@ -152,7 +152,9 @@ function planSchedule(inp) {
    Pure. Vessel supplies have priority: each transfer goes in the first gap
    where BOTH its barges are free for its whole length, at or after the start
    asked for — clear of every supply (ETC + contingency, travel either side),
-   Unavailable block, Loading and earlier transfer on either barge.
+   Unavailable block and earlier transfer on either barge, and every Loading
+   of the barge that RECEIVES (a Loading of the barge that discharges waits
+   for the transfer instead: busyFor marks Loadings kind:'loading').
      transfers [{id, from, to, req: Date, durMs}]  in the order to place them
      sched     the schedule's jobs {bargeLabel, bargeStart, etc, refuelSlot}
      busyFor   name -> [{s: Date, e: Date}] other fixed commitments
@@ -160,20 +162,22 @@ function planSchedule(inp) {
 function placeTransfers(inp) {
   const H = 3600000, tr = (inp.travelHrs || 0) * H, cont = (inp.contHrs || 0) * H;
   const busy = {};
-  const add = (name, s, e) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e }); };
+  const add = (name, s, e, kind) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e, kind: kind || '' }); };
   (inp.sched || []).forEach(j => {
     const s = new Date(j.bargeStart).getTime(), e0 = new Date(j.refuelSlot && j.refuelSlot.rfEnd ? j.refuelSlot.rfEnd : j.etc).getTime();
     if (isFinite(s) && isFinite(e0)) add(j.bargeLabel, s - tr, e0 + cont + tr);
   });
   const names = {};
   (inp.transfers || []).forEach(t => { names[t.from] = 1; names[t.to] = 1; });
-  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr)));
+  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr, x.kind)));
   const out = [];
   (inp.transfers || []).forEach(t => {
     let s = new Date(t.req).getTime();
     const d = Math.max(0, t.durMs || 0);
     for (let guard = 0; guard < 1000; guard++) {
-      const hits = [].concat(busy[t.from] || [], busy[t.to] || []).filter(x => s < x.e && s + d > x.s);
+      // a Loading of the barge that discharges waits for the transfer (it is
+      // moved after it — _xferPlaceAll), so it does not hold the transfer back
+      const hits = [].concat((busy[t.from] || []).filter(x => x.kind !== 'loading'), busy[t.to] || []).filter(x => s < x.e && s + d > x.s);
       if (!hits.length) break;
       s = Math.max.apply(null, hits.map(x => x.e));
     }
