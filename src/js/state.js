@@ -22,7 +22,7 @@ function disconnectSync() {}
    leaves out on purpose when it is cleared (qtyMin…, etaWin, sts, mmsi), saves
    exactly as the card says. A new field goes into its list in the build that
    starts writing it. */
-const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly'];
+const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly', 'dealDate', 'dupOk', 'mergedFrom'];
 // buf: legacy single buffer (read as vbuf/mbuf); _robBakedAt, receivedV/M: retired; _robGuardApplied: applyState's marker.
 const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'email', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
 function _newerBuildFields(def, known) {
@@ -84,7 +84,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id), _cardExtraFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingDeals: _loadingDeals||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };

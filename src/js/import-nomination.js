@@ -429,6 +429,9 @@ function addVessel(def = {}) {
   c.className = 'vcard'; c.id = `vessel-${id}`;
   c.dataset.nomUid = nomUid;
   c._newerFields = _newerBuildFields(def, _VESSEL_KEYS); // saved back unchanged (see _newerBuildFields)
+  // Duplicates page: the cards this one was confirmed to be a separate call from, and the cards merged into it
+  c._dupOk = Array.isArray(def.dupOk) ? def.dupOk.filter(function(x) { return typeof x === 'string' && x; }) : [];
+  c._mergedFrom = Array.isArray(def.mergedFrom) ? _deepClone(def.mergedFrom).filter(_isPlainObj) : [];
   if (sts) c.setAttribute('data-sts', '1');
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
@@ -447,7 +450,7 @@ function addVessel(def = {}) {
     </div>
   </div>
   <div class="g4 mb10 vrow-ids">
-    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record');_trImoSuggest(${id},true)},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
+    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record');_trImoSuggest(${id},true)},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div><div class="dup-merged" id="v${id}-merged"></div></div>
     <div class="field vid-field" role="group" aria-labelledby="v${id}-ids-lbl">
       <label id="v${id}-ids-lbl" for="v${id}-imo" title="At least one of the two is required">IMO Number / MMSI <span class="vid-req" aria-hidden="true">*</span><span class="vid-sub"> — at least one</span></label>
       <div class="vid-pair">
@@ -497,7 +500,7 @@ function addVessel(def = {}) {
       </select>
     </div>
   </div>
-  <div class="g2 mb10">
+  <div class="g3 mb10">
     <div class="field">
       <label>PAQ Received <span style="font-weight:400;color:var(--muted)">— Pre-Arrival Questionnaire</span></label>
       <select id="v${id}-paq" onchange="saveSharedState()">
@@ -508,6 +511,10 @@ function addVessel(def = {}) {
     <div class="field">
       <label>Assigned Barge <span style="font-weight:400;color:var(--muted)">— optional</span></label>
       <select id="v${id}-barge" onchange="saveSharedState()"><option value="">Auto (any barge)</option></select>
+    </div>
+    <div class="field">
+      <label for="v${id}-dealdate">Deal Done Date</label>
+      <input type="date" id="v${id}-dealdate" value="${esc(_dealDateYmd(def.dealDate))}" title="The day the deal for this supply was done" onchange="saveSharedState()">
     </div>
   </div>
   <div class="g2 mb10">
@@ -567,6 +574,7 @@ function addVessel(def = {}) {
   tQ(id);
   _qtyHints(id);
   _vidRender(id); // IMO / MMSI state, header badge, look-up links
+  _dupRenderMergedNote(id);
   if (lc || eta) upd(id);
   populateBargeDropdowns();
   // Show the track record immediately for a restored/existing nomination

@@ -102,6 +102,7 @@ function vidInput(id, which) {
   clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 1500);
   _vidSyncAlertsSoon();
   if (typeof _trImoSuggest === 'function') _trImoSuggest(id, false);
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
 }
 // Box left / changed: normalise ("IMO 9321483" → "9321483") and move a misplaced number.
 function vidCommit(id, which) {

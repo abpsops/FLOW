@@ -3388,6 +3388,8 @@ function flowWelcomeGo(pageId) {
        agents not yet in the directory. -->
   <datalist id="agent-directory-list"></datalist>
 
+  <!-- More than one open card for one vessel (nomination-cards.js renderDupBanner) -->
+  <div id="dup-banner" class="dup-banner" role="status" hidden></div>
   <!-- Nominations table (vessels render here) -->
   <div id="vc"></div>
   <button class="btn-add" onclick="addNewVesselNomination()">
@@ -11238,7 +11240,7 @@ function disconnectSync() {}
    leaves out on purpose when it is cleared (qtyMin…, etaWin, sts, mmsi), saves
    exactly as the card says. A new field goes into its list in the build that
    starts writing it. */
-const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly'];
+const _VESSEL_KEYS = ['nomUid', 'name', 'imo', 'mmsi', 'area', 'type', 'qty', 'mgo', 'qtyMin', 'qtyMax', 'mgoMin', 'mgoMax', 'spec', 'agent', 'manifold', 'remarks', 'lc', 'eta', 'etaWin', 'paq', 'bargeId', 'refuelChk', 'rfv', 'rfm', 'rfvr', 'rfmr', 'sts', 'lcOnly', 'dealDate', 'dupOk', 'mergedFrom'];
 // buf: legacy single buffer (read as vbuf/mbuf); _robBakedAt, receivedV/M: retired; _robGuardApplied: applyState's marker.
 const _BARGE_KEYS = ['id', 'name', 'vcap', 'mcap', 'vrob', 'mrob', 'vbuf', 'mbuf', 'vtph', 'mtph', 'vrfr', 'mrfr', 'color', 'email', 'buf', '_robBakedAt', 'receivedV', 'receivedM', '_robGuardApplied'];
 function _newerBuildFields(def, known) {
@@ -11300,7 +11302,7 @@ function captureCurrentState() {
       rfm:  parseFloat(document.getElementById(`v${id}-rfm`)?.value)||0,
       rfvr: parseFloat(document.getElementById(`v${id}-rfvr`)?.value)||750,
       rfmr: parseFloat(document.getElementById(`v${id}-rfmr`)?.value)||275,
-    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
+    }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id), _cardExtraFields(id))); // keys of a newer build first (_newerBuildFields); qtyMin/qtyMax, mgoMin/mgoMax — only for a range; sts — only when ticked; etaWin — only for a time-frame ETA; imo (+ mmsi only when set) — see _cardIdStore
   });
 
   return { barges, vessels, checklist: _checklist, manualROB: _manualROB, calcParams: _calcParams, lastSched: _lastSched||[], checklistRecords: _checklistRecords||{}, agents: _agents||[], archives: _archives||{}, deliveryLog: _deliveryLog||{}, loadingRecords: _loadingRecords||[], loadingDeals: _loadingDeals||[], loadingConfig: _loadingConfig||{}, bargeTrackingReports: _bargeTrackingReports||[], fuelingInitiated: _fuelingInitiated||{}, bargeReloads: _bargeReloads||[], bargeBlocks: _bargeBlocks||[], lastSchedMeta: _lastSchedMeta||null };
@@ -14447,6 +14449,34 @@ function rmV(id) {
       }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
     }
   }
+  _trashVesselCard(id);
+}
+// The card → Trash (restorable), its draft checklist rows dropped, the card
+// removed. opts.mergedInto: merged into another card (Duplicates) — nothing
+// is emailed, and the removal is immediate.
+function _trashVesselCard(id, opts) {
+  const card = document.getElementById(`vessel-${id}`);
+  if (!card) return;
+  const name     = document.getElementById(`v${id}-name`)?.value || '';
+  const imo      = document.getElementById(`v${id}-imo`)?.value || '';
+  const area     = document.getElementById(`v${id}-area`)?.value || 'FUJ-A';
+  const type     = document.getElementById(`v${id}-type`)?.value || 'VLSFO';
+  const qty      = _cardQty(id, 'vlsfo').qty;
+  const mgo      = _cardQty(id, 'mgo').qty;
+  const spec     = document.getElementById(`v${id}-spec`)?.value || '';
+  const agent    = document.getElementById(`v${id}-agent`)?.value || '';
+  const manifold = document.getElementById(`v${id}-manifold`)?.value || '';
+  const lc       = document.getElementById(`v${id}-lc`)?.value || '';
+  const eta      = document.getElementById(`v${id}-eta`)?.value || '';
+  const remarks  = document.getElementById(`v${id}-remarks`)?.value || '';
+  const paq      = document.getElementById(`v${id}-paq`)?.value || 'no';
+  const bargeId  = document.getElementById(`v${id}-barge`)?.value || '';
+  const refuelChk= document.getElementById(`v${id}-refuel-chk`)?.checked || false;
+  const rfv      = parseFloat(document.getElementById(`v${id}-rfv`)?.value) || 0;
+  const rfm      = parseFloat(document.getElementById(`v${id}-rfm`)?.value) || 0;
+  const rfvr     = parseFloat(document.getElementById(`v${id}-rfvr`)?.value) || 750;
+  const rfmr     = parseFloat(document.getElementById(`v${id}-rfmr`)?.value) || 275;
+  const nomUidForCancel = card.dataset.nomUid;
 
   // Move to Trash Bin instead of permanent delete
   const trashEntry = {
@@ -14454,8 +14484,9 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details — and a newer build's fields.
-    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))
+    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id), _cardExtraFields(id))
   };
+  if (opts && opts.mergedInto) { trashEntry.reason = 'merged'; trashEntry.mergedInto = opts.mergedInto; }
   _trashBin.push(trashEntry);
   _saveTrashBin();
 
@@ -14478,6 +14509,7 @@ function rmV(id) {
     Array.from(_rstSelected).forEach(function(uid){ if (!_checklistRecords[uid]) _rstSelected.delete(uid); });
   }
 
+  if (opts && opts.mergedInto) { card.remove(); return; } // the caller saves and re-renders once
   card.style.transition = 'opacity .25s, transform .25s';
   card.style.opacity = '0';
   card.style.transform = 'translateX(20px)';
@@ -14489,6 +14521,7 @@ function rmV(id) {
     showTrashBanner(name);
     if (typeof renderChecklist === 'function') renderChecklist(_lastSched || []);
     if (typeof renderRemainingSupplyTracker === 'function') renderRemainingSupplyTracker();
+    if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
   }, 250);
 }
 
@@ -14539,7 +14572,7 @@ function renderTrashBin() {
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface);border:none;box-shadow:var(--sh-xs);border-radius:8px;margin-bottom:8px;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
         <div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(d.name || '(unnamed vessel)')}</div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px">${fuelLine} · ${esc(d.area)} · Removed: ${esc(trashedTime)}</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">${fuelLine} · ${esc(d.area)} · ${entry.reason === 'merged' ? 'Merged into another card (Duplicates)' : 'Removed'}: ${esc(trashedTime)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button onclick="restoreFromTrash(${idx})" style="padding:6px 14px;background:var(--green-lt);border:1.5px solid var(--green-bd);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--green);font-family:DM Sans,sans-serif">↩ Restore</button>
@@ -14557,6 +14590,7 @@ function restoreFromTrash(idx) {
   addVessel(entry.def);
   renderTrashBin();
   saveSharedState();
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
 }
 
 function permanentDeleteFromTrash(idx) {
@@ -14641,6 +14675,193 @@ function renumberVessels() {
   });
 }
 
+
+/* ─── Deal Done Date (nomination card) ─── a date only ('YYYY-MM-DD'), empty
+   until picked; saved on the vessel as dealDate only when set. */
+function _dealDateYmd(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10), dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? s : ''; // a real day (no 31 Feb)
+}
+// Fields a card keeps beyond its inputs: dealDate, dupOk, mergedFrom — each only when set.
+function _cardExtraFields(id) {
+  const out = {}, card = document.getElementById('vessel-' + id);
+  const dd = _dealDateYmd((document.getElementById('v' + id + '-dealdate') || {}).value);
+  if (dd) out.dealDate = dd;
+  if (card && Array.isArray(card._dupOk) && card._dupOk.length) out.dupOk = card._dupOk.slice();
+  if (card && Array.isArray(card._mergedFrom) && card._mergedFrom.length) out.mergedFrom = _deepClone(card._mergedFrom);
+  return out;
+}
+// The Deal Done Date of a nomination (by nomUid, else by name) — '' when none.
+function _dealDateForNom(nomUid, name) {
+  const cards = Array.prototype.slice.call(document.querySelectorAll('.vcard[id^="vessel-"]'));
+  let c = nomUid ? cards.find(function(x) { return x.dataset.nomUid === nomUid; }) : null;
+  if (!c && name) { const k = _normVesselKey(name); c = cards.find(function(x) { return _normVesselKey((document.getElementById('v' + x.id.replace('vessel-', '') + '-name') || {}).value) === k; }); }
+  return c ? _dealDateYmd((document.getElementById('v' + c.id.replace('vessel-', '') + '-dealdate') || {}).value) : '';
+}
+function _dealDateTxt(ymd) {
+  const s = _dealDateYmd(ymd);
+  if (!s) return '';
+  return new Date(s + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/* ─── Duplicates — more than one open card for one vessel ───
+   Cards are the same vessel when their IMOs match (valid IMO) or their names
+   match as the Track Record matches them ("M/T Hayat" = "HAYAT"). Cancelled
+   nominations do not count. A group stops being listed once its cards are
+   marked as separate calls (each card keeps the others' nomUids in dupOk).
+   Merge (operators): keep one card; the others go to the Trash (restorable,
+   nothing is emailed) and the kept card notes what was merged into it. */
+function _dupCardInfo(card) {
+  const id = card.id.replace('vessel-', '');
+  const g = function(s) { return document.getElementById('v' + id + '-' + s); };
+  const name = ((g('name') || {}).value || '').trim();
+  const ids = _cardIds(id), imoN = _vidNorm(ids.imo);
+  const type = (g('type') || {}).value || 'VLSFO';
+  const def = Object.assign({ type: type, qty: _cardQty(id, 'vlsfo').qty, mgo: _cardQty(id, 'mgo').qty }, _cardQtyRangeFields(id));
+  const qt = function(k) { const t = String(_vesselQtyTxt(def, k)); return /^\d+(\.\d+)?$/.test(t) ? Number(t).toLocaleString('en-US') : t; }; // 1,000
+  const qtyTxt = type === 'BOTH' ? 'VLSFO ' + qt('qty') + ' + MGO ' + qt('mgo') + ' MT'
+    : type === 'MGO' ? 'MGO ' + qt('mgo') + ' MT' : 'VLSFO ' + qt('qty') + ' MT';
+  const area = (g('area') || {}).value || '';
+  const bSel = g('barge');
+  const nomUid = card.dataset.nomUid || '';
+  return { id: id, card: card, nomUid: nomUid, name: name, key: _trVesselKey(name), imo: _imoValid(imoN) ? imoN : '',
+    num: ((card.querySelector('.vnum') || {}).textContent || '').trim(), qtyTxt: qtyTxt,
+    area: (AREA_OPTIONS.find(function(o) { return o.value === area; }) || {}).label || area,
+    eta: ((g('eta') || {}).value || '').trim(), lc: ((g('lc') || {}).value || '').trim(),
+    barge: bSel && bSel.value ? (bSel.options[bSel.selectedIndex] || {}).text || '' : 'Auto',
+    deal: _dealDateTxt((g('dealdate') || {}).value),
+    emailed: !!(nomUid && typeof _nomEmailLog === 'object' && _nomEmailLog[nomUid] && _nomEmailLog[nomUid].emailSent),
+    cancelled: !!(nomUid && typeof _nomCancelEmailLog === 'object' && _nomCancelEmailLog[nomUid] && _nomCancelEmailLog[nomUid].emailSent),
+    dupOk: Array.isArray(card._dupOk) ? card._dupOk : [] };
+}
+function _dupGroups() {
+  const cards = Array.prototype.slice.call(document.querySelectorAll('#vc .vcard[id^="vessel-"]')).map(_dupCardInfo)
+    .filter(function(c) { return c.key && !c.cancelled; });
+  const parent = cards.map(function(_, i) { return i; });
+  const find = function(i) { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+  const join = function(a, b) { parent[find(a)] = find(b); };
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+    if (cards[i].key === cards[j].key || (cards[i].imo && cards[i].imo === cards[j].imo)) join(i, j);
+  }
+  const by = {};
+  cards.forEach(function(c, i) { const r = find(i); (by[r] = by[r] || []).push(c); });
+  const sep = function(a, b) { return a.dupOk.indexOf(b.nomUid) !== -1 || b.dupOk.indexOf(a.nomUid) !== -1; };
+  return Object.keys(by).map(function(k) { return by[k]; }).filter(function(g) {
+    if (g.length < 2) return false;
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) if (!sep(g[i], g[j])) return true;
+    return false; // every pair confirmed as separate calls
+  });
+}
+let _dupTimer = null;
+function _dupRefreshSoon() {
+  clearTimeout(_dupTimer);
+  _dupTimer = setTimeout(function() { _dupTimer = null; try { renderDupBanner(); } catch (e) { console.warn('ABPS: duplicates check failed', e); } }, 300);
+}
+function renderDupBanner() {
+  const el = document.getElementById('dup-banner');
+  const groups = _dupGroups();
+  if (el) {
+    if (!groups.length) { el.hidden = true; el.innerHTML = ''; }
+    else {
+      el.hidden = false;
+      el.innerHTML = '<span class="dup-ico" aria-hidden="true">⚠</span><span><b>' + groups.length + ' vessel' + (groups.length !== 1 ? 's have' : ' has') + ' more than one open nomination card</b> — ' +
+        groups.map(function(g) { return esc(g[0].name) + ' (' + g.length + ')'; }).join(', ') + '</span>' +
+        '<button type="button" class="btn btn-sm dup-review-btn" onclick="openDupModal()">Review duplicates</button>';
+    }
+  }
+  const m = document.getElementById('dup-modal');
+  if (m && m.style.display === 'flex') _dupRenderModal(groups);
+}
+function openDupModal() {
+  let m = document.getElementById('dup-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'dup-modal'; m.className = 'dup-modal';
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-labelledby', 'dup-modal-title');
+    m.addEventListener('click', function(e) { if (e.target === m) closeDupModal(); });
+    document.body.appendChild(m);
+  }
+  m.style.display = 'flex';
+  _dupRenderModal(_dupGroups());
+}
+function closeDupModal() { const m = document.getElementById('dup-modal'); if (m) m.style.display = 'none'; }
+function _dupRenderModal(groups) {
+  const m = document.getElementById('dup-modal');
+  if (!m) return;
+  const op = !(typeof isTrader === 'function' && isTrader());
+  const cell = function(v) { return '<td>' + (v ? esc(v) : '<span class="dup-none">—</span>') + '</td>'; };
+  const body = !groups.length
+    ? '<div class="dup-empty">No duplicates — every vessel has one open nomination card.</div>'
+    : groups.map(function(g, gi) {
+      return '<div class="dup-group" data-dup-group="' + gi + '">' +
+        '<div class="dup-group-hdr"><b>' + esc(g[0].name) + '</b> — ' + g.length + ' open cards</div>' +
+        '<div class="dup-tbl-wrap"><table class="dup-tbl"><thead><tr><th>Card</th><th>Quantity</th><th>Location</th><th>ETA</th><th>Laycan</th><th>Barge</th><th>Deal done</th><th>Nomination email</th>' + (op ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        g.map(function(c) {
+          return '<tr data-nom-uid="' + esc(c.nomUid) + '"><td><b>' + esc(c.num || ('Card ' + c.id)) + '</b><div class="dup-sub">' + esc(c.name) + (c.imo ? ' · IMO ' + esc(c.imo) : '') + '</div></td>' +
+            cell(c.qtyTxt) + cell(c.area) + cell(c.eta) + cell(c.lc) + cell(c.barge) + cell(c.deal) + '<td>' + (c.emailed ? '<span class="dup-sent">Sent ✓</span>' : '<span class="dup-none">Not sent</span>') + '</td>' +
+            (op ? '<td><button type="button" class="btn btn-primary btn-sm dup-keep" onclick="dupKeep(' + JSON.stringify(c.nomUid).replace(/"/g, '&quot;') + ')">Keep this one</button></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>' +
+        (op ? '<div class="dup-actions"><button type="button" class="btn btn-secondary btn-sm dup-sep" onclick="dupSeparate(' + gi + ')">Not duplicates — separate calls</button>' +
+          '<span class="dup-hint">Keep this one: the other card' + (g.length > 2 ? 's go' : ' goes') + ' to the Trash (restore from there); nothing is emailed.</span></div>'
+          : '<div class="dup-hint">Only an operator can merge.</div>') +
+      '</div>';
+    }).join('');
+  m.innerHTML = '<div class="dup-box"><div class="dup-box-hdr"><div id="dup-modal-title" class="dup-title">Duplicate nominations</div>' +
+    '<button type="button" class="dup-x" onclick="closeDupModal()" aria-label="Close">✕</button></div>' +
+    '<div class="dup-intro">Each vessel below has more than one open card. Keep the right one — the quantity, location and ETA of the card you keep are what the schedule, calendar, Calling Instructions and emails use.</div>' +
+    body + '</div>';
+}
+function dupKeep(nomUid) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const groups = _dupGroups();
+  const g = groups.find(function(gr) { return gr.some(function(c) { return c.nomUid === nomUid; }); });
+  if (!g) return;
+  const keep = g.find(function(c) { return c.nomUid === nomUid; });
+  const others = g.filter(function(c) { return c !== keep; });
+  if (!confirm('Keep ' + (keep.num || keep.name) + ' — ' + keep.name + ', ' + keep.qtyTxt + ', ' + keep.area + (keep.eta ? ', ETA ' + keep.eta : '') + '?\n\n' +
+    'The other ' + (others.length === 1 ? 'card goes' : others.length + ' cards go') + ' to the Trash (you can restore from there). Nothing is emailed.')) return;
+  const kc = keep.card;
+  kc._mergedFrom = Array.isArray(kc._mergedFrom) ? kc._mergedFrom : [];
+  others.forEach(function(o) {
+    kc._mergedFrom.push({ at: new Date().toISOString(), nomUid: o.nomUid, name: o.name, qty: o.qtyTxt, area: o.area, eta: o.eta });
+    _trashVesselCard(o.id, { mergedInto: keep.nomUid });
+  });
+  renumberVessels();
+  _dupRenderMergedNote(keep.id);
+  saveSharedState();
+  renderTrashBin();
+  if (typeof renderChecklist === 'function') renderChecklist(_lastSched || []);
+  if (typeof renderRemainingSupplyTracker === 'function') renderRemainingSupplyTracker();
+  renderDupBanner();
+  if (typeof _trSyncAlertsSoon === 'function') _trSyncAlertsSoon();
+  if (typeof showToast === 'function') showToast(keep.name + ': kept ' + (keep.num || 'one card') + '; ' + others.length + ' other card' + (others.length !== 1 ? 's' : '') + ' moved to the Trash. Generate Schedule to update the calendar.', 'success', 8000);
+}
+function dupSeparate(gi) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const g = _dupGroups()[gi];
+  if (!g) return;
+  g.forEach(function(c) {
+    const set = Array.isArray(c.card._dupOk) ? c.card._dupOk.slice() : [];
+    g.forEach(function(o) { if (o !== c && o.nomUid && set.indexOf(o.nomUid) === -1) set.push(o.nomUid); });
+    c.card._dupOk = set;
+  });
+  saveSharedState();
+  renderDupBanner();
+  if (typeof showToast === 'function') showToast(g[0].name + ': marked as separate calls — not listed as duplicates any more.', 'success');
+}
+// "Merged with: HAYAT · VLSFO 750 MT · FUJ-A · ETA 21 Nov 2026 19:00 (24 Nov 10:15)"
+function _dupRenderMergedNote(id) {
+  const el = document.getElementById('v' + id + '-merged'), card = document.getElementById('vessel-' + id);
+  if (!el || !card) return;
+  const list = Array.isArray(card._mergedFrom) ? card._mergedFrom : [];
+  el.innerHTML = list.length ? list.map(function(x) {
+    const at = new Date(x.at);
+    return '<div class="dup-merged-line">Merged with: ' + esc([x.name, x.qty, x.area, x.eta ? 'ETA ' + x.eta : ''].filter(Boolean).join(' · ')) +
+      (isNaN(at.getTime()) ? '' : ' <span class="dup-merged-at">(' + esc(fmt24(at)) + ')</span>') + '</div>';
+  }).join('') : '';
+}
 /* ─── VESSEL IDENTIFIERS on the nomination card (rules: see _vidNorm) ───
    _vidRender(id): box states (red = invalid, amber = neither box holds a
    valid ID), the message under the pair, the header badge ("IMO ✓",
@@ -14745,6 +14966,7 @@ function vidInput(id, which) {
   clearTimeout(upd._t); upd._t = setTimeout(saveSharedState, 1500);
   _vidSyncAlertsSoon();
   if (typeof _trImoSuggest === 'function') _trImoSuggest(id, false);
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
 }
 // Box left / changed: normalise ("IMO 9321483" → "9321483") and move a misplaced number.
 function vidCommit(id, which) {
@@ -15984,6 +16206,9 @@ function addVessel(def = {}) {
   c.className = 'vcard'; c.id = `vessel-${id}`;
   c.dataset.nomUid = nomUid;
   c._newerFields = _newerBuildFields(def, _VESSEL_KEYS); // saved back unchanged (see _newerBuildFields)
+  // Duplicates page: the cards this one was confirmed to be a separate call from, and the cards merged into it
+  c._dupOk = Array.isArray(def.dupOk) ? def.dupOk.filter(function(x) { return typeof x === 'string' && x; }) : [];
+  c._mergedFrom = Array.isArray(def.mergedFrom) ? _deepClone(def.mergedFrom).filter(_isPlainObj) : [];
   if (sts) c.setAttribute('data-sts', '1');
   // Every field value below is user/sync data — esc() it (see esc() header).
   c.innerHTML = `
@@ -16002,7 +16227,7 @@ function addVessel(def = {}) {
     </div>
   </div>
   <div class="g4 mb10 vrow-ids">
-    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record');_trImoSuggest(${id},true)},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div></div>
+    <div class="field vname-field"><label>Vessel Name</label><input type="text" id="v${id}-name" value="${esc(name)}" oninput="clearTimeout(upd._t);upd._t=setTimeout(saveSharedState,1500);clearTimeout(window._trBanner${id});window._trBanner${id}=setTimeout(function(){renderVesselTrackRecordBanner('v${id}-name','v${id}-track-record');_trImoSuggest(${id},true)},400);_vidRender(${id});_vidSyncAlertsSoon();_trSyncAlertsSoon()"><div id="v${id}-track-record"></div><div class="dup-merged" id="v${id}-merged"></div></div>
     <div class="field vid-field" role="group" aria-labelledby="v${id}-ids-lbl">
       <label id="v${id}-ids-lbl" for="v${id}-imo" title="At least one of the two is required">IMO Number / MMSI <span class="vid-req" aria-hidden="true">*</span><span class="vid-sub"> — at least one</span></label>
       <div class="vid-pair">
@@ -16052,7 +16277,7 @@ function addVessel(def = {}) {
       </select>
     </div>
   </div>
-  <div class="g2 mb10">
+  <div class="g3 mb10">
     <div class="field">
       <label>PAQ Received <span style="font-weight:400;color:var(--muted)">— Pre-Arrival Questionnaire</span></label>
       <select id="v${id}-paq" onchange="saveSharedState()">
@@ -16063,6 +16288,10 @@ function addVessel(def = {}) {
     <div class="field">
       <label>Assigned Barge <span style="font-weight:400;color:var(--muted)">— optional</span></label>
       <select id="v${id}-barge" onchange="saveSharedState()"><option value="">Auto (any barge)</option></select>
+    </div>
+    <div class="field">
+      <label for="v${id}-dealdate">Deal Done Date</label>
+      <input type="date" id="v${id}-dealdate" value="${esc(_dealDateYmd(def.dealDate))}" title="The day the deal for this supply was done" onchange="saveSharedState()">
     </div>
   </div>
   <div class="g2 mb10">
@@ -16122,6 +16351,7 @@ function addVessel(def = {}) {
   tQ(id);
   _qtyHints(id);
   _vidRender(id); // IMO / MMSI state, header badge, look-up links
+  _dupRenderMergedNote(id);
   if (lc || eta) upd(id);
   populateBargeDropdowns();
   // Show the track record immediately for a restored/existing nomination
@@ -22314,6 +22544,7 @@ function _trGoTo(cid) {
 // The bell follows vessel names typed / imported (after its first pass at login).
 let _trAlertTimer = null, _trAlertSig = null;
 function _trSyncAlertsSoon() {
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon(); // names / IMOs changed: duplicate cards too
   clearTimeout(_trAlertTimer);
   _trAlertTimer = setTimeout(function() {
     _trAlertTimer = null;
@@ -24107,54 +24338,108 @@ async function downloadMonthlyReportPDF(btnEl) {
 }
 
 /* ─── DOWNLOAD EXCEL ─── */
-function downloadExcel() {
+/* ── Voyage Schedule / nominations Excel ── one sheet, laid out and coloured
+   like the app (ExcelJS — the plain XLSX writer drops every colour):
+   navy title and header, frozen header with filters, banded rows with thin
+   borders, quantities right-aligned in the grade colour, laycan status green
+   (on laycan) / amber (delayed), the supply plan in blue, a totals row.
+   Columns keep their old order (S.No. … Sampling / Manifold) and add Barge,
+   IMO and Deal Done Date at the end. */
+async function downloadExcel() {
   if (!_lastSched.length) { alert('Run the schedule first.'); return; }
-  const WB = XLSX.utils.book_new();
-  const S = {
-    hdr:{font:{bold:true,color:{rgb:'FFFFFF'},sz:11},fill:{fgColor:{rgb:'0D1B2A'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}},
-    ok:{font:{color:{rgb:'1E6E3E'},bold:true},fill:{fgColor:{rgb:'E5F5EC'}},alignment:{horizontal:'center'}},
-    dl:{font:{color:{rgb:'C97B00'},bold:true},fill:{fgColor:{rgb:'FFF5E0'}},alignment:{horizontal:'center'}},
-    alrt:{font:{color:{rgb:'BE2B2B'},bold:true},fill:{fgColor:{rgb:'FDEAEA'}},alignment:{horizontal:'center'}},
-    num:{alignment:{horizontal:'center'}},ctr:{alignment:{horizontal:'center'}},
-    def:{alignment:{horizontal:'left',vertical:'center'}},boldL:{font:{bold:true},alignment:{horizontal:'left'}},
-    title:{font:{bold:true,sz:14}},sum:{font:{bold:true,sz:12},fill:{fgColor:{rgb:'F2F5F9'}},alignment:{horizontal:'center'}},
-  };
-  const ws1={}; let r=0;
-  ws1[XLSX.utils.encode_cell({r,c:0})]={v:'FLOW — Voyage Schedule',t:'s',s:S.title};
-  ws1[XLSX.utils.encode_cell({r,c:2})]={v:'Generated: '+fmt24(new Date()),t:'s',s:{font:{sz:10,color:{rgb:'8A9BAC'}},alignment:{horizontal:'right'}}};
-  r+=2;
-  const totV=_lastSched.reduce((a,i)=>a+i.vQ,0),totM=_lastSched.reduce((a,i)=>a+i.mQ,0);
-  const openV=Object.values(_bargeStates).reduce((s,bs)=>s+bs._openingV,0);
-  const openM=Object.values(_bargeStates).reduce((s,bs)=>s+bs._openingM,0);
-  const closV=openV-Math.round(totV),closM=openM-Math.round(totM);
-  ['Total VLSFO Supplied','Total MGO Supplied','Closing VLSFO ROB','Closing MGO ROB'].forEach((lbl,i)=>{
-    ws1[XLSX.utils.encode_cell({r,c:i*2})]={v:lbl,t:'s',s:{font:{sz:10,color:{rgb:'4A6278'}},fill:{fgColor:{rgb:'F2F5F9'}},alignment:{horizontal:'center'}}};
-    ws1[XLSX.utils.encode_cell({r,c:i*2+1})]={v:[totV,totM,closV,closM][i].toLocaleString()+' MT',t:'s',s:S.sum};
-  }); r+=2;
-  const hdrs=['S.No.','Vessel Name','Anchorage','FO (MT)','MGO (MT)','Spec','Nominated Laycan','Actual ETA','Supply Start','ETC','Supply Plan','Laycan Status','Agent','Sampling / Manifold'];
-  hdrs.forEach((h,c)=>{ws1[XLSX.utils.encode_cell({r,c})]={v:h,t:'s',s:S.hdr};}); r++;
-  _lastSched.forEach((item,idx)=>{
-    // "After <vessel>" only makes sense within the same barge's sequence —
-    // classifying across the merged list named another barge's vessel.
-    const sameBarge = _lastSched.filter(x => (x.bargeLabel||'') === (item.bargeLabel||''));
-    const seq  = classifySeq(item, sameBarge.indexOf(item), sameBarge);
-    const plan = seq.label;
-    const areaLabel=AREA_OPTIONS.find(o=>o.value===item.area)?.label||item.area||'—';
-    const nomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, nomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-    [{v:item.sno,t:'n',s:S.num},{v:item.name,t:'s',s:S.boldL},{v:areaLabel,t:'s',s:S.ctr},
-     // a ranged nomination exports as text "500–600" (the planning figure is its top)
-     {v:_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||'—'),t:nomV&&!_nomRange(item,'V')?'n':'s',s:S.num},{v:_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||'—'),t:nomM&&!_nomRange(item,'M')?'n':'s',s:S.num},
-     {v:item.spec||'—',t:'s',s:S.def},{v:fmtLC(item.lc),t:'s',s:S.ctr},{v:_itemEtaTxt(item),t:'s',s:S.ctr},
-     {v:fmt24(item.bargeStart),t:'s',s:S.ctr},{v:fmt24(item.etc),t:'s',s:S.ctr},
-     {v:plan,t:'s',s:{font:{sz:10,color:{rgb:'1A6FD4'}},fill:{fgColor:{rgb:'EBF3FD'}},alignment:{horizontal:'center'}}},
-     {v:item.isDelayed?'Delayed':'On Laycan',t:'s',s:item.isDelayed?S.dl:S.ok},
-     {v:item.agent||'—',t:'s',s:S.def},{v:item.mani||'—',t:'s',s:S.def},
-    ].forEach((cell,c)=>{ws1[XLSX.utils.encode_cell({r,c})]= cell;}); r++;
+  const ExcelJS = await _loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Voyage Schedule', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  const NAVY = 'FF0D1B2A', LINE = 'FFD8E0E8', BAND = 'FFF5F8FB', MUTED = 'FF8A9BAC';
+  const thin = { style: 'thin', color: { argb: LINE } }, border = { top: thin, bottom: thin, left: thin, right: thin };
+  const fill = function(argb) { return { type: 'pattern', pattern: 'solid', fgColor: { argb: argb } }; };
+  const hdrs = ['S.No.', 'Vessel Name', 'Anchorage', 'FO (MT)', 'MGO (MT)', 'Spec', 'Nominated Laycan', 'Actual ETA', 'Supply Start', 'ETC', 'Supply Plan', 'Laycan Status', 'Agent', 'Sampling / Manifold', 'Barge', 'IMO', 'Deal Done Date'];
+  const widths = [7, 26, 30, 12, 12, 15, 20, 24, 20, 20, 22, 14, 22, 20, 12, 11, 16];
+  ws.columns = widths.map(function(w) { return { width: w }; });
+  const last = String.fromCharCode(64 + hdrs.length); // Q
+  let r = 1;
+  ws.mergeCells('A1:' + last + '1');
+  Object.assign(ws.getCell('A1'), { value: 'FLOW — Voyage Schedule & Vessel Nominations' });
+  ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('A1').fill = fill(NAVY);
+  ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+  ws.getRow(1).height = 28;
+  ws.mergeCells('A2:' + last + '2');
+  ws.getCell('A2').value = 'Generated ' + fmt24(new Date());
+  ws.getCell('A2').font = { size: 9, color: { argb: MUTED } };
+  ws.getCell('A2').alignment = { horizontal: 'left', indent: 1 };
+  r = 4;
+  // Summary: four label / value pairs
+  const totV = _lastSched.reduce(function(a, i) { return a + (i.vQ || 0); }, 0), totM = _lastSched.reduce(function(a, i) { return a + (i.mQ || 0); }, 0);
+  const openV = Object.values(_bargeStates || {}).reduce(function(x, bs) { return x + (bs._openingV || 0); }, 0);
+  const openM = Object.values(_bargeStates || {}).reduce(function(x, bs) { return x + (bs._openingM || 0); }, 0);
+  // one line each: label in column B, figure in column C
+  [['Total VLSFO Supplied', Math.round(totV)], ['Total MGO Supplied', Math.round(totM)], ['Closing VLSFO ROB', openV - Math.round(totV)], ['Closing MGO ROB', openM - Math.round(totM)]].forEach(function(p) {
+    const lc = ws.getRow(r).getCell(2), vc = ws.getRow(r).getCell(3);
+    lc.value = p[0]; lc.font = { size: 10, bold: true, color: { argb: 'FF4A6278' } }; lc.fill = fill('FFF2F5F9'); lc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }; lc.border = border;
+    vc.value = p[1]; vc.numFmt = '#,##0" MT"'; vc.font = { bold: true, size: 11, color: { argb: NAVY } }; vc.fill = fill('FFF2F5F9'); vc.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 }; vc.border = border;
+    ws.getRow(r).height = 18; r++;
   });
-  ws1['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:hdrs.length-1}});
-  ws1['!cols']=[{wch:6},{wch:20},{wch:14},{wch:10},{wch:10},{wch:16},{wch:18},{wch:22},{wch:22},{wch:22},{wch:22},{wch:14},{wch:12},{wch:22}];
-  XLSX.utils.book_append_sheet(WB,ws1,'Voyage Schedule');
-  _flowSaveOrShareBlob(new Blob([XLSX.write(WB,{bookType:'xlsx',type:'array'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), `FLOW_Schedule_${fmt24(new Date()).replace(/\s+/g,'-').replace(/:/g,'')}.xlsx`);
+  r += 1;
+  // Header
+  const hr = ws.getRow(r);
+  hdrs.forEach(function(h, c) {
+    const cell = hr.getCell(c + 1);
+    cell.value = h; cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10.5 }; cell.fill = fill(NAVY);
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; cell.border = border;
+  });
+  hr.height = 30;
+  const headRow = r;
+  ws.views = [{ state: 'frozen', ySplit: headRow, xSplit: 2 }];
+  ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: headRow, column: hdrs.length } };
+  r++;
+  const cardIds = {};
+  document.querySelectorAll('.vcard[id^="vessel-"]').forEach(function(c) { const id = c.id.replace('vessel-', ''); cardIds[c.dataset.nomUid || ''] = _cardIds(id); });
+  let sumV = 0, sumM = 0;
+  _lastSched.forEach(function(item, idx) {
+    // "After <vessel>" only makes sense within the same barge's sequence.
+    const sameBarge = _lastSched.filter(function(x) { return (x.bargeLabel || '') === (item.bargeLabel || ''); });
+    const plan = classifySeq(item, sameBarge.indexOf(item), sameBarge).label;
+    const areaLabel = (AREA_OPTIONS.find(function(o) { return o.value === item.area; }) || {}).label || item.area || '—';
+    const nomV = (item.nomVQ !== undefined && item.nomVQ !== null) ? item.nomVQ : item.vQ, nomM = (item.nomMQ !== undefined && item.nomMQ !== null) ? item.nomMQ : item.mQ;
+    sumV += Number(nomV) || 0; sumM += Number(nomM) || 0;
+    const ids = cardIds[item.nomUid || ''] || {};
+    const imo = _vidNorm(ids.imo || '');
+    const deal = _dealDateTxt(_dealDateForNom(item.nomUid, item.name));
+    // a ranged nomination exports as text "500–600" (the planning figure is its top)
+    const q = function(g, n) { return _nomRange(item, g) ? _nomQtyTxt(item, g, n) : (n ? Number(n) : '—'); };
+    const vals = [item.sno, item.name, areaLabel, q('V', nomV), q('M', nomM), item.spec || '—', fmtLC(item.lc), _itemEtaTxt(item),
+      fmt24(item.bargeStart), fmt24(item.etc), plan, item.isDelayed ? 'Delayed' : 'On Laycan', item.agent || '—', item.mani || '—',
+      item.bargeLabel || '—', imo || '—', deal || '—'];
+    const row = ws.getRow(r++);
+    const band = idx % 2 ? fill(BAND) : null;
+    vals.forEach(function(v, c) {
+      const cell = row.getCell(c + 1);
+      cell.value = v; cell.border = border;
+      cell.alignment = { horizontal: [1, 12].indexOf(c) !== -1 ? 'left' : ([3, 4].indexOf(c) !== -1 ? 'right' : 'center'), vertical: 'middle', wrapText: true };
+      if (band) cell.fill = band;
+      if (v === '—') cell.font = { color: { argb: MUTED } };
+    });
+    row.getCell(2).font = { bold: true, color: { argb: NAVY } };
+    [[4, 'FF1A6FD4'], [5, 'FF0E8A5F']].forEach(function(x) { const c = row.getCell(x[0]); if (typeof c.value === 'number') c.numFmt = '#,##0'; if (c.value !== '—') c.font = { bold: true, color: { argb: x[1] } }; });
+    const pc = row.getCell(11); pc.fill = fill('FFEBF3FD'); pc.font = { color: { argb: 'FF1A6FD4' }, size: 10 };
+    const sc = row.getCell(12);
+    sc.fill = fill(item.isDelayed ? 'FFFFF5E0' : 'FFE5F5EC'); sc.font = { bold: true, color: { argb: item.isDelayed ? 'FFC97B00' : 'FF1E6E3E' } };
+  });
+  // Totals
+  const tr = ws.getRow(r);
+  tr.getCell(2).value = 'Total (' + _lastSched.length + ' vessel' + (_lastSched.length !== 1 ? 's' : '') + ')';
+  tr.getCell(4).value = Math.round(sumV); tr.getCell(5).value = Math.round(sumM);
+  for (let c = 1; c <= hdrs.length; c++) {
+    const cell = tr.getCell(c);
+    cell.fill = fill('FFE8EEF5'); cell.border = { top: { style: 'medium', color: { argb: NAVY } }, bottom: thin, left: thin, right: thin };
+    cell.font = { bold: true, color: { argb: NAVY } };
+    cell.alignment = { horizontal: c === 2 ? 'left' : (c === 4 || c === 5 ? 'right' : 'center'), vertical: 'middle' };
+  }
+  tr.getCell(4).numFmt = '#,##0'; tr.getCell(5).numFmt = '#,##0';
+  tr.height = 22;
+  const buf = await wb.xlsx.writeBuffer();
+  await _flowSaveOrShareBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `FLOW_Schedule_${fmt24(new Date()).replace(/\s+/g, '-').replace(/:/g, '')}.xlsx`);
 }
 
 
@@ -28185,6 +28470,35 @@ html[data-skin="harbour"] .vid-msg,html[data-skin="harbour"] .vid-look{font-size
 html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-idbad{border-color:var(--red);background-color:var(--red-lt)}
 .nimp-flag .idbad{background:var(--red-lt);color:var(--red);border-color:var(--red-bd)}
 .nimp-flag .idmiss{background:var(--amber-lt);color:var(--amber);border-color:var(--amber-bd)}
+
+/* Duplicate nominations (nomination-cards.js) */
+.dup-banner{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:10px;background:var(--amber-lt);border:1.5px solid var(--amber-bd);color:var(--amber);font-size:12.5px;line-height:1.45}
+.dup-banner[hidden]{display:none}
+.dup-banner .dup-ico{font-size:15px}
+.dup-banner > span:nth-child(2){flex:1;min-width:200px;color:var(--ink)}
+.dup-banner .dup-review-btn{background:var(--amber);border-color:var(--amber);color:#fff;font-weight:700}
+.dup-modal{position:fixed;inset:0;z-index:10050;display:none;align-items:flex-start;justify-content:center;padding:40px 16px;background:rgba(13,27,42,.45);overflow:auto}
+.dup-box{background:var(--surface);border-radius:14px;box-shadow:0 18px 50px rgba(13,27,42,.3);width:min(1100px,100%);padding:18px 20px}
+.dup-box-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.dup-title{font-size:16px;font-weight:800;color:var(--ink)}
+.dup-x{border:0;background:none;font-size:16px;cursor:pointer;color:var(--sub);padding:4px 8px}
+.dup-intro{font-size:12px;color:var(--sub);margin-bottom:12px}
+.dup-empty{padding:18px;text-align:center;color:var(--green);font-weight:700;background:var(--green-lt);border-radius:10px}
+.dup-group{border:1px solid var(--line, #E3E8EE);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+.dup-group-hdr{font-size:13px;color:var(--ink);margin-bottom:8px}
+.dup-tbl-wrap{overflow-x:auto}
+.dup-tbl{width:100%;border-collapse:collapse;font-size:12px}
+.dup-tbl th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--sub);padding:6px 8px;border-bottom:1px solid var(--line, #E3E8EE);white-space:nowrap}
+.dup-tbl td{padding:7px 8px;border-bottom:1px solid var(--line, #E3E8EE);vertical-align:middle;color:var(--ink)}
+.dup-tbl .dup-sub{font-size:10.5px;color:var(--muted)}
+.dup-none{color:var(--muted)}
+.dup-sent{color:var(--green);font-weight:700}
+.dup-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px}
+.dup-hint{font-size:11px;color:var(--muted)}
+.dup-merged:empty{display:none}
+.dup-merged{margin-top:6px;font-size:11px;color:var(--sub)}
+.dup-merged-line{padding:3px 8px;border-left:3px solid var(--azure);background:var(--azure-lt);border-radius:4px;margin-top:3px}
+.dup-merged-at{color:var(--muted)}
 </style>
 
 <script>
