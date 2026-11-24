@@ -574,7 +574,11 @@ function cancelLoadingEdit() {
 }
 
 function deleteLoadingRecord(id) {
-  if (!confirm('Remove this loading from the schedule?')) return;
+  const rec0 = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  // A completed loading is a lifting counted on its deal (and a done transfer is history):
+  // it is not removed from here — Undo Done first if it really was never done.
+  if (rec0 && rec0.completed) { alert('This one is completed — it counts in the lifted quantity of its deal, so it is not removed here.\n\nIf it was marked Done by mistake, use Undo first.'); return; }
+  if (!confirm('Remove this loading from the schedule?\n\n(It goes to "Removed loadings" at the bottom of this page, where you can restore it.)')) return;
   // Soft-delete (tombstone), not a physical removal from the array. The
   // sync merge in applyState() for loading records is additive-only — it
   // can only ever ADD or UPDATE an entry, it has no way to know "this id

@@ -3613,6 +3613,7 @@ function flowWelcomeGo(pageId) {
     <span class="sec-label">Scheduled &amp; Recent Loadings</span>
   </div>
   <div id="loading-list"></div>
+  <div id="ld-removed"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════════
@@ -9549,7 +9550,11 @@ function cancelLoadingEdit() {
 }
 
 function deleteLoadingRecord(id) {
-  if (!confirm('Remove this loading from the schedule?')) return;
+  const rec0 = (_loadingRecords || []).find(function(r) { return r.id === id; });
+  // A completed loading is a lifting counted on its deal (and a done transfer is history):
+  // it is not removed from here — Undo Done first if it really was never done.
+  if (rec0 && rec0.completed) { alert('This one is completed — it counts in the lifted quantity of its deal, so it is not removed here.\n\nIf it was marked Done by mistake, use Undo first.'); return; }
+  if (!confirm('Remove this loading from the schedule?\n\n(It goes to "Removed loadings" at the bottom of this page, where you can restore it.)')) return;
   // Soft-delete (tombstone), not a physical removal from the array. The
   // sync merge in applyState() for loading records is additive-only — it
   // can only ever ADD or UPDATE an entry, it has no way to know "this id
@@ -10233,9 +10238,7 @@ function renderLoadingList() {
           + '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
           + '</button>'
-          + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
-            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-          + '</button>'
+          // no Remove on a completed loading: it is a lifting counted on its deal (Undo Done first)
         : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="' + (xfer ? 'Mark the transfer as done — removes it from the calendar and timeline; update both barges\' ROB on Barge Fleet' : 'Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline') + '">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
           + '</button>'
@@ -10306,6 +10309,44 @@ function renderLoadingList() {
 
   _refreshLoadingTerminalDatalist();
   _ldRepRefresh();
+  _renderRemovedLoadings();
+}
+
+/* Removed loadings (the last 90 days, newest first) with Restore — a removal
+   is a tombstone, so the record comes back exactly as it was. */
+function _renderRemovedLoadings() {
+  const el = document.getElementById('ld-removed');
+  if (!el) return;
+  const since = Date.now() - 90 * 86400000;
+  const list = (_loadingRecords || []).filter(function(r) { return r && r.deletedAt && Number(r.deletedAt) >= since; })
+    .sort(function(a, b) { return Number(b.deletedAt) - Number(a.deletedAt); }).slice(0, 60);
+  if (!list.length) { el.innerHTML = ''; return; }
+  const op = !(typeof isTrader === 'function' && isTrader());
+  const wasOpen = !!(el.querySelector('details') || {}).open;
+  el.innerHTML = '<details class="ld-removed"' + (wasOpen ? ' open' : '') + '><summary>Removed loadings (' + list.length + ') — restore one put back by mistake</summary>' +
+    list.map(function(r) {
+      const st = new Date(r.startAt);
+      const what = _isTransfer(r) ? 'Barge transfer ' + (r.fromBarge || '') + ' → ' + _resolveRecordBargeName(r) : (r.terminal || 'Terminal') + ' · ' + _resolveRecordBargeName(r);
+      const deal = r.dealId && typeof _dealById === 'function' && _dealById(r.dealId) ? ' · deal ' + _dealLabel(_dealById(r.dealId)) : '';
+      return '<div class="ld-removed-row" data-ld-id="' + esc(r.id) + '">' +
+        '<span class="ld-removed-what"><b>' + esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString() + ' MT</b> · ' + esc(what) + esc(deal) +
+        (r.completed ? ' · <span class="ld-removed-done">Done' + (r.blQty != null ? ', BL ' + esc(Number(r.blQty).toLocaleString()) + ' MT' : '') + '</span>' : '') + '</span>' +
+        '<span class="ld-removed-when">' + (isNaN(st.getTime()) ? '' : esc(fmt24(st))) + ' · removed ' + esc(fmt24(new Date(Number(r.deletedAt)))) + '</span>' +
+        (op ? '<button type="button" class="btn btn-secondary btn-sm" onclick="restoreLoadingRecord(\'' + escJs(r.id) + '\')">↩ Restore</button>' : '') +
+      '</div>';
+    }).join('') + '</details>';
+}
+function restoreLoadingRecord(id) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const idx = (_loadingRecords || []).findIndex(function(r) { return r && r.id === id; });
+  if (idx === -1 || !_loadingRecords[idx].deletedAt) return;
+  const next = Object.assign({}, _loadingRecords[idx], { updatedAt: Date.now() });
+  delete next.deletedAt;
+  _loadingRecords[idx] = next;
+  saveLoadingRecords();
+  renderLoadingList();
+  _refreshLoadingConsumers();
+  if (typeof showToast === 'function') showToast('Restored: ' + (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString() + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
 }
 
 function renderLoadingPage() {
@@ -28499,6 +28540,15 @@ html[data-skin="harbour"] .main .nimp-tbl :is(input,select).nimp-idbad{border-co
 .dup-merged{margin-top:6px;font-size:11px;color:var(--sub)}
 .dup-merged-line{padding:3px 8px;border-left:3px solid var(--azure);background:var(--azure-lt);border-radius:4px;margin-top:3px}
 .dup-merged-at{color:var(--muted)}
+
+/* Removed loadings (deals.js _renderRemovedLoadings) */
+.ld-removed{margin-top:14px;background:var(--surface);border-radius:var(--radius, 10px);box-shadow:var(--sh-xs);padding:10px 14px}
+.ld-removed summary{cursor:pointer;font-size:12px;font-weight:700;color:var(--sub)}
+.ld-removed-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:8px 0;border-top:1px solid var(--line, #E3E8EE);font-size:12px;color:var(--ink)}
+.ld-removed-row:first-of-type{margin-top:8px}
+.ld-removed-what{flex:1;min-width:220px}
+.ld-removed-when{color:var(--muted);font-size:11px}
+.ld-removed-done{color:var(--green);font-weight:700}
 </style>
 
 <script>
