@@ -485,54 +485,108 @@ async function downloadMonthlyReportPDF(btnEl) {
 }
 
 /* ─── DOWNLOAD EXCEL ─── */
-function downloadExcel() {
+/* ── Voyage Schedule / nominations Excel ── one sheet, laid out and coloured
+   like the app (ExcelJS — the plain XLSX writer drops every colour):
+   navy title and header, frozen header with filters, banded rows with thin
+   borders, quantities right-aligned in the grade colour, laycan status green
+   (on laycan) / amber (delayed), the supply plan in blue, a totals row.
+   Columns keep their old order (S.No. … Sampling / Manifold) and add Barge,
+   IMO and Deal Done Date at the end. */
+async function downloadExcel() {
   if (!_lastSched.length) { alert('Run the schedule first.'); return; }
-  const WB = XLSX.utils.book_new();
-  const S = {
-    hdr:{font:{bold:true,color:{rgb:'FFFFFF'},sz:11},fill:{fgColor:{rgb:'0D1B2A'}},alignment:{horizontal:'center',vertical:'center',wrapText:true}},
-    ok:{font:{color:{rgb:'1E6E3E'},bold:true},fill:{fgColor:{rgb:'E5F5EC'}},alignment:{horizontal:'center'}},
-    dl:{font:{color:{rgb:'C97B00'},bold:true},fill:{fgColor:{rgb:'FFF5E0'}},alignment:{horizontal:'center'}},
-    alrt:{font:{color:{rgb:'BE2B2B'},bold:true},fill:{fgColor:{rgb:'FDEAEA'}},alignment:{horizontal:'center'}},
-    num:{alignment:{horizontal:'center'}},ctr:{alignment:{horizontal:'center'}},
-    def:{alignment:{horizontal:'left',vertical:'center'}},boldL:{font:{bold:true},alignment:{horizontal:'left'}},
-    title:{font:{bold:true,sz:14}},sum:{font:{bold:true,sz:12},fill:{fgColor:{rgb:'F2F5F9'}},alignment:{horizontal:'center'}},
-  };
-  const ws1={}; let r=0;
-  ws1[XLSX.utils.encode_cell({r,c:0})]={v:'FLOW — Voyage Schedule',t:'s',s:S.title};
-  ws1[XLSX.utils.encode_cell({r,c:2})]={v:'Generated: '+fmt24(new Date()),t:'s',s:{font:{sz:10,color:{rgb:'8A9BAC'}},alignment:{horizontal:'right'}}};
-  r+=2;
-  const totV=_lastSched.reduce((a,i)=>a+i.vQ,0),totM=_lastSched.reduce((a,i)=>a+i.mQ,0);
-  const openV=Object.values(_bargeStates).reduce((s,bs)=>s+bs._openingV,0);
-  const openM=Object.values(_bargeStates).reduce((s,bs)=>s+bs._openingM,0);
-  const closV=openV-Math.round(totV),closM=openM-Math.round(totM);
-  ['Total VLSFO Supplied','Total MGO Supplied','Closing VLSFO ROB','Closing MGO ROB'].forEach((lbl,i)=>{
-    ws1[XLSX.utils.encode_cell({r,c:i*2})]={v:lbl,t:'s',s:{font:{sz:10,color:{rgb:'4A6278'}},fill:{fgColor:{rgb:'F2F5F9'}},alignment:{horizontal:'center'}}};
-    ws1[XLSX.utils.encode_cell({r,c:i*2+1})]={v:[totV,totM,closV,closM][i].toLocaleString()+' MT',t:'s',s:S.sum};
-  }); r+=2;
-  const hdrs=['S.No.','Vessel Name','Anchorage','FO (MT)','MGO (MT)','Spec','Nominated Laycan','Actual ETA','Supply Start','ETC','Supply Plan','Laycan Status','Agent','Sampling / Manifold'];
-  hdrs.forEach((h,c)=>{ws1[XLSX.utils.encode_cell({r,c})]={v:h,t:'s',s:S.hdr};}); r++;
-  _lastSched.forEach((item,idx)=>{
-    // "After <vessel>" only makes sense within the same barge's sequence —
-    // classifying across the merged list named another barge's vessel.
-    const sameBarge = _lastSched.filter(x => (x.bargeLabel||'') === (item.bargeLabel||''));
-    const seq  = classifySeq(item, sameBarge.indexOf(item), sameBarge);
-    const plan = seq.label;
-    const areaLabel=AREA_OPTIONS.find(o=>o.value===item.area)?.label||item.area||'—';
-    const nomV=(item.nomVQ!==undefined&&item.nomVQ!==null)?item.nomVQ:item.vQ, nomM=(item.nomMQ!==undefined&&item.nomMQ!==null)?item.nomMQ:item.mQ;
-    [{v:item.sno,t:'n',s:S.num},{v:item.name,t:'s',s:S.boldL},{v:areaLabel,t:'s',s:S.ctr},
-     // a ranged nomination exports as text "500–600" (the planning figure is its top)
-     {v:_nomRange(item,'V')?_nomQtyTxt(item,'V',nomV):(nomV||'—'),t:nomV&&!_nomRange(item,'V')?'n':'s',s:S.num},{v:_nomRange(item,'M')?_nomQtyTxt(item,'M',nomM):(nomM||'—'),t:nomM&&!_nomRange(item,'M')?'n':'s',s:S.num},
-     {v:item.spec||'—',t:'s',s:S.def},{v:fmtLC(item.lc),t:'s',s:S.ctr},{v:_itemEtaTxt(item),t:'s',s:S.ctr},
-     {v:fmt24(item.bargeStart),t:'s',s:S.ctr},{v:fmt24(item.etc),t:'s',s:S.ctr},
-     {v:plan,t:'s',s:{font:{sz:10,color:{rgb:'1A6FD4'}},fill:{fgColor:{rgb:'EBF3FD'}},alignment:{horizontal:'center'}}},
-     {v:item.isDelayed?'Delayed':'On Laycan',t:'s',s:item.isDelayed?S.dl:S.ok},
-     {v:item.agent||'—',t:'s',s:S.def},{v:item.mani||'—',t:'s',s:S.def},
-    ].forEach((cell,c)=>{ws1[XLSX.utils.encode_cell({r,c})]= cell;}); r++;
+  const ExcelJS = await _loadExcelJS();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Voyage Schedule', { pageSetup: { orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0, paperSize: 9 } });
+  const NAVY = 'FF0D1B2A', LINE = 'FFD8E0E8', BAND = 'FFF5F8FB', MUTED = 'FF8A9BAC';
+  const thin = { style: 'thin', color: { argb: LINE } }, border = { top: thin, bottom: thin, left: thin, right: thin };
+  const fill = function(argb) { return { type: 'pattern', pattern: 'solid', fgColor: { argb: argb } }; };
+  const hdrs = ['S.No.', 'Vessel Name', 'Anchorage', 'FO (MT)', 'MGO (MT)', 'Spec', 'Nominated Laycan', 'Actual ETA', 'Supply Start', 'ETC', 'Supply Plan', 'Laycan Status', 'Agent', 'Sampling / Manifold', 'Barge', 'IMO', 'Deal Done Date'];
+  const widths = [7, 26, 30, 12, 12, 15, 20, 24, 20, 20, 22, 14, 22, 20, 12, 11, 16];
+  ws.columns = widths.map(function(w) { return { width: w }; });
+  const last = String.fromCharCode(64 + hdrs.length); // Q
+  let r = 1;
+  ws.mergeCells('A1:' + last + '1');
+  Object.assign(ws.getCell('A1'), { value: 'FLOW — Voyage Schedule & Vessel Nominations' });
+  ws.getCell('A1').font = { bold: true, size: 15, color: { argb: 'FFFFFFFF' } };
+  ws.getCell('A1').fill = fill(NAVY);
+  ws.getCell('A1').alignment = { vertical: 'middle', horizontal: 'left', indent: 1 };
+  ws.getRow(1).height = 28;
+  ws.mergeCells('A2:' + last + '2');
+  ws.getCell('A2').value = 'Generated ' + fmt24(new Date());
+  ws.getCell('A2').font = { size: 9, color: { argb: MUTED } };
+  ws.getCell('A2').alignment = { horizontal: 'left', indent: 1 };
+  r = 4;
+  // Summary: four label / value pairs
+  const totV = _lastSched.reduce(function(a, i) { return a + (i.vQ || 0); }, 0), totM = _lastSched.reduce(function(a, i) { return a + (i.mQ || 0); }, 0);
+  const openV = Object.values(_bargeStates || {}).reduce(function(x, bs) { return x + (bs._openingV || 0); }, 0);
+  const openM = Object.values(_bargeStates || {}).reduce(function(x, bs) { return x + (bs._openingM || 0); }, 0);
+  // one line each: label in column B, figure in column C
+  [['Total VLSFO Supplied', Math.round(totV)], ['Total MGO Supplied', Math.round(totM)], ['Closing VLSFO ROB', openV - Math.round(totV)], ['Closing MGO ROB', openM - Math.round(totM)]].forEach(function(p) {
+    const lc = ws.getRow(r).getCell(2), vc = ws.getRow(r).getCell(3);
+    lc.value = p[0]; lc.font = { size: 10, bold: true, color: { argb: 'FF4A6278' } }; lc.fill = fill('FFF2F5F9'); lc.alignment = { horizontal: 'left', vertical: 'middle', indent: 1 }; lc.border = border;
+    vc.value = p[1]; vc.numFmt = '#,##0" MT"'; vc.font = { bold: true, size: 11, color: { argb: NAVY } }; vc.fill = fill('FFF2F5F9'); vc.alignment = { horizontal: 'right', vertical: 'middle', indent: 1 }; vc.border = border;
+    ws.getRow(r).height = 18; r++;
   });
-  ws1['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r,c:hdrs.length-1}});
-  ws1['!cols']=[{wch:6},{wch:20},{wch:14},{wch:10},{wch:10},{wch:16},{wch:18},{wch:22},{wch:22},{wch:22},{wch:22},{wch:14},{wch:12},{wch:22}];
-  XLSX.utils.book_append_sheet(WB,ws1,'Voyage Schedule');
-  _flowSaveOrShareBlob(new Blob([XLSX.write(WB,{bookType:'xlsx',type:'array'})],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}), `FLOW_Schedule_${fmt24(new Date()).replace(/\s+/g,'-').replace(/:/g,'')}.xlsx`);
+  r += 1;
+  // Header
+  const hr = ws.getRow(r);
+  hdrs.forEach(function(h, c) {
+    const cell = hr.getCell(c + 1);
+    cell.value = h; cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 10.5 }; cell.fill = fill(NAVY);
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true }; cell.border = border;
+  });
+  hr.height = 30;
+  const headRow = r;
+  ws.views = [{ state: 'frozen', ySplit: headRow, xSplit: 2 }];
+  ws.autoFilter = { from: { row: headRow, column: 1 }, to: { row: headRow, column: hdrs.length } };
+  r++;
+  const cardIds = {};
+  document.querySelectorAll('.vcard[id^="vessel-"]').forEach(function(c) { const id = c.id.replace('vessel-', ''); cardIds[c.dataset.nomUid || ''] = _cardIds(id); });
+  let sumV = 0, sumM = 0;
+  _lastSched.forEach(function(item, idx) {
+    // "After <vessel>" only makes sense within the same barge's sequence.
+    const sameBarge = _lastSched.filter(function(x) { return (x.bargeLabel || '') === (item.bargeLabel || ''); });
+    const plan = classifySeq(item, sameBarge.indexOf(item), sameBarge).label;
+    const areaLabel = (AREA_OPTIONS.find(function(o) { return o.value === item.area; }) || {}).label || item.area || '—';
+    const nomV = (item.nomVQ !== undefined && item.nomVQ !== null) ? item.nomVQ : item.vQ, nomM = (item.nomMQ !== undefined && item.nomMQ !== null) ? item.nomMQ : item.mQ;
+    sumV += Number(nomV) || 0; sumM += Number(nomM) || 0;
+    const ids = cardIds[item.nomUid || ''] || {};
+    const imo = _vidNorm(ids.imo || '');
+    const deal = _dealDateTxt(_dealDateForNom(item.nomUid, item.name));
+    // a ranged nomination exports as text "500–600" (the planning figure is its top)
+    const q = function(g, n) { return _nomRange(item, g) ? _nomQtyTxt(item, g, n) : (n ? Number(n) : '—'); };
+    const vals = [item.sno, item.name, areaLabel, q('V', nomV), q('M', nomM), item.spec || '—', fmtLC(item.lc), _itemEtaTxt(item),
+      fmt24(item.bargeStart), fmt24(item.etc), plan, item.isDelayed ? 'Delayed' : 'On Laycan', item.agent || '—', item.mani || '—',
+      item.bargeLabel || '—', imo || '—', deal || '—'];
+    const row = ws.getRow(r++);
+    const band = idx % 2 ? fill(BAND) : null;
+    vals.forEach(function(v, c) {
+      const cell = row.getCell(c + 1);
+      cell.value = v; cell.border = border;
+      cell.alignment = { horizontal: [1, 12].indexOf(c) !== -1 ? 'left' : ([3, 4].indexOf(c) !== -1 ? 'right' : 'center'), vertical: 'middle', wrapText: true };
+      if (band) cell.fill = band;
+      if (v === '—') cell.font = { color: { argb: MUTED } };
+    });
+    row.getCell(2).font = { bold: true, color: { argb: NAVY } };
+    [[4, 'FF1A6FD4'], [5, 'FF0E8A5F']].forEach(function(x) { const c = row.getCell(x[0]); if (typeof c.value === 'number') c.numFmt = '#,##0'; if (c.value !== '—') c.font = { bold: true, color: { argb: x[1] } }; });
+    const pc = row.getCell(11); pc.fill = fill('FFEBF3FD'); pc.font = { color: { argb: 'FF1A6FD4' }, size: 10 };
+    const sc = row.getCell(12);
+    sc.fill = fill(item.isDelayed ? 'FFFFF5E0' : 'FFE5F5EC'); sc.font = { bold: true, color: { argb: item.isDelayed ? 'FFC97B00' : 'FF1E6E3E' } };
+  });
+  // Totals
+  const tr = ws.getRow(r);
+  tr.getCell(2).value = 'Total (' + _lastSched.length + ' vessel' + (_lastSched.length !== 1 ? 's' : '') + ')';
+  tr.getCell(4).value = Math.round(sumV); tr.getCell(5).value = Math.round(sumM);
+  for (let c = 1; c <= hdrs.length; c++) {
+    const cell = tr.getCell(c);
+    cell.fill = fill('FFE8EEF5'); cell.border = { top: { style: 'medium', color: { argb: NAVY } }, bottom: thin, left: thin, right: thin };
+    cell.font = { bold: true, color: { argb: NAVY } };
+    cell.alignment = { horizontal: c === 2 ? 'left' : (c === 4 || c === 5 ? 'right' : 'center'), vertical: 'middle' };
+  }
+  tr.getCell(4).numFmt = '#,##0'; tr.getCell(5).numFmt = '#,##0';
+  tr.height = 22;
+  const buf = await wb.xlsx.writeBuffer();
+  await _flowSaveOrShareBlob(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), `FLOW_Schedule_${fmt24(new Date()).replace(/\s+/g, '-').replace(/:/g, '')}.xlsx`);
 }
 
 

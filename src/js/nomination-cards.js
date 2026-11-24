@@ -112,6 +112,34 @@ function rmV(id) {
       }, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardLcOnlyFields(id), _cardIdFields(id)));
     }
   }
+  _trashVesselCard(id);
+}
+// The card → Trash (restorable), its draft checklist rows dropped, the card
+// removed. opts.mergedInto: merged into another card (Duplicates) — nothing
+// is emailed, and the removal is immediate.
+function _trashVesselCard(id, opts) {
+  const card = document.getElementById(`vessel-${id}`);
+  if (!card) return;
+  const name     = document.getElementById(`v${id}-name`)?.value || '';
+  const imo      = document.getElementById(`v${id}-imo`)?.value || '';
+  const area     = document.getElementById(`v${id}-area`)?.value || 'FUJ-A';
+  const type     = document.getElementById(`v${id}-type`)?.value || 'VLSFO';
+  const qty      = _cardQty(id, 'vlsfo').qty;
+  const mgo      = _cardQty(id, 'mgo').qty;
+  const spec     = document.getElementById(`v${id}-spec`)?.value || '';
+  const agent    = document.getElementById(`v${id}-agent`)?.value || '';
+  const manifold = document.getElementById(`v${id}-manifold`)?.value || '';
+  const lc       = document.getElementById(`v${id}-lc`)?.value || '';
+  const eta      = document.getElementById(`v${id}-eta`)?.value || '';
+  const remarks  = document.getElementById(`v${id}-remarks`)?.value || '';
+  const paq      = document.getElementById(`v${id}-paq`)?.value || 'no';
+  const bargeId  = document.getElementById(`v${id}-barge`)?.value || '';
+  const refuelChk= document.getElementById(`v${id}-refuel-chk`)?.checked || false;
+  const rfv      = parseFloat(document.getElementById(`v${id}-rfv`)?.value) || 0;
+  const rfm      = parseFloat(document.getElementById(`v${id}-rfm`)?.value) || 0;
+  const rfvr     = parseFloat(document.getElementById(`v${id}-rfvr`)?.value) || 750;
+  const rfmr     = parseFloat(document.getElementById(`v${id}-rfmr`)?.value) || 275;
+  const nomUidForCancel = card.dataset.nomUid;
 
   // Move to Trash Bin instead of permanent delete
   const trashEntry = {
@@ -119,8 +147,9 @@ function rmV(id) {
     trashedAt: Date.now(),
     // nomUid/imo/mmsi/remarks included so a restored vessel keeps its identity
     // (email log, checklist link) and its details — and a newer build's fields.
-    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id))
+    def: Object.assign(_deepClone(card._newerFields) || {}, {nomUid: nomUidForCancel || '', name,imo,area,type,qty,mgo,spec,agent,manifold,lc,eta,remarks,paq,bargeId,refuelChk,rfv,rfm,rfvr,rfmr}, _cardQtyRangeFields(id), _cardEtaWinFields(id), _cardStsFields(id), _cardLcOnlyFields(id), _cardIdFields(id), _cardExtraFields(id))
   };
+  if (opts && opts.mergedInto) { trashEntry.reason = 'merged'; trashEntry.mergedInto = opts.mergedInto; }
   _trashBin.push(trashEntry);
   _saveTrashBin();
 
@@ -143,6 +172,7 @@ function rmV(id) {
     Array.from(_rstSelected).forEach(function(uid){ if (!_checklistRecords[uid]) _rstSelected.delete(uid); });
   }
 
+  if (opts && opts.mergedInto) { card.remove(); return; } // the caller saves and re-renders once
   card.style.transition = 'opacity .25s, transform .25s';
   card.style.opacity = '0';
   card.style.transform = 'translateX(20px)';
@@ -154,6 +184,7 @@ function rmV(id) {
     showTrashBanner(name);
     if (typeof renderChecklist === 'function') renderChecklist(_lastSched || []);
     if (typeof renderRemainingSupplyTracker === 'function') renderRemainingSupplyTracker();
+    if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
   }, 250);
 }
 
@@ -204,7 +235,7 @@ function renderTrashBin() {
     return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:var(--surface);border:none;box-shadow:var(--sh-xs);border-radius:8px;margin-bottom:8px;gap:12px;flex-wrap:wrap">
       <div style="flex:1;min-width:180px">
         <div style="font-size:13px;font-weight:700;color:var(--ink)">${esc(d.name || '(unnamed vessel)')}</div>
-        <div style="font-size:11px;color:var(--sub);margin-top:2px">${fuelLine} · ${esc(d.area)} · Removed: ${esc(trashedTime)}</div>
+        <div style="font-size:11px;color:var(--sub);margin-top:2px">${fuelLine} · ${esc(d.area)} · ${entry.reason === 'merged' ? 'Merged into another card (Duplicates)' : 'Removed'}: ${esc(trashedTime)}</div>
       </div>
       <div style="display:flex;gap:6px;flex-shrink:0">
         <button onclick="restoreFromTrash(${idx})" style="padding:6px 14px;background:var(--green-lt);border:1.5px solid var(--green-bd);border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;color:var(--green);font-family:DM Sans,sans-serif">↩ Restore</button>
@@ -222,6 +253,7 @@ function restoreFromTrash(idx) {
   addVessel(entry.def);
   renderTrashBin();
   saveSharedState();
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon();
 }
 
 function permanentDeleteFromTrash(idx) {
@@ -306,3 +338,190 @@ function renumberVessels() {
   });
 }
 
+
+/* ─── Deal Done Date (nomination card) ─── a date only ('YYYY-MM-DD'), empty
+   until picked; saved on the vessel as dealDate only when set. */
+function _dealDateYmd(v) {
+  const s = String(v == null ? '' : v).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return '';
+  const y = +s.slice(0, 4), m = +s.slice(5, 7), d = +s.slice(8, 10), dt = new Date(y, m - 1, d);
+  return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d ? s : ''; // a real day (no 31 Feb)
+}
+// Fields a card keeps beyond its inputs: dealDate, dupOk, mergedFrom — each only when set.
+function _cardExtraFields(id) {
+  const out = {}, card = document.getElementById('vessel-' + id);
+  const dd = _dealDateYmd((document.getElementById('v' + id + '-dealdate') || {}).value);
+  if (dd) out.dealDate = dd;
+  if (card && Array.isArray(card._dupOk) && card._dupOk.length) out.dupOk = card._dupOk.slice();
+  if (card && Array.isArray(card._mergedFrom) && card._mergedFrom.length) out.mergedFrom = _deepClone(card._mergedFrom);
+  return out;
+}
+// The Deal Done Date of a nomination (by nomUid, else by name) — '' when none.
+function _dealDateForNom(nomUid, name) {
+  const cards = Array.prototype.slice.call(document.querySelectorAll('.vcard[id^="vessel-"]'));
+  let c = nomUid ? cards.find(function(x) { return x.dataset.nomUid === nomUid; }) : null;
+  if (!c && name) { const k = _normVesselKey(name); c = cards.find(function(x) { return _normVesselKey((document.getElementById('v' + x.id.replace('vessel-', '') + '-name') || {}).value) === k; }); }
+  return c ? _dealDateYmd((document.getElementById('v' + c.id.replace('vessel-', '') + '-dealdate') || {}).value) : '';
+}
+function _dealDateTxt(ymd) {
+  const s = _dealDateYmd(ymd);
+  if (!s) return '';
+  return new Date(s + 'T00:00:00').toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+}
+
+/* ─── Duplicates — more than one open card for one vessel ───
+   Cards are the same vessel when their IMOs match (valid IMO) or their names
+   match as the Track Record matches them ("M/T Hayat" = "HAYAT"). Cancelled
+   nominations do not count. A group stops being listed once its cards are
+   marked as separate calls (each card keeps the others' nomUids in dupOk).
+   Merge (operators): keep one card; the others go to the Trash (restorable,
+   nothing is emailed) and the kept card notes what was merged into it. */
+function _dupCardInfo(card) {
+  const id = card.id.replace('vessel-', '');
+  const g = function(s) { return document.getElementById('v' + id + '-' + s); };
+  const name = ((g('name') || {}).value || '').trim();
+  const ids = _cardIds(id), imoN = _vidNorm(ids.imo);
+  const type = (g('type') || {}).value || 'VLSFO';
+  const def = Object.assign({ type: type, qty: _cardQty(id, 'vlsfo').qty, mgo: _cardQty(id, 'mgo').qty }, _cardQtyRangeFields(id));
+  const qt = function(k) { const t = String(_vesselQtyTxt(def, k)); return /^\d+(\.\d+)?$/.test(t) ? Number(t).toLocaleString('en-US') : t; }; // 1,000
+  const qtyTxt = type === 'BOTH' ? 'VLSFO ' + qt('qty') + ' + MGO ' + qt('mgo') + ' MT'
+    : type === 'MGO' ? 'MGO ' + qt('mgo') + ' MT' : 'VLSFO ' + qt('qty') + ' MT';
+  const area = (g('area') || {}).value || '';
+  const bSel = g('barge');
+  const nomUid = card.dataset.nomUid || '';
+  return { id: id, card: card, nomUid: nomUid, name: name, key: _trVesselKey(name), imo: _imoValid(imoN) ? imoN : '',
+    num: ((card.querySelector('.vnum') || {}).textContent || '').trim(), qtyTxt: qtyTxt,
+    area: (AREA_OPTIONS.find(function(o) { return o.value === area; }) || {}).label || area,
+    eta: ((g('eta') || {}).value || '').trim(), lc: ((g('lc') || {}).value || '').trim(),
+    barge: bSel && bSel.value ? (bSel.options[bSel.selectedIndex] || {}).text || '' : 'Auto',
+    deal: _dealDateTxt((g('dealdate') || {}).value),
+    emailed: !!(nomUid && typeof _nomEmailLog === 'object' && _nomEmailLog[nomUid] && _nomEmailLog[nomUid].emailSent),
+    cancelled: !!(nomUid && typeof _nomCancelEmailLog === 'object' && _nomCancelEmailLog[nomUid] && _nomCancelEmailLog[nomUid].emailSent),
+    dupOk: Array.isArray(card._dupOk) ? card._dupOk : [] };
+}
+function _dupGroups() {
+  const cards = Array.prototype.slice.call(document.querySelectorAll('#vc .vcard[id^="vessel-"]')).map(_dupCardInfo)
+    .filter(function(c) { return c.key && !c.cancelled; });
+  const parent = cards.map(function(_, i) { return i; });
+  const find = function(i) { while (parent[i] !== i) i = parent[i] = parent[parent[i]]; return i; };
+  const join = function(a, b) { parent[find(a)] = find(b); };
+  for (let i = 0; i < cards.length; i++) for (let j = i + 1; j < cards.length; j++) {
+    if (cards[i].key === cards[j].key || (cards[i].imo && cards[i].imo === cards[j].imo)) join(i, j);
+  }
+  const by = {};
+  cards.forEach(function(c, i) { const r = find(i); (by[r] = by[r] || []).push(c); });
+  const sep = function(a, b) { return a.dupOk.indexOf(b.nomUid) !== -1 || b.dupOk.indexOf(a.nomUid) !== -1; };
+  return Object.keys(by).map(function(k) { return by[k]; }).filter(function(g) {
+    if (g.length < 2) return false;
+    for (let i = 0; i < g.length; i++) for (let j = i + 1; j < g.length; j++) if (!sep(g[i], g[j])) return true;
+    return false; // every pair confirmed as separate calls
+  });
+}
+let _dupTimer = null;
+function _dupRefreshSoon() {
+  clearTimeout(_dupTimer);
+  _dupTimer = setTimeout(function() { _dupTimer = null; try { renderDupBanner(); } catch (e) { console.warn('ABPS: duplicates check failed', e); } }, 300);
+}
+function renderDupBanner() {
+  const el = document.getElementById('dup-banner');
+  const groups = _dupGroups();
+  if (el) {
+    if (!groups.length) { el.hidden = true; el.innerHTML = ''; }
+    else {
+      el.hidden = false;
+      el.innerHTML = '<span class="dup-ico" aria-hidden="true">⚠</span><span><b>' + groups.length + ' vessel' + (groups.length !== 1 ? 's have' : ' has') + ' more than one open nomination card</b> — ' +
+        groups.map(function(g) { return esc(g[0].name) + ' (' + g.length + ')'; }).join(', ') + '</span>' +
+        '<button type="button" class="btn btn-sm dup-review-btn" onclick="openDupModal()">Review duplicates</button>';
+    }
+  }
+  const m = document.getElementById('dup-modal');
+  if (m && m.style.display === 'flex') _dupRenderModal(groups);
+}
+function openDupModal() {
+  let m = document.getElementById('dup-modal');
+  if (!m) {
+    m = document.createElement('div');
+    m.id = 'dup-modal'; m.className = 'dup-modal';
+    m.setAttribute('role', 'dialog'); m.setAttribute('aria-modal', 'true'); m.setAttribute('aria-labelledby', 'dup-modal-title');
+    m.addEventListener('click', function(e) { if (e.target === m) closeDupModal(); });
+    document.body.appendChild(m);
+  }
+  m.style.display = 'flex';
+  _dupRenderModal(_dupGroups());
+}
+function closeDupModal() { const m = document.getElementById('dup-modal'); if (m) m.style.display = 'none'; }
+function _dupRenderModal(groups) {
+  const m = document.getElementById('dup-modal');
+  if (!m) return;
+  const op = !(typeof isTrader === 'function' && isTrader());
+  const cell = function(v) { return '<td>' + (v ? esc(v) : '<span class="dup-none">—</span>') + '</td>'; };
+  const body = !groups.length
+    ? '<div class="dup-empty">No duplicates — every vessel has one open nomination card.</div>'
+    : groups.map(function(g, gi) {
+      return '<div class="dup-group" data-dup-group="' + gi + '">' +
+        '<div class="dup-group-hdr"><b>' + esc(g[0].name) + '</b> — ' + g.length + ' open cards</div>' +
+        '<div class="dup-tbl-wrap"><table class="dup-tbl"><thead><tr><th>Card</th><th>Quantity</th><th>Location</th><th>ETA</th><th>Laycan</th><th>Barge</th><th>Deal done</th><th>Nomination email</th>' + (op ? '<th></th>' : '') + '</tr></thead><tbody>' +
+        g.map(function(c) {
+          return '<tr data-nom-uid="' + esc(c.nomUid) + '"><td><b>' + esc(c.num || ('Card ' + c.id)) + '</b><div class="dup-sub">' + esc(c.name) + (c.imo ? ' · IMO ' + esc(c.imo) : '') + '</div></td>' +
+            cell(c.qtyTxt) + cell(c.area) + cell(c.eta) + cell(c.lc) + cell(c.barge) + cell(c.deal) + '<td>' + (c.emailed ? '<span class="dup-sent">Sent ✓</span>' : '<span class="dup-none">Not sent</span>') + '</td>' +
+            (op ? '<td><button type="button" class="btn btn-primary btn-sm dup-keep" onclick="dupKeep(' + JSON.stringify(c.nomUid).replace(/"/g, '&quot;') + ')">Keep this one</button></td>' : '') + '</tr>';
+        }).join('') + '</tbody></table></div>' +
+        (op ? '<div class="dup-actions"><button type="button" class="btn btn-secondary btn-sm dup-sep" onclick="dupSeparate(' + gi + ')">Not duplicates — separate calls</button>' +
+          '<span class="dup-hint">Keep this one: the other card' + (g.length > 2 ? 's go' : ' goes') + ' to the Trash (restore from there); nothing is emailed.</span></div>'
+          : '<div class="dup-hint">Only an operator can merge.</div>') +
+      '</div>';
+    }).join('');
+  m.innerHTML = '<div class="dup-box"><div class="dup-box-hdr"><div id="dup-modal-title" class="dup-title">Duplicate nominations</div>' +
+    '<button type="button" class="dup-x" onclick="closeDupModal()" aria-label="Close">✕</button></div>' +
+    '<div class="dup-intro">Each vessel below has more than one open card. Keep the right one — the quantity, location and ETA of the card you keep are what the schedule, calendar, Calling Instructions and emails use.</div>' +
+    body + '</div>';
+}
+function dupKeep(nomUid) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const groups = _dupGroups();
+  const g = groups.find(function(gr) { return gr.some(function(c) { return c.nomUid === nomUid; }); });
+  if (!g) return;
+  const keep = g.find(function(c) { return c.nomUid === nomUid; });
+  const others = g.filter(function(c) { return c !== keep; });
+  if (!confirm('Keep ' + (keep.num || keep.name) + ' — ' + keep.name + ', ' + keep.qtyTxt + ', ' + keep.area + (keep.eta ? ', ETA ' + keep.eta : '') + '?\n\n' +
+    'The other ' + (others.length === 1 ? 'card goes' : others.length + ' cards go') + ' to the Trash (you can restore from there). Nothing is emailed.')) return;
+  const kc = keep.card;
+  kc._mergedFrom = Array.isArray(kc._mergedFrom) ? kc._mergedFrom : [];
+  others.forEach(function(o) {
+    kc._mergedFrom.push({ at: new Date().toISOString(), nomUid: o.nomUid, name: o.name, qty: o.qtyTxt, area: o.area, eta: o.eta });
+    _trashVesselCard(o.id, { mergedInto: keep.nomUid });
+  });
+  renumberVessels();
+  _dupRenderMergedNote(keep.id);
+  saveSharedState();
+  renderTrashBin();
+  if (typeof renderChecklist === 'function') renderChecklist(_lastSched || []);
+  if (typeof renderRemainingSupplyTracker === 'function') renderRemainingSupplyTracker();
+  renderDupBanner();
+  if (typeof _trSyncAlertsSoon === 'function') _trSyncAlertsSoon();
+  if (typeof showToast === 'function') showToast(keep.name + ': kept ' + (keep.num || 'one card') + '; ' + others.length + ' other card' + (others.length !== 1 ? 's' : '') + ' moved to the Trash. Generate Schedule to update the calendar.', 'success', 8000);
+}
+function dupSeparate(gi) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const g = _dupGroups()[gi];
+  if (!g) return;
+  g.forEach(function(c) {
+    const set = Array.isArray(c.card._dupOk) ? c.card._dupOk.slice() : [];
+    g.forEach(function(o) { if (o !== c && o.nomUid && set.indexOf(o.nomUid) === -1) set.push(o.nomUid); });
+    c.card._dupOk = set;
+  });
+  saveSharedState();
+  renderDupBanner();
+  if (typeof showToast === 'function') showToast(g[0].name + ': marked as separate calls — not listed as duplicates any more.', 'success');
+}
+// "Merged with: HAYAT · VLSFO 750 MT · FUJ-A · ETA 21 Nov 2026 19:00 (24 Nov 10:15)"
+function _dupRenderMergedNote(id) {
+  const el = document.getElementById('v' + id + '-merged'), card = document.getElementById('vessel-' + id);
+  if (!el || !card) return;
+  const list = Array.isArray(card._mergedFrom) ? card._mergedFrom : [];
+  el.innerHTML = list.length ? list.map(function(x) {
+    const at = new Date(x.at);
+    return '<div class="dup-merged-line">Merged with: ' + esc([x.name, x.qty, x.area, x.eta ? 'ETA ' + x.eta : ''].filter(Boolean).join(' · ')) +
+      (isNaN(at.getTime()) ? '' : ' <span class="dup-merged-at">(' + esc(fmt24(at)) + ')</span>') + '</div>';
+  }).join('') : '';
+}

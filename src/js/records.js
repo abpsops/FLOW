@@ -350,6 +350,7 @@ function _trGoTo(cid) {
 // The bell follows vessel names typed / imported (after its first pass at login).
 let _trAlertTimer = null, _trAlertSig = null;
 function _trSyncAlertsSoon() {
+  if (typeof _dupRefreshSoon === 'function') _dupRefreshSoon(); // names / IMOs changed: duplicate cards too
   clearTimeout(_trAlertTimer);
   _trAlertTimer = setTimeout(function() {
     _trAlertTimer = null;
