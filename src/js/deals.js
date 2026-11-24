@@ -610,9 +610,7 @@ function renderLoadingList() {
           + '<button class="btn btn-secondary btn-sm" onclick="undoLoadingRecordDone(\'' + escJs(r.id) + '\')" title="Undo — put back on the calendar">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>'
           + '</button>'
-          + '<button class="btn btn-secondary btn-sm" onclick="deleteLoadingRecord(\'' + escJs(r.id) + '\')" title="Remove">'
-            + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
-          + '</button>'
+          // no Remove on a completed loading: it is a lifting counted on its deal (Undo Done first)
         : '<button class="btn btn-primary btn-sm" onclick="completeLoadingPrompt(\'' + escJs(r.id) + '\')" title="' + (xfer ? 'Mark the transfer as done — removes it from the calendar and timeline; update both barges\' ROB on Barge Fleet' : 'Mark as done — asks for the quantity loaded per BL; removes it from the calendar and timeline') + '">'
             + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Done'
           + '</button>'
@@ -683,6 +681,44 @@ function renderLoadingList() {
 
   _refreshLoadingTerminalDatalist();
   _ldRepRefresh();
+  _renderRemovedLoadings();
+}
+
+/* Removed loadings (the last 90 days, newest first) with Restore — a removal
+   is a tombstone, so the record comes back exactly as it was. */
+function _renderRemovedLoadings() {
+  const el = document.getElementById('ld-removed');
+  if (!el) return;
+  const since = Date.now() - 90 * 86400000;
+  const list = (_loadingRecords || []).filter(function(r) { return r && r.deletedAt && Number(r.deletedAt) >= since; })
+    .sort(function(a, b) { return Number(b.deletedAt) - Number(a.deletedAt); }).slice(0, 60);
+  if (!list.length) { el.innerHTML = ''; return; }
+  const op = !(typeof isTrader === 'function' && isTrader());
+  const wasOpen = !!(el.querySelector('details') || {}).open;
+  el.innerHTML = '<details class="ld-removed"' + (wasOpen ? ' open' : '') + '><summary>Removed loadings (' + list.length + ') — restore one put back by mistake</summary>' +
+    list.map(function(r) {
+      const st = new Date(r.startAt);
+      const what = _isTransfer(r) ? 'Barge transfer ' + (r.fromBarge || '') + ' → ' + _resolveRecordBargeName(r) : (r.terminal || 'Terminal') + ' · ' + _resolveRecordBargeName(r);
+      const deal = r.dealId && typeof _dealById === 'function' && _dealById(r.dealId) ? ' · deal ' + _dealLabel(_dealById(r.dealId)) : '';
+      return '<div class="ld-removed-row" data-ld-id="' + esc(r.id) + '">' +
+        '<span class="ld-removed-what"><b>' + esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString() + ' MT</b> · ' + esc(what) + esc(deal) +
+        (r.completed ? ' · <span class="ld-removed-done">Done' + (r.blQty != null ? ', BL ' + esc(Number(r.blQty).toLocaleString()) + ' MT' : '') + '</span>' : '') + '</span>' +
+        '<span class="ld-removed-when">' + (isNaN(st.getTime()) ? '' : esc(fmt24(st))) + ' · removed ' + esc(fmt24(new Date(Number(r.deletedAt)))) + '</span>' +
+        (op ? '<button type="button" class="btn btn-secondary btn-sm" onclick="restoreLoadingRecord(\'' + escJs(r.id) + '\')">↩ Restore</button>' : '') +
+      '</div>';
+    }).join('') + '</details>';
+}
+function restoreLoadingRecord(id) {
+  if (typeof isTrader === 'function' && isTrader()) return;
+  const idx = (_loadingRecords || []).findIndex(function(r) { return r && r.id === id; });
+  if (idx === -1 || !_loadingRecords[idx].deletedAt) return;
+  const next = Object.assign({}, _loadingRecords[idx], { updatedAt: Date.now() });
+  delete next.deletedAt;
+  _loadingRecords[idx] = next;
+  saveLoadingRecords();
+  renderLoadingList();
+  _refreshLoadingConsumers();
+  if (typeof showToast === 'function') showToast('Restored: ' + (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString() + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
 }
 
 function renderLoadingPage() {
