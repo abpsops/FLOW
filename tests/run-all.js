@@ -61,7 +61,7 @@ const SUITES = [
   ['fix-tracker-samename', 'suites/fix2/tracker-samename.test.js', 'Remaining Supply Tracker: a second call of the same vessel (another nomination) is its own row'],
   ['fix-trackrecord-laycan', 'suites/fix2/trackrecord-laycan.test.js', 'Track Record: out-of-laycan (after / before) flagged from the first supply, rolling 2-month watchlist, history kept for re-nominations (card banner, bell, Generate Schedule)'],
   ['fix-lifting-report', 'suites/fix2/lifting-report.test.js', 'Loading Deals: BL date + quantity on each lifting, deal card in BL-date order with left after, lifting report as Excel and PDF'],
-  ['fix-barge-transfer', 'suites/fix2/barge-transfer.test.js', 'Barge transfer (barge to barge) on the Loading page: pump-rate window, orange on calendar / timelines, both barges busy, no stock / deal / BL'],
+  ['fix-barge-transfer', 'suites/fix2/barge-transfer.test.js', 'Barge transfer (barge to barge) on the Loading page: pump-rate window, orange on calendar / timelines, both barges busy, no deal / BL, grade Both (VLSFO + LSMGO at once)'],
   ['fix-trackrecord-imo', 'suites/fix2/trackrecord-imo.test.js', 'Nomination card: typing a vessel supplied before fills its IMO from the Track Record (empty box only; two IMOs for one name → pick)'],
   ['fix-loading-restore', 'suites/fix2/loading-restore.test.js', 'Completed loadings cannot be removed; Removed loadings list with Restore (Loading page)'],
   ['fix-dup-nominations', 'suites/fix2/dup-nominations.test.js', 'Duplicate nomination cards (banner, side-by-side, keep one / separate calls), Deal Done Date, coloured nominations Excel'],

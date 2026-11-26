@@ -623,12 +623,12 @@ function renderLoadingList() {
       if (xfer) {
         return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--xfer);' + doneStyle + '">'
           + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--xfer);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
-          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(_xferGradeLbl(r)) + '</span>'
           + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--xfer);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
           + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
           + '<div style="flex:1;min-width:160px">'
             + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
-            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (r.grade === 'BOTH' ? esc(_xferGradeQtyTxt(r)) : (Number(r.qty) || 0).toLocaleString()) + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
             + (_xferMovedNote(r) ? '<div class="ld-xfer-moved" style="font-size:10.5px;color:var(--xfer);margin-top:1px">' + esc(_xferMovedNote(r)) + '</div>' : '')
           + '</div>'
@@ -701,7 +701,7 @@ function _renderRemovedLoadings() {
       const what = _isTransfer(r) ? 'Barge transfer ' + (r.fromBarge || '') + ' → ' + _resolveRecordBargeName(r) : (r.terminal || 'Terminal') + ' · ' + _resolveRecordBargeName(r);
       const deal = r.dealId && typeof _dealById === 'function' && _dealById(r.dealId) ? ' · deal ' + _dealLabel(_dealById(r.dealId)) : '';
       return '<div class="ld-removed-row" data-ld-id="' + esc(r.id) + '">' +
-        '<span class="ld-removed-what"><b>' + esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString() + ' MT</b> · ' + esc(what) + esc(deal) +
+        '<span class="ld-removed-what"><b>' + (_isTransfer(r) ? esc(_xferGradeQtyTxt(r)) : esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString()) + ' MT</b> · ' + esc(what) + esc(deal) +
         (r.completed ? ' · <span class="ld-removed-done">Done' + (r.blQty != null ? ', BL ' + esc(Number(r.blQty).toLocaleString()) + ' MT' : '') + '</span>' : '') + '</span>' +
         '<span class="ld-removed-when">' + (isNaN(st.getTime()) ? '' : esc(fmt24(st))) + ' · removed ' + esc(fmt24(new Date(Number(r.deletedAt)))) + '</span>' +
         (op ? '<button type="button" class="btn btn-secondary btn-sm" onclick="restoreLoadingRecord(\'' + escJs(r.id) + '\')">↩ Restore</button>' : '') +
@@ -718,7 +718,7 @@ function restoreLoadingRecord(id) {
   saveLoadingRecords();
   renderLoadingList();
   _refreshLoadingConsumers();
-  if (typeof showToast === 'function') showToast('Restored: ' + (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString() + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
+  if (typeof showToast === 'function') showToast('Restored: ' + (_isTransfer(next) ? _xferGradeQtyTxt(next) : (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString()) + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
 }
 
 function renderLoadingPage() {

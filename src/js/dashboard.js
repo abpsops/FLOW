@@ -508,8 +508,8 @@ function renderDashActivity(records, vessels) {
       if (r.kind === 'transfer') {
         items.push({
           color: 'var(--xfer)',
-          title: `Barge Transfer Scheduled — ${r.grade}`,
-          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
+          title: `Barge Transfer Scheduled — ${_xferGradeLbl(r)}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
           time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
           onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
         });
@@ -540,8 +540,8 @@ function renderDashActivity(records, vessels) {
       if (r.kind === 'transfer') {
         items.push({
           color: 'var(--xfer)',
-          title: `Barge Transfer Completed — ${r.grade}`,
-          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade}`,
+          title: `Barge Transfer Completed — ${_xferGradeLbl(r)}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + r.grade}`,
           time: (dateLbl + ' ' + t).trim() || '—',
           onclick: `showPage('loading')`,
         });

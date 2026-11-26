@@ -160,7 +160,7 @@ function _transferBlocksForBarge(bargeId, bargeName) {
     return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && (r.barge === name || r.fromBarge === name);
   }).map(function(r) {
     return { id: 'xfer_' + r.id, transferId: r.id, bargeName: name, start: r.startAt, end: r.endAt,
-      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') };
+      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO')) };
   });
 }
 function _blocksForBarge(bargeId, bargeName, list) {
@@ -249,7 +249,9 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
       // a supply). Both ROBs are still set by hand once it is Done.
       var xr = op.transferId ? (_loadingRecords || []).find(function(r) { return r && r.id === op.transferId; }) : null;
       if (xr && Number(xr.qty) > 0) {
-        bi.transferId = xr.id; bi.grade = xr.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'; bi.qty = Number(xr.qty) || 0;
+        var xq = _xferQtys(xr);
+        bi.transferId = xr.id; bi.grade = xr.grade === 'BOTH' ? 'BOTH' : (xr.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'); bi.qty = Number(xr.qty) || 0;
+        bi.xv = xq.v; bi.xm = xq.m; // per grade (a "Both" transfer moves the two at once)
         if (_resolveRecordBargeName(xr) === bargeName) { bi.xferIn = true; bi.peer = xr.fromBarge || ''; }
         else if (xr.fromBarge === bargeName) { bi.xferOut = true; bi.peer = _resolveRecordBargeName(xr); }
       }
@@ -300,8 +302,12 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   // the discharging barge at its start, into the receiving one at its end.
   function apply(it, s) {
     if (it.kind === 'vessel') { s.v = Math.max(0, s.v - it.nomV); s.m = Math.max(0, s.m - it.nomM); }
-    else if (it.xferOut) { if (it.grade === 'LSMGO') s.m = Math.max(0, s.m - it.qty); else s.v = Math.max(0, s.v - it.qty); }
-    else if (it.kind === 'loading' || it.xferIn) {
+    else if (it.xferOut) { s.v = Math.max(0, s.v - (it.xv || 0)); s.m = Math.max(0, s.m - (it.xm || 0)); }
+    else if (it.xferIn) {
+      if (it.xv) s.v = vcap ? Math.min(vcap, s.v + it.xv) : s.v + it.xv;
+      if (it.xm) s.m = mcap ? Math.min(mcap, s.m + it.xm) : s.m + it.xm;
+    }
+    else if (it.kind === 'loading') {
       if (it.grade === 'LSMGO') s.m = mcap ? Math.min(mcap, s.m + it.qty) : s.m + it.qty;
       else s.v = vcap ? Math.min(vcap, s.v + it.qty) : s.v + it.qty;
     }
@@ -312,7 +318,8 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     var s = { v: v, m: m }, minV = v, minM = m, stopV = false, stopM = false;
     for (var k = idx; k < items.length && !(stopV && stopM); k++) {
       var it = items[k];
-      if (it.kind === 'loading' || it.xferIn) { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
+      if (it.xferIn) { if (it.xv) stopV = true; if (it.xm) stopM = true; continue; }
+      if (it.kind === 'loading') { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
       apply(it, s);
       if (!stopV) minV = Math.min(minV, s.v);
       if (!stopM) minM = Math.min(minM, s.m);

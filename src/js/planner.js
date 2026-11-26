@@ -537,12 +537,12 @@ function buildTL(items, containerId, loadingsForBarge) {
       ld.className = 'tli tli-transfer';
       ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--xfer)"></div><div class="tll"></div></div>
       <div class="tlc" style="border-color:var(--xfer-bd);background:var(--xfer-lt)">
-        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
+        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(_xferGradeLbl(rec))}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
         <div class="tlm">
           <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
           <div class="tmi tmi-xfer-dur"><label>Duration</label><span>${esc(_xferDurationText(rec))}</span></div>
-          <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
+          <div class="tmi"><label>Quantity</label><span>${rec.grade === 'BOTH' ? esc(_xferGradeQtyTxt(rec)) + ' MT' : (Number(rec.qty)||0).toLocaleString() + ' MT'}</span></div>
           <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
