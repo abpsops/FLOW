@@ -172,9 +172,10 @@ function seed(loadings, extra) {
       document.getElementById('ld-start-date').value = _localDateInputStr(s); document.getElementById('ld-start-time').value = _localTimeInputStr(s);
       window.__confirms = []; addLoadingRecord(); await _waitForSaveIdle();
       const x1 = _loadingRecords.find(x => x.id === 'x1'), x2 = _loadingRecords.find(x => x.kind === 'transfer' && x.id !== 'x1');
-      return { confirms: window.__confirms.slice(), after: new Date(x2.startAt) >= new Date(x1.endAt), req: x2.reqStartAt === s.toISOString() };
+      const gps = _loadingRecords.find(x => x.terminal === 'GPS');
+      return { confirms: window.__confirms.slice(), x2: x2.fromBarge + '>' + x2.barge, atTyped: x2.startAt === s.toISOString(), during: new Date(x2.startAt) < new Date(x1.endAt), gpsAfter: new Date(gps.startAt) >= new Date(x2.endAt) };
     });
-    check('X3 a second transfer typed over it is placed after it (no overlap, nothing to warn about); the start typed is kept', w2.confirms.length === 0 && w2.after && w2.req, w2);
+    check('X3 a transfer the other way between the same two barges (FNSA 11 → FNSA 10) runs at the same time, at the start typed — no warning; the loading asked for after it follows it', w2.confirms.length === 0 && w2.x2 === 'FNSA 11>FNSA 10' && w2.atTyped && w2.during && w2.gpsAfter, w2);
   });
 
   await scenario('X4 no stock, no deal, Done without BL', async (openT) => {

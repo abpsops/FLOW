@@ -335,7 +335,11 @@ function _clearLoadingForm() {
 // warns rather than blocks — sometimes an overlap is known/intentional
 // (e.g. loading finishing right as supply starts) — but it's never
 // silent anymore.
-function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
+// The two barges of a transfer, either direction ("FNSA 10|FNSA 11").
+function _xferPair(r) { return [String(r.fromBarge || ''), String(_resolveRecordBargeName(r) || '')].sort().join('|'); }
+// pairKey (a transfer being checked): another transfer between the same two barges
+// is no conflict — they lie alongside and can transfer both ways at once.
+function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId, pairKey) {
   // (a transfer's own window shows up as a block on both its barges — the
   // record loop below reports it once, so blocks made from transfers are skipped)
   const conflicts = [];
@@ -363,6 +367,7 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
     if (r.deletedAt) return;
     if (r.completed) return;
     if (r.barge !== bargeName && !(_isTransfer(r) && r.fromBarge === bargeName)) return;
+    if (pairKey && _isTransfer(r) && _xferPair(r) === pairKey) return;
     const rStart = new Date(r.startAt), rEnd = new Date(r.endAt);
     if (jobStart < rEnd && jobEnd > rStart) {
       conflicts.push(_isTransfer(r) ? `Barge transfer ${r.fromBarge} → ${r.barge} (${fmt24(rStart)} → ${fmt24(rEnd)})` : `Loading at ${r.terminal} (${fmt24(rStart)} → ${fmt24(rEnd)})`);
@@ -375,7 +380,8 @@ function _checkLoadingConflict(bargeName, startAt, endAt, excludeLoadingId) {
 function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, fromBarge) {
   // A transfer occupies both barges: each is checked.
   const names = fromBarge ? [fromBarge, bargeName] : [bargeName];
-  const parts = names.map(function(n) { return { n: n, c: _checkLoadingConflict(n, startAt, endAt, excludeLoadingId) }; }).filter(function(x) { return x.c.length; });
+  const pairKey = fromBarge ? [String(fromBarge), String(bargeName)].sort().join('|') : '';
+  const parts = names.map(function(n) { return { n: n, c: _checkLoadingConflict(n, startAt, endAt, excludeLoadingId, pairKey) }; }).filter(function(x) { return x.c.length; });
   if (!parts.length) return true;
   return confirm(
     parts.map(function(x) { return `⚠ ${x.n} is already committed during this window:\n\n` + x.c.map(c => '• ' + c).join('\n'); }).join('\n\n') +
@@ -436,7 +442,7 @@ function _xferPlaceAll(records, sched, barges) {
     recs.forEach(function(r) {
       if (!live(r)) return;
       if (_isTransfer(r)) { // one already under way stays where it is
-        if (new Date(r.startAt).getTime() <= now && (r.fromBarge === name || _resolveRecordBargeName(r) === name)) out.push({ s: new Date(r.startAt), e: new Date(r.endAt) });
+        if (new Date(r.startAt).getTime() <= now && (r.fromBarge === name || _resolveRecordBargeName(r) === name)) out.push({ s: new Date(r.startAt), e: new Date(r.endAt), kind: 'xfer', pair: _xferPair(r) });
       } else if (_resolveRecordBargeName(r) === name) {
         // where the Loading sits in this pass (it may itself move for a transfer)
         const at = loadPos[r.id];
