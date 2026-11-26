@@ -456,13 +456,21 @@ function _xferPlaceAll(records, sched, barges) {
   let loadPos = {}, placed = [], loadAt = {};
   for (let pass = 0; pass < 6; pass++) {
     placed = transfers.length ? placeTransfers({ transfers: transfers, sched: jobs, busyFor: busyFor,
-      travelHrs: (_calcParams && _calcParams.travelHrs) || 0, contHrs: _contingencyHrs() }) : [];
+      travelHrs: (_calcParams && _calcParams.travelHrs) || 0, contHrs: _contingencyHrs() }).map(exactEnd) : [];
     loadAt = placeLoads(placed);
     const same = Object.keys(loadAt).every(function(k) { return loadPos[k] && loadPos[k].start.getTime() === loadAt[k].start.getTime(); });
     loadPos = loadAt;
     if (same && pass > 0) break;
   }
   const byId = {}; placed.forEach(function(p) { byId[p.id] = p; });
+  // A start time frame ("PM" = 12:00–18:00) gives the latest end: frame + duration.
+  // Moved, the record starts at an exact time, so the frame comes off its length.
+  function frameMs(r) { return r && r.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(r.startWin) * H : 0; }
+  function exactEnd(p) {
+    const r = recs.find(function(x) { return x && x.id === p.id; }), f = frameMs(r);
+    if (!f || p.start.getTime() === new Date(r.startAt).getTime() || p.end - p.start <= f) return p;
+    return Object.assign({}, p, { end: new Date(p.end.getTime() - f) });
+  }
   function placeLoads(placedNow) {
   // every transfer that keeps a discharging barge busy: placed now, or under way
   const xferWins = placedNow.map(function(p) { const t = transfers.find(function(x) { return x.id === p.id; }); return { from: t.from, to: t.to, req: t.req.getTime(), s: p.start.getTime(), e: p.end.getTime() }; })
@@ -481,7 +489,8 @@ function _xferPlaceAll(records, sched, barges) {
       if (!hit.length) break;
       s = Math.max.apply(null, hit.map(function(x) { return x.e + tr; }));
     }
-    if (isFinite(s)) loadAt[r.id] = { start: new Date(s), end: new Date(s + dur) };
+    const f = s !== st && dur > frameMs(r) ? frameMs(r) : 0;
+    if (isFinite(s)) loadAt[r.id] = { start: new Date(s), end: new Date(s + dur - f) };
   });
   return loadAt;
   }

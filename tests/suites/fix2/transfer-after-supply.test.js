@@ -282,6 +282,18 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     check('T13 a transfer each way between the same two barges runs at the same time (neither waits)', a.start === at(40) && b.start === at(40), { a, b });
   });
 
+  await scenario('T14 a start time frame comes off when moved', async (openT) => {
+    // 27 Nov: FNSA 11's loading asked for "PM" (a 6h frame) was saved frame + 15h long; moved after the
+    // transfer it starts at an exact time, so it is 15h long, not 21h. Same for a transfer asked for "PM".
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23, { startWin: 'PM', endAt: iso(23 + 6 + 7.75) }), loading('l11', 'FNSA 11', 29, 21, { startWin: 'PM', estimatedHours: 15 })]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l = await recAt(A.page, 'l11');
+    const xStart = g.hayat.etc + 2 * HR;
+    check('T14 a moved transfer asked for a time frame: its length without the frame', g.x1.start === xStart && g.x1.end === xStart + 7.75 * HR && !g.x1.startWin, { x1: g.x1, xStart });
+    check('T14 a moved Loading asked for a time frame: its length without the frame (15h, not 21h)', l.start === g.x1.end + HR && l.end - l.start === 15 * HR, { l, x1end: g.x1.end });
+  });
+
   await browser.close();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
