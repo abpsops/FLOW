@@ -7,7 +7,8 @@
    • both barges are busy — but vessel supplies come first: Generate schedule supplies the
      vessels at their ETA and moves the transfer after them (see fix2/transfer-after-supply);
      Free Windows / Availability see it; a loading on the giving barge waits for it
-   • the stock forecast is not changed, no deal link, no BL: Done just completes it (ROB by hand)
+   • no deal link, no BL: Done just completes it (ROB by hand)
+   • grade "Both" (transfer only): VLSFO + LSMGO in one transfer, pumped at the same time
    • edit (switch type back), sync to another device, merge recompute with the barge's rate,
      trader view, hostile names stay text, two different barges required
    node suites/fix2/barge-transfer.test.js [appDir] */
@@ -293,6 +294,60 @@ function seed(loadings, extra) {
       return { win: r && r.startWin, row: row && row.textContent.replace(/\s+/g, ' ') };
     });
     check('X7 a transfer with a time-frame start shows the frame and "latest end" in the list, and its surveyor', tf.win === 'AM' && /AM \(/.test(tf.row) && /Start frame/.test(tf.row) && /Surveyor: SGS/.test(tf.row), tf);
+  });
+
+  await scenario('X9 grade Both', async (openT) => {
+    const db = H.createDb({ workspace: seed([]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const f = await A.page.evaluate(async () => {
+      showPage('loading');
+      const sel = document.getElementById('ld-grade'), both = [...sel.options].find(o => o.value === 'BOTH');
+      const k = document.getElementById('ld-kind');
+      const asLoading = { hidden: both.hidden, disabled: both.disabled };
+      k.value = 'transfer'; k.dispatchEvent(new Event('change'));
+      const asXfer = { hidden: both.hidden, disabled: both.disabled };
+      document.getElementById('ld-from-barge').value = 'FNSA 10'; document.getElementById('ld-from-barge').dispatchEvent(new Event('change'));
+      document.getElementById('ld-barge').value = 'FNSA 11';
+      sel.value = 'BOTH'; sel.dispatchEvent(new Event('change'));
+      const mBox = getComputedStyle(document.getElementById('ld-qty-m-field')).display !== 'none', qLbl = document.getElementById('ld-qty-label').textContent;
+      document.getElementById('ld-qty').value = '2000';
+      const t = new Date(); t.setDate(t.getDate() + 3);
+      document.getElementById('ld-start-date').value = _localDateInputStr(t); document.getElementById('ld-start-time').value = '08:00';
+      // no LSMGO quantity → refused
+      window.__alerts = []; const n0 = _loadingRecords.length; addLoadingRecord(); const refused = _loadingRecords.length === n0 && window.__alerts.some(a => /LSMGO quantity/.test(a));
+      document.getElementById('ld-qty-m').value = '300'; _recalcLoadingEstimate();
+      const pump = document.getElementById('ld-pump-duration-display').value, dur = document.getElementById('ld-duration-display').value;
+      submitLoadingForm(); await _waitForSaveIdle();
+      const r = _loadingRecords.find(x => x.kind === 'transfer');
+      return { asLoading, asXfer, mBox, qLbl, refused, pump, dur, rec: r && { grade: r.grade, qty: r.qty, qtyM: r.qtyM, pump: r.pumpHours, est: r.estimatedHours, span: (new Date(r.endAt) - new Date(r.startAt)) / 3600000 } };
+    });
+    check('X9 "Both" is offered for a transfer only; picking it shows the LSMGO quantity box (the first box becomes VLSFO Quantity)', f.asLoading.hidden && f.asLoading.disabled && !f.asXfer.hidden && !f.asXfer.disabled && f.mBox && f.qLbl === 'VLSFO Quantity (MT)', f);
+    check('X9 "Both" without an LSMGO quantity is refused with a message', f.refused, f);
+    check('X9 both grades are pumped at the same time: the longer of 2,000 ÷ 400 = 5h and 300 ÷ 100 = 3h, + 4h ops = 9h', /^5h — both at once \(VLSFO 5h at 400 · LSMGO 3h at 100 MT\/h\)$/.test(f.pump) && /^9h \(incl\. pre\/post ops 4h\)$/.test(f.dur), f);
+    check('X9 saved as one transfer {grade BOTH, qty 2,000 VLSFO, qtyM 300 LSMGO, 9h}', f.rec && f.rec.grade === 'BOTH' && f.rec.qty === 2000 && f.rec.qtyM === 300 && f.rec.pump === 5 && f.rec.est === 9 && f.rec.span === 9, f.rec);
+    const cloud = (U.row(db).payload.state.loadingRecords || []).find(x => x.kind === 'transfer');
+    check('X9 …and reaches the cloud', cloud && cloud.grade === 'BOTH' && cloud.qtyM === 300, cloud);
+    const v = await A.page.evaluate(() => {
+      showPage('dashboard'); renderWeekCalendar(0);
+      const t = document.querySelector('.cal-ticket-transfer');
+      if (!(_bargeConfig || []).length) _bargeConfig = getBarges(); // no schedule generated in this test
+      const fc11 = _bargeStockForecast(2, 10 * 24), fc10 = _bargeStockForecast(1, 10 * 24);
+      const i11 = fc11.events.find(e => e.xfer === 'in'), o10 = fc10.events.find(e => e.xfer === 'out');
+      showPage('loading');
+      const row = document.querySelector('#loading-list .ld-row-transfer');
+      return { cal: t && t.textContent.replace(/\s+/g, ' '), in11: i11 && [i11.dv, i11.dm], out10: o10 && [o10.dv, o10.dm], row: row && row.textContent.replace(/\s+/g, ' ') };
+    });
+    check('X9 calendar and Loading list show both grades (VLSFO 2,000 + LSMGO 300)', /VLSFO\s2,000 \+ LSMGO\s300/.test(v.cal || '') && /VLSFO \+ LSMGO/.test(v.row || '') && /VLSFO 2,000 \+ LSMGO 300 MT/.test(v.row || ''), v);
+    check('X9 the stock forecast moves both grades: FNSA 11 +2,000 VLSFO +300 LSMGO, FNSA 10 −2,000 −300', JSON.stringify(v.in11) === '[2000,300]' && JSON.stringify(v.out10) === '[-2000,-300]', v);
+    const e = await A.page.evaluate(() => {
+      const r = _loadingRecords.find(x => x.kind === 'transfer'); editLoadingRecord(r.id);
+      const out = { grade: document.getElementById('ld-grade').value, q: document.getElementById('ld-qty').value, qm: document.getElementById('ld-qty-m').value, box: getComputedStyle(document.getElementById('ld-qty-m-field')).display !== 'none' };
+      const k = document.getElementById('ld-kind'); k.value = 'loading'; k.dispatchEvent(new Event('change'));
+      out.afterLoading = { grade: document.getElementById('ld-grade').value, box: getComputedStyle(document.getElementById('ld-qty-m-field')).display !== 'none' };
+      cancelLoadingEdit();
+      return out;
+    });
+    check('X9 Edit opens with both quantities; switching it to a terminal loading goes back to one grade', e.grade === 'BOTH' && e.q === '2000' && e.qm === '300' && e.box && e.afterLoading.grade === 'VLSFO' && !e.afterLoading.box, e);
   });
 
   await browser.close();

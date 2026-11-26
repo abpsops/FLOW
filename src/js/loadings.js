@@ -72,13 +72,48 @@ const XFER_OPS_HRS = 4;
 function _xferRate(fromBargeName, grade) {
   const b = (typeof getBarges === 'function' ? getBarges() : (_bargeConfig || [])).find(function(x) { return x.name === fromBargeName; });
   if (!b) return 0;
+  if (grade === 'BOTH') return (Number(b.mtph) || 0) > 0 ? XFER_RATE_VLSFO : 0; // needs both rates
   return grade === 'LSMGO' ? (Number(b.mtph) || 0) : XFER_RATE_VLSFO;
 }
 function _xferHoseHrs() { return XFER_OPS_HRS; }
-function _xferDuration(fromBargeName, grade, qty) {
+// grade 'BOTH': VLSFO `qty` and LSMGO `qtyM` pumped at the same time (two
+// hoses) — the longer of the two pumping times + the ops hours once.
+function _xferDuration(fromBargeName, grade, qty, qtyM) {
+  if (grade === 'BOTH') {
+    const rv = _xferRate(fromBargeName, 'VLSFO'), rm = _xferRate(fromBargeName, 'LSMGO');
+    const pv = rv > 0 && qty > 0 ? qty / rv : 0, pm = rm > 0 && qtyM > 0 ? qtyM / rm : 0;
+    const pump = rv > 0 && rm > 0 ? Math.max(pv, pm) : 0;
+    return { rate: rv && rm ? rv : 0, rateV: rv, rateM: rm, pumpV: pv, pumpM: pm, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+  }
   const rate = _xferRate(fromBargeName, grade);
   const pump = rate > 0 && qty > 0 ? qty / rate : 0;
   return { rate: rate, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+}
+// A transfer's quantities per grade: {v, m} (grade 'BOTH' carries both: qty = VLSFO, qtyM = LSMGO).
+function _xferQtys(r) {
+  const q = Number(r && r.qty) || 0;
+  if (r && r.grade === 'BOTH') return { v: q, m: Number(r.qtyM) || 0 };
+  return r && r.grade === 'LSMGO' ? { v: 0, m: q } : { v: q, m: 0 };
+}
+function _xferGradeLbl(r) { return r && r.grade === 'BOTH' ? 'VLSFO + LSMGO' : ((r && r.grade) || 'VLSFO'); }
+// "VLSFO 2,000 + LSMGO 300" / "VLSFO 1,500" (no unit)
+function _xferGradeQtyTxt(r) {
+  const x = _xferQtys(r);
+  if (r && r.grade === 'BOTH') return 'VLSFO ' + x.v.toLocaleString() + ' + LSMGO ' + x.m.toLocaleString();
+  return ((r && r.grade === 'LSMGO') ? 'LSMGO ' : 'VLSFO ') + (Number(r && r.qty) || 0).toLocaleString();
+}
+// Grade "Both" is for a transfer only; with it the LSMGO quantity box shows.
+function _ldGradeUi() {
+  const xfer = _ldKind() === 'transfer';
+  const sel = document.getElementById('ld-grade');
+  const both = sel ? Array.from(sel.options).find(function(o) { return o.value === 'BOTH'; }) : null;
+  if (both) { both.hidden = !xfer; both.disabled = !xfer; }
+  if (sel && !xfer && sel.value === 'BOTH') sel.value = 'VLSFO';
+  const isBoth = !!(sel && sel.value === 'BOTH');
+  const f = document.getElementById('ld-qty-m-field');
+  if (f) f.style.display = isBoth ? '' : 'none';
+  const ql = document.getElementById('ld-qty-label');
+  if (ql) ql.textContent = isBoth ? 'VLSFO Quantity (MT)' : 'Quantity (MT)';
 }
 // Show the fields of the chosen type (terminal loading / barge transfer).
 function _ldKindChanged() {
@@ -92,6 +127,7 @@ function _ldKindChanged() {
   const lb = document.getElementById('loading-submit-btn-label');
   if (lb) lb.textContent = _loadingEditingId ? (xfer ? 'Update Transfer' : 'Update Loading') : (xfer ? 'Add Transfer' : 'Add Loading');
   _populateLoadingBargeSelect();
+  _ldGradeUi();
   _recalcLoadingEstimate();
 }
 // Barges that can't be the other side: giving and receiving must differ.
@@ -113,7 +149,8 @@ function _recalcLoadingEstimate() {
   const preOps = xfer ? 0 : (parseFloat(document.getElementById('ld-pre-ops')?.value) || 0);
   const postOps = xfer ? 0 : (parseFloat(document.getElementById('ld-post-ops')?.value) || 0);
 
-  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty) : null;
+  const qtyM = parseFloat(document.getElementById('ld-qty-m')?.value) || 0;
+  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty, qtyM) : null;
   const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
   const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start: completion = frame END + the operation (worst case).
@@ -125,7 +162,11 @@ function _recalcLoadingEstimate() {
   const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
-  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : '') : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
+  if (pumpEl) pumpEl.value = pumpHrs > 0
+    ? (xfer && grade === 'BOTH'
+      ? _formatDurationHours(pumpHrs) + ' — both at once (VLSFO ' + _formatDurationHours(xd.pumpV) + ' at ' + xd.rateV + ' · LSMGO ' + _formatDurationHours(xd.pumpM) + ' at ' + xd.rateM + ' MT/h)'
+      : _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : ''))
+    : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
   if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. pre/post ops ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
 
   if (compEl) {
@@ -238,14 +279,16 @@ function _readLoadingForm() {
     if (fromBarge === barge) { alert('A transfer needs two different barges.'); return null; }
   } else if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
+  const qtyM = parseFloat(document.getElementById('ld-qty-m')?.value) || 0;
+  if (xfer && grade === 'BOTH' && !(qtyM > 0)) { alert('Grade "Both": enter the LSMGO quantity too (or choose VLSFO / LSMGO only).'); return null; }
   if (!startDateStr) { alert('Select a ' + (xfer ? 'transfer' : 'loading') + ' start date.'); return null; }
-  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'LSMGO' ? 'MGO' : 'VLSFO') + ' pump rate — set it on Barge Fleet first.'); return null; }
+  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'VLSFO' ? 'VLSFO' : 'MGO') + ' pump rate — set it on Barge Fleet first.'); return null; }
 
   const startWin = _ldStartWin();
   const start = new Date(startDateStr + 'T' + (startWin ? pad(_etaFrame(startWin).from) + ':00' : startTimeStr) + ':00');
   if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
-  const xd = xfer ? _xferDuration(fromBarge, grade, qty) : null;
+  const xd = xfer ? _xferDuration(fromBarge, grade, qty, qtyM) : null;
   const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
   const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start (AM / PM …): start = frame start; the barge stays
@@ -254,7 +297,7 @@ function _readLoadingForm() {
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
   if (xfer) {
     return Object.assign({
-      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty,
+      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty, ...(grade === 'BOTH' ? { qtyM: qtyM } : {}),
       startAt: start.toISOString(), endAt: end.toISOString(), reqStartAt: start.toISOString(),
       preOpsHours: 0, pumpHours: pumpHrs, postOpsHours: 0, hoseHours: xd.hose, estimatedHours: totalHrs,
       endOverridden: !!endOverride, surveyor: surveyor, notes: notes,
@@ -277,7 +320,7 @@ function _readLoadingForm() {
 
 function _clearLoadingForm() {
   if (typeof _rlClearPrefillNote === 'function') _rlClearPrefillNote();
-  ['ld-terminal','ld-qty','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
+  ['ld-terminal','ld-qty','ld-qty-m','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const dl = document.getElementById('ld-deal');
@@ -368,7 +411,7 @@ function _xferPlaceAll(records, sched, barges) {
   const calc = {};
   todo.forEach(function(r) {
     if (r.endOverridden) return;
-    const xd = _xferDuration(r.fromBarge || '', r.grade, Number(r.qty) || 0);
+    const xd = _xferDuration(r.fromBarge || '', r.grade, Number(r.qty) || 0, Number(r.qtyM) || 0);
     if (xd.total > 0) calc[r.id] = { pump: xd.pump, hose: xd.hose, total: xd.total, frame: r.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(r.startWin) : 0 };
   });
   const transfers = todo.map(function(r) {
@@ -458,6 +501,7 @@ function _xferDurationText(r) {
   const hrs = (new Date(r.endAt) - new Date(r.startAt)) / 3600000;
   if (!(hrs > 0)) return '—';
   const pump = Number(r.pumpHours) || 0, ops = Number(r.hoseHours) || 0;
+  if (r.grade === 'BOTH') return _formatDurationHours(hrs) + (pump > 0 ? ' (' + _formatDurationHours(pump) + ' pumping, both grades at once' + (ops > 0 ? ' + ' + _formatDurationHours(ops) + ' ops' : '') + ')' : '');
   const rate = pump > 0 ? Math.round((Number(r.qty) || 0) / pump) : 0;
   return _formatDurationHours(hrs) + (pump > 0 ? ' (' + _formatDurationHours(pump) + ' pumping' + (rate ? ' at ' + rate + ' MT/h' : '') + (ops > 0 ? ' + ' + _formatDurationHours(ops) + ' ops' : '') + ')' : '');
 }
@@ -515,6 +559,8 @@ function editLoadingRecord(id) {
   document.getElementById('ld-terminal').value = rec.terminal || '';
   document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
   document.getElementById('ld-qty').value = rec.qty || '';
+  const qmEl = document.getElementById('ld-qty-m'); if (qmEl) qmEl.value = rec.grade === 'BOTH' ? (rec.qtyM || '') : '';
+  _ldGradeUi();
   document.getElementById('ld-start-date').value = _localDateInputStr(start);
   document.getElementById('ld-start-time').value = _localTimeInputStr(start);
   _ldSetStartWin(rec.startWin || '');
@@ -547,6 +593,7 @@ function updateLoadingRecord(id) {
   if (!data.startWin) delete next.startWin;
   if (!data.dealId) delete next.dealId;
   if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; delete next.reqStartAt; }
+  if (data.grade !== 'BOTH') delete next.qtyM;
   else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
   // A transfer goes after the vessel supplies, a Loading of a discharging barge
   // after its transfer (the start typed is the earliest it may start).

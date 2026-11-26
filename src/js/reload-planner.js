@@ -166,7 +166,7 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
       start: it.start, end: it.end, v: s.v, m: s.m, dv: s.v - before.v, dm: s.m - before.m, beforeV: before.v, beforeM: before.m };
     if (it.kind === 'vessel') { ev.vessel = it.vessel; ev.nomUid = it.nomUid; ev.nomV = it.nomV; ev.nomM = it.nomM; }
     if (it.kind === 'loading') { ev.grade = it.grade; ev.qty = it.qty; }
-    if (it.xferIn || it.xferOut) { ev.xfer = it.xferIn ? 'in' : 'out'; ev.peer = it.peer; ev.grade = it.grade; ev.qty = it.qty; }
+    if (it.xferIn || it.xferOut) { ev.xfer = it.xferIn ? 'in' : 'out'; ev.peer = it.peer; ev.grade = it.grade; ev.qty = it.qty; ev.xTxt = _xferGradeQtyTxt({ grade: it.grade, qty: it.qty, qtyM: it.xm }) + ' MT'; }
     events.push(ev);
   });
   var series = {};
@@ -197,8 +197,8 @@ function _rlAnalyse(b, proj, now, end, liveROBs) {
     var steps = [];
     proj.items.forEach(function(it, idx) {
       if (it.kind === 'vessel' && it[gi.nom] > 0) steps.push({ t: it.start, kind: 'vessel', q: it[gi.nom], it: it, idx: idx });
-      else if ((it.kind === 'loading' || it.xferIn) && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
-      else if (it.xferOut && it.grade === gi.g) steps.push({ t: it.start, kind: 'xferout', q: it.qty, it: it, idx: idx });
+      else if (it.kind === 'loading' && !it.xferIn && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
+      else if ((it.xferIn || it.xferOut) && (gi.k === 'm' ? it.xm : it.xv) > 0) steps.push({ t: it.start, kind: it.xferIn ? 'loading' : 'xferout', q: gi.k === 'm' ? it.xm : it.xv, it: it, idx: idx });
     });
     return { gi: gi, buf: proj[gi.buf], cap: proj[gi.cap], steps: steps, hyps: [], lastIdx: -1, done: false };
   });
@@ -469,10 +469,10 @@ function _rlChartHtml(fc) {
     }
     if (e.xfer === 'in') {
       col = e.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
-      tip = 'Barge transfer from ' + e.peer + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.qty.toLocaleString() + ' MT ' + e.grade;
+      tip = 'Barge transfer from ' + e.peer + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.xTxt;
       return '<span class="' + cls + ' rl-mk-load rl-mk-xfer" style="left:' + pct(e.end) + '%;border-color:var(--xfer)" title="' + esc(tip) + '"></span>';
     }
-    tip = (e.xfer === 'out' ? 'Barge transfer to ' + e.peer + ' · −' + e.qty.toLocaleString() + ' MT ' + e.grade + ' · ' : 'Unavailable — ' + e.label + ' · ') + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
+    tip = (e.xfer === 'out' ? 'Barge transfer to ' + e.peer + ' · −' + e.xTxt + ' · ' : 'Unavailable — ' + e.label + ' · ') + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
     return '<span class="' + cls + ' rl-mk-block" style="left:' + pct(e.start) + '%" title="' + esc(tip) + '"></span>';
   }).join('');
   var rbl = fc.recs.filter(function(r) { return r.reloadBy > fc.now && r.reloadBy < fc.end; }).map(function(r) {
@@ -541,8 +541,8 @@ function _rlEventListHtml(fc) {
         (e.counted ? ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is' : ' — ' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' not counted (' + esc(e.why) + ')') +
         ' → ' + esc(after) + _rlDoneBtn(e) + '</li>';
     }
-    if (e.xfer === 'in') return '<li class="rl-xfer">' + when + ' — Barge transfer from ' + esc(e.peer) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
-    if (e.xfer === 'out') return '<li class="rl-xfer">' + when + ' — Barge transfer to ' + esc(e.peer) + ': −' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' (until ' + esc(_rlFmt(e.end)) + ') → ' + esc(after) + '</li>';
+    if (e.xfer === 'in') return '<li class="rl-xfer">' + when + ' — Barge transfer from ' + esc(e.peer) + ': +' + (e.grade === 'BOTH' ? esc(e.xTxt) : esc(_rlMT(e.qty)) + ' ' + esc(e.grade)) + ' → ' + esc(after) + '</li>';
+    if (e.xfer === 'out') return '<li class="rl-xfer">' + when + ' — Barge transfer to ' + esc(e.peer) + ': −' + (e.grade === 'BOTH' ? esc(e.xTxt) : esc(_rlMT(e.qty)) + ' ' + esc(e.grade)) + ' (until ' + esc(_rlFmt(e.end)) + ') → ' + esc(after) + '</li>';
     return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
   });
   return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +

@@ -107,7 +107,7 @@ function _mergeByNewer(b, l, r, ctx, path, groups) {
 // from the other: then pumping, duration and end time are derived again from the
 // merged inputs with the merged rates (unless the end date was set by hand). When
 // the merged inputs are exactly one side's, that side's own figures stay.
-const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
+const _LD_INPUT_KEYS = ['qty', 'qtyM', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
 function _ldInputs(r) { return _stableStr(_LD_INPUT_KEYS.map(function(k) { return r && r[k] !== undefined ? r[k] : null; })); }
 function _mergeLoadingDerived(merged, ld, rd) {
   const recs = merged && merged.state && Array.isArray(merged.state.loadingRecords) ? merged.state.loadingRecords : null;
@@ -133,10 +133,17 @@ function _mergeLoadingDerived(merged, ld, rd) {
       // A barge transfer pumps at the transfer rate (VLSFO 400 MT/h, LSMGO the
       // giving barge's MGO rate), then its pre / post ops hours.
       const fb = (merged.state.barges || []).find(function(b) { return b && b.name === m.fromBarge; });
-      rate = m.grade === 'LSMGO' ? (Number(fb && fb.mtph) || 0) : (typeof XFER_RATE_VLSFO !== 'undefined' ? XFER_RATE_VLSFO : Number(fb && fb.vtph) || 0);
-      if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
-      if (!rate) return m;
-      pump = q > 0 ? q / rate : 0;
+      const rV = typeof XFER_RATE_VLSFO !== 'undefined' ? XFER_RATE_VLSFO : Number(fb && fb.vtph) || 0, rM = Number(fb && fb.mtph) || 0;
+      if (m.grade === 'BOTH') { // both grades at once: the longer of the two
+        if (!rV || !rM) return m;
+        const qm = Number(m.qtyM) || 0;
+        pump = Math.max(q > 0 ? q / rV : 0, qm > 0 ? qm / rM : 0);
+      } else {
+        rate = m.grade === 'LSMGO' ? rM : rV;
+        if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
+        if (!rate) return m;
+        pump = q > 0 ? q / rate : 0;
+      }
       total = pump > 0 ? pump + (Number(m.hoseHours) || 0) : 0;
     } else {
       rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;

@@ -3551,7 +3551,7 @@ function flowWelcomeGo(pageId) {
       </div>
       <span class="ld-xfer-only hint inf" id="ld-xfer-hint" style="display:none;font-size:11.5px;color:var(--xfer);font-weight:600;padding-bottom:9px">Both barges are busy for the transfer · ROB is updated by hand on Barge Fleet</span>
     </div>
-    <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the transfer rate (VLSFO 400 MT/h; LSMGO the giving barge's MGO rate on Barge Fleet) + 4h pre / post ops; both barges are blocked for it in the schedule.</div>
+    <div class="ld-xfer-only" style="display:none;font-size:12px;color:var(--sub);margin-bottom:14px">Choose the barge that discharges and the barge that receives, the grade and the quantity. Duration = quantity ÷ the transfer rate (VLSFO 400 MT/h; LSMGO the giving barge's MGO rate on Barge Fleet) + 4h pre / post ops — with "Both", the two grades are pumped at the same time (the longer of the two); both barges are blocked for it in the schedule.</div>
     <div class="ld-load-only" style="font-size:12px;color:var(--sub);margin-bottom:14px">Enter the terminal, grade, and quantity. Duration and completion time are calculated automatically from the rate configured above — you can still adjust the end date manually if the operation is expected to run outside that estimate.</div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px">
@@ -3560,12 +3560,14 @@ function flowWelcomeGo(pageId) {
       </div>
       <div class="field ld-load-only"><label for="ld-terminal">Terminal</label><input type="text" id="ld-terminal" placeholder="e.g. Fujairah Terminal 1" list="ld-terminal-list" oninput="_ldRefreshDealSelect()"></div>
       <div class="field"><label for="ld-grade">Grade</label>
-        <select id="ld-grade" onchange="_recalcLoadingEstimate();_ldRefreshDealSelect(undefined, 'grade')">
+        <select id="ld-grade" onchange="_ldGradeUi();_recalcLoadingEstimate();_ldRefreshDealSelect(undefined, 'grade')">
           <option value="VLSFO">VLSFO</option>
           <option value="LSMGO">LSMGO</option>
+          <option value="BOTH" hidden disabled>Both (VLSFO + LSMGO)</option>
         </select>
       </div>
-      <div class="field"><label for="ld-qty">Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate();_ldRefreshDealSelect()"></div>
+      <div class="field"><label for="ld-qty" id="ld-qty-label">Quantity (MT)</label><input type="number" id="ld-qty" min="0" step="50" placeholder="e.g. 2500" oninput="_recalcLoadingEstimate();_ldRefreshDealSelect()"></div>
+      <div class="field" id="ld-qty-m-field" style="display:none"><label for="ld-qty-m">LSMGO Quantity (MT)</label><input type="number" id="ld-qty-m" min="0" step="50" placeholder="e.g. 300" oninput="_recalcLoadingEstimate()"></div>
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:end;margin-bottom:12px">
@@ -5745,8 +5747,8 @@ function renderDashActivity(records, vessels) {
       if (r.kind === 'transfer') {
         items.push({
           color: 'var(--xfer)',
-          title: `Barge Transfer Scheduled — ${r.grade}`,
-          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
+          title: `Barge Transfer Scheduled — ${_xferGradeLbl(r)}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + r.grade} · Ends ${end.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',hour12:false})}`,
           time: dateLbl + ' ' + (r.startWin && _etaFrame(r.startWin) ? _etaFrame(r.startWin).code : t),
           onclick: `showPage('loading');editLoadingRecord('${escJs(r.id)}')`,
         });
@@ -5777,8 +5779,8 @@ function renderDashActivity(records, vessels) {
       if (r.kind === 'transfer') {
         items.push({
           color: 'var(--xfer)',
-          title: `Barge Transfer Completed — ${r.grade}`,
-          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${(Number(r.qty) || 0).toLocaleString()} MT ${r.grade}`,
+          title: `Barge Transfer Completed — ${_xferGradeLbl(r)}`,
+          detail: `${r.fromBarge || ''} → ${_resolveRecordBargeName(r)} — ${r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + r.grade}`,
           time: (dateLbl + ' ' + t).trim() || '—',
           onclick: `showPage('loading')`,
         });
@@ -7869,7 +7871,7 @@ function _mergeByNewer(b, l, r, ctx, path, groups) {
 // from the other: then pumping, duration and end time are derived again from the
 // merged inputs with the merged rates (unless the end date was set by hand). When
 // the merged inputs are exactly one side's, that side's own figures stay.
-const _LD_INPUT_KEYS = ['qty', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
+const _LD_INPUT_KEYS = ['qty', 'qtyM', 'grade', 'preOpsHours', 'postOpsHours', 'startAt', 'startWin', 'endOverridden', 'kind', 'fromBarge', 'hoseHours'];
 function _ldInputs(r) { return _stableStr(_LD_INPUT_KEYS.map(function(k) { return r && r[k] !== undefined ? r[k] : null; })); }
 function _mergeLoadingDerived(merged, ld, rd) {
   const recs = merged && merged.state && Array.isArray(merged.state.loadingRecords) ? merged.state.loadingRecords : null;
@@ -7895,10 +7897,17 @@ function _mergeLoadingDerived(merged, ld, rd) {
       // A barge transfer pumps at the transfer rate (VLSFO 400 MT/h, LSMGO the
       // giving barge's MGO rate), then its pre / post ops hours.
       const fb = (merged.state.barges || []).find(function(b) { return b && b.name === m.fromBarge; });
-      rate = m.grade === 'LSMGO' ? (Number(fb && fb.mtph) || 0) : (typeof XFER_RATE_VLSFO !== 'undefined' ? XFER_RATE_VLSFO : Number(fb && fb.vtph) || 0);
-      if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
-      if (!rate) return m;
-      pump = q > 0 ? q / rate : 0;
+      const rV = typeof XFER_RATE_VLSFO !== 'undefined' ? XFER_RATE_VLSFO : Number(fb && fb.vtph) || 0, rM = Number(fb && fb.mtph) || 0;
+      if (m.grade === 'BOTH') { // both grades at once: the longer of the two
+        if (!rV || !rM) return m;
+        const qm = Number(m.qtyM) || 0;
+        pump = Math.max(q > 0 ? q / rV : 0, qm > 0 ? qm / rM : 0);
+      } else {
+        rate = m.grade === 'LSMGO' ? rM : rV;
+        if (!rate) { const side = [l, r].find(function(x) { return Number(x.pumpHours) > 0 && Number(x.qty) > 0; }); rate = side ? Number(side.qty) / Number(side.pumpHours) : 0; }
+        if (!rate) return m;
+        pump = q > 0 ? q / rate : 0;
+      }
       total = pump > 0 ? pump + (Number(m.hoseHours) || 0) : 0;
     } else {
       rate = (m.grade === 'LSMGO' ? cfg.rateLSMGO : cfg.rateVLSFO) || 1;
@@ -9048,13 +9057,48 @@ const XFER_OPS_HRS = 4;
 function _xferRate(fromBargeName, grade) {
   const b = (typeof getBarges === 'function' ? getBarges() : (_bargeConfig || [])).find(function(x) { return x.name === fromBargeName; });
   if (!b) return 0;
+  if (grade === 'BOTH') return (Number(b.mtph) || 0) > 0 ? XFER_RATE_VLSFO : 0; // needs both rates
   return grade === 'LSMGO' ? (Number(b.mtph) || 0) : XFER_RATE_VLSFO;
 }
 function _xferHoseHrs() { return XFER_OPS_HRS; }
-function _xferDuration(fromBargeName, grade, qty) {
+// grade 'BOTH': VLSFO `qty` and LSMGO `qtyM` pumped at the same time (two
+// hoses) — the longer of the two pumping times + the ops hours once.
+function _xferDuration(fromBargeName, grade, qty, qtyM) {
+  if (grade === 'BOTH') {
+    const rv = _xferRate(fromBargeName, 'VLSFO'), rm = _xferRate(fromBargeName, 'LSMGO');
+    const pv = rv > 0 && qty > 0 ? qty / rv : 0, pm = rm > 0 && qtyM > 0 ? qtyM / rm : 0;
+    const pump = rv > 0 && rm > 0 ? Math.max(pv, pm) : 0;
+    return { rate: rv && rm ? rv : 0, rateV: rv, rateM: rm, pumpV: pv, pumpM: pm, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+  }
   const rate = _xferRate(fromBargeName, grade);
   const pump = rate > 0 && qty > 0 ? qty / rate : 0;
   return { rate: rate, pump: pump, hose: _xferHoseHrs(), total: pump > 0 ? pump + _xferHoseHrs() : 0 };
+}
+// A transfer's quantities per grade: {v, m} (grade 'BOTH' carries both: qty = VLSFO, qtyM = LSMGO).
+function _xferQtys(r) {
+  const q = Number(r && r.qty) || 0;
+  if (r && r.grade === 'BOTH') return { v: q, m: Number(r.qtyM) || 0 };
+  return r && r.grade === 'LSMGO' ? { v: 0, m: q } : { v: q, m: 0 };
+}
+function _xferGradeLbl(r) { return r && r.grade === 'BOTH' ? 'VLSFO + LSMGO' : ((r && r.grade) || 'VLSFO'); }
+// "VLSFO 2,000 + LSMGO 300" / "VLSFO 1,500" (no unit)
+function _xferGradeQtyTxt(r) {
+  const x = _xferQtys(r);
+  if (r && r.grade === 'BOTH') return 'VLSFO ' + x.v.toLocaleString() + ' + LSMGO ' + x.m.toLocaleString();
+  return ((r && r.grade === 'LSMGO') ? 'LSMGO ' : 'VLSFO ') + (Number(r && r.qty) || 0).toLocaleString();
+}
+// Grade "Both" is for a transfer only; with it the LSMGO quantity box shows.
+function _ldGradeUi() {
+  const xfer = _ldKind() === 'transfer';
+  const sel = document.getElementById('ld-grade');
+  const both = sel ? Array.from(sel.options).find(function(o) { return o.value === 'BOTH'; }) : null;
+  if (both) { both.hidden = !xfer; both.disabled = !xfer; }
+  if (sel && !xfer && sel.value === 'BOTH') sel.value = 'VLSFO';
+  const isBoth = !!(sel && sel.value === 'BOTH');
+  const f = document.getElementById('ld-qty-m-field');
+  if (f) f.style.display = isBoth ? '' : 'none';
+  const ql = document.getElementById('ld-qty-label');
+  if (ql) ql.textContent = isBoth ? 'VLSFO Quantity (MT)' : 'Quantity (MT)';
 }
 // Show the fields of the chosen type (terminal loading / barge transfer).
 function _ldKindChanged() {
@@ -9068,6 +9112,7 @@ function _ldKindChanged() {
   const lb = document.getElementById('loading-submit-btn-label');
   if (lb) lb.textContent = _loadingEditingId ? (xfer ? 'Update Transfer' : 'Update Loading') : (xfer ? 'Add Transfer' : 'Add Loading');
   _populateLoadingBargeSelect();
+  _ldGradeUi();
   _recalcLoadingEstimate();
 }
 // Barges that can't be the other side: giving and receiving must differ.
@@ -9089,7 +9134,8 @@ function _recalcLoadingEstimate() {
   const preOps = xfer ? 0 : (parseFloat(document.getElementById('ld-pre-ops')?.value) || 0);
   const postOps = xfer ? 0 : (parseFloat(document.getElementById('ld-post-ops')?.value) || 0);
 
-  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty) : null;
+  const qtyM = parseFloat(document.getElementById('ld-qty-m')?.value) || 0;
+  const xd = xfer ? _xferDuration((document.getElementById('ld-from-barge') || {}).value, grade, qty, qtyM) : null;
   const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
   const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start: completion = frame END + the operation (worst case).
@@ -9101,7 +9147,11 @@ function _recalcLoadingEstimate() {
   const pumpEl = document.getElementById('ld-pump-duration-display');
   const durEl = document.getElementById('ld-duration-display');
   const compEl = document.getElementById('ld-completion-display');
-  if (pumpEl) pumpEl.value = pumpHrs > 0 ? _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : '') : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
+  if (pumpEl) pumpEl.value = pumpHrs > 0
+    ? (xfer && grade === 'BOTH'
+      ? _formatDurationHours(pumpHrs) + ' — both at once (VLSFO ' + _formatDurationHours(xd.pumpV) + ' at ' + xd.rateV + ' · LSMGO ' + _formatDurationHours(xd.pumpM) + ' at ' + xd.rateM + ' MT/h)'
+      : _formatDurationHours(pumpHrs) + (xfer ? ' at ' + xd.rate + ' MT/h' : ''))
+    : (xfer && qty > 0 && !xd.rate ? 'No pump rate for this grade on the giving barge' : '—');
   if (durEl) durEl.value = totalHrs > 0 ? _formatDurationHours(totalHrs) + (xfer ? ' (incl. pre/post ops ' + _formatDurationHours(xd.hose) + ')' : '') : '—';
 
   if (compEl) {
@@ -9214,14 +9264,16 @@ function _readLoadingForm() {
     if (fromBarge === barge) { alert('A transfer needs two different barges.'); return null; }
   } else if (!terminal) { alert('Enter a terminal.'); return null; }
   if (!qty || qty <= 0) { alert('Enter a quantity greater than 0.'); return null; }
+  const qtyM = parseFloat(document.getElementById('ld-qty-m')?.value) || 0;
+  if (xfer && grade === 'BOTH' && !(qtyM > 0)) { alert('Grade "Both": enter the LSMGO quantity too (or choose VLSFO / LSMGO only).'); return null; }
   if (!startDateStr) { alert('Select a ' + (xfer ? 'transfer' : 'loading') + ' start date.'); return null; }
-  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'LSMGO' ? 'MGO' : 'VLSFO') + ' pump rate — set it on Barge Fleet first.'); return null; }
+  if (xfer && !_xferRate(fromBarge, grade)) { alert(fromBarge + ' has no ' + (grade === 'VLSFO' ? 'VLSFO' : 'MGO') + ' pump rate — set it on Barge Fleet first.'); return null; }
 
   const startWin = _ldStartWin();
   const start = new Date(startDateStr + 'T' + (startWin ? pad(_etaFrame(startWin).from) + ':00' : startTimeStr) + ':00');
   if (isNaN(start)) { alert('That start date/time isn\'t valid.'); return null; }
 
-  const xd = xfer ? _xferDuration(fromBarge, grade, qty) : null;
+  const xd = xfer ? _xferDuration(fromBarge, grade, qty, qtyM) : null;
   const pumpHrs = xfer ? xd.pump : computeLoadingDurationHours(qty, grade);
   const totalHrs = xfer ? xd.total : preOps + pumpHrs + postOps;
   // Time-frame start (AM / PM …): start = frame start; the barge stays
@@ -9230,7 +9282,7 @@ function _readLoadingForm() {
   const end = endOverride ? new Date(endOverride + 'T23:59:59') : estimatedEnd;
   if (xfer) {
     return Object.assign({
-      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty,
+      kind: 'transfer', fromBarge: fromBarge, barge: barge, terminal: '', grade: grade, qty: qty, ...(grade === 'BOTH' ? { qtyM: qtyM } : {}),
       startAt: start.toISOString(), endAt: end.toISOString(), reqStartAt: start.toISOString(),
       preOpsHours: 0, pumpHours: pumpHrs, postOpsHours: 0, hoseHours: xd.hose, estimatedHours: totalHrs,
       endOverridden: !!endOverride, surveyor: surveyor, notes: notes,
@@ -9253,7 +9305,7 @@ function _readLoadingForm() {
 
 function _clearLoadingForm() {
   if (typeof _rlClearPrefillNote === 'function') _rlClearPrefillNote();
-  ['ld-terminal','ld-qty','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
+  ['ld-terminal','ld-qty','ld-qty-m','ld-notes','ld-end-date-override','ld-surveyor'].forEach(function(id) {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const dl = document.getElementById('ld-deal');
@@ -9344,7 +9396,7 @@ function _xferPlaceAll(records, sched, barges) {
   const calc = {};
   todo.forEach(function(r) {
     if (r.endOverridden) return;
-    const xd = _xferDuration(r.fromBarge || '', r.grade, Number(r.qty) || 0);
+    const xd = _xferDuration(r.fromBarge || '', r.grade, Number(r.qty) || 0, Number(r.qtyM) || 0);
     if (xd.total > 0) calc[r.id] = { pump: xd.pump, hose: xd.hose, total: xd.total, frame: r.startWin && typeof _etaFrameHrs === 'function' ? _etaFrameHrs(r.startWin) : 0 };
   });
   const transfers = todo.map(function(r) {
@@ -9434,6 +9486,7 @@ function _xferDurationText(r) {
   const hrs = (new Date(r.endAt) - new Date(r.startAt)) / 3600000;
   if (!(hrs > 0)) return '—';
   const pump = Number(r.pumpHours) || 0, ops = Number(r.hoseHours) || 0;
+  if (r.grade === 'BOTH') return _formatDurationHours(hrs) + (pump > 0 ? ' (' + _formatDurationHours(pump) + ' pumping, both grades at once' + (ops > 0 ? ' + ' + _formatDurationHours(ops) + ' ops' : '') + ')' : '');
   const rate = pump > 0 ? Math.round((Number(r.qty) || 0) / pump) : 0;
   return _formatDurationHours(hrs) + (pump > 0 ? ' (' + _formatDurationHours(pump) + ' pumping' + (rate ? ' at ' + rate + ' MT/h' : '') + (ops > 0 ? ' + ' + _formatDurationHours(ops) + ' ops' : '') + ')' : '');
 }
@@ -9491,6 +9544,8 @@ function editLoadingRecord(id) {
   document.getElementById('ld-terminal').value = rec.terminal || '';
   document.getElementById('ld-grade').value = rec.grade || 'VLSFO';
   document.getElementById('ld-qty').value = rec.qty || '';
+  const qmEl = document.getElementById('ld-qty-m'); if (qmEl) qmEl.value = rec.grade === 'BOTH' ? (rec.qtyM || '') : '';
+  _ldGradeUi();
   document.getElementById('ld-start-date').value = _localDateInputStr(start);
   document.getElementById('ld-start-time').value = _localTimeInputStr(start);
   _ldSetStartWin(rec.startWin || '');
@@ -9523,6 +9578,7 @@ function updateLoadingRecord(id) {
   if (!data.startWin) delete next.startWin;
   if (!data.dealId) delete next.dealId;
   if (!_isTransfer(data)) { delete next.kind; delete next.fromBarge; delete next.hoseHours; delete next.reqStartAt; }
+  if (data.grade !== 'BOTH') delete next.qtyM;
   else { delete next.blQty; delete next.blAt; delete next.blDate; } // a transfer has no BL
   // A transfer goes after the vessel supplies, a Loading of a discharging barge
   // after its transfer (the start typed is the earliest it may start).
@@ -10251,12 +10307,12 @@ function renderLoadingList() {
       if (xfer) {
         return '<div class="card ld-row-transfer" style="padding:12px 16px;margin-bottom:8px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;border-left:3px solid var(--xfer);' + doneStyle + '">'
           + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--xfer);color:#fff;font-family:\'DM Mono\',monospace;letter-spacing:.04em">TRANSFER</span>'
-          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(r.grade) + '</span>'
+          + '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:' + gradeColorBg + ';color:' + gradeColor + ';font-family:\'DM Mono\',monospace;letter-spacing:.04em">' + esc(_xferGradeLbl(r)) + '</span>'
           + _bargePill(r.fromBarge || '', ldMap) + '<span style="color:var(--xfer);font-weight:700">→</span>' + _bargePill(_resolveRecordBargeName(r), ldMap)
           + (r.completed ? '<span style="font-size:9.5px;font-weight:700;padding:3px 9px;border-radius:4px;background:var(--green-lt);color:var(--green);font-family:\'DM Mono\',monospace;letter-spacing:.04em">DONE</span>' : '')
           + '<div style="flex:1;min-width:160px">'
             + '<div style="font-size:13px;font-weight:700;color:var(--xfer);' + (r.completed ? 'text-decoration:line-through' : '') + '">Barge transfer — ' + esc(r.fromBarge || '') + ' → ' + esc(_resolveRecordBargeName(r)) + '</div>'
-            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (Number(r.qty) || 0).toLocaleString() + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
+            + '<div style="font-size:11px;color:var(--sub);margin-top:1px">' + (r.grade === 'BOTH' ? esc(_xferGradeQtyTxt(r)) : (Number(r.qty) || 0).toLocaleString()) + ' MT' + (r.notes ? ' · ' + esc(r.notes) : '') + '</div>'
             + (r.surveyor ? '<div style="font-size:10.5px;color:var(--muted);margin-top:1px">Surveyor: ' + esc(r.surveyor) + '</div>' : '')
             + (_xferMovedNote(r) ? '<div class="ld-xfer-moved" style="font-size:10.5px;color:var(--xfer);margin-top:1px">' + esc(_xferMovedNote(r)) + '</div>' : '')
           + '</div>'
@@ -10329,7 +10385,7 @@ function _renderRemovedLoadings() {
       const what = _isTransfer(r) ? 'Barge transfer ' + (r.fromBarge || '') + ' → ' + _resolveRecordBargeName(r) : (r.terminal || 'Terminal') + ' · ' + _resolveRecordBargeName(r);
       const deal = r.dealId && typeof _dealById === 'function' && _dealById(r.dealId) ? ' · deal ' + _dealLabel(_dealById(r.dealId)) : '';
       return '<div class="ld-removed-row" data-ld-id="' + esc(r.id) + '">' +
-        '<span class="ld-removed-what"><b>' + esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString() + ' MT</b> · ' + esc(what) + esc(deal) +
+        '<span class="ld-removed-what"><b>' + (_isTransfer(r) ? esc(_xferGradeQtyTxt(r)) : esc(r.grade || '') + ' ' + (Number(r.qty) || 0).toLocaleString()) + ' MT</b> · ' + esc(what) + esc(deal) +
         (r.completed ? ' · <span class="ld-removed-done">Done' + (r.blQty != null ? ', BL ' + esc(Number(r.blQty).toLocaleString()) + ' MT' : '') + '</span>' : '') + '</span>' +
         '<span class="ld-removed-when">' + (isNaN(st.getTime()) ? '' : esc(fmt24(st))) + ' · removed ' + esc(fmt24(new Date(Number(r.deletedAt)))) + '</span>' +
         (op ? '<button type="button" class="btn btn-secondary btn-sm" onclick="restoreLoadingRecord(\'' + escJs(r.id) + '\')">↩ Restore</button>' : '') +
@@ -10346,7 +10402,7 @@ function restoreLoadingRecord(id) {
   saveLoadingRecords();
   renderLoadingList();
   _refreshLoadingConsumers();
-  if (typeof showToast === 'function') showToast('Restored: ' + (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString() + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
+  if (typeof showToast === 'function') showToast('Restored: ' + (_isTransfer(next) ? _xferGradeQtyTxt(next) : (next.grade || '') + ' ' + (Number(next.qty) || 0).toLocaleString()) + ' MT ' + (_isTransfer(next) ? 'barge transfer' : 'loading at ' + (next.terminal || 'terminal')) + '.', 'success');
 }
 
 function renderLoadingPage() {
@@ -17086,12 +17142,12 @@ function buildTL(items, containerId, loadingsForBarge) {
       ld.className = 'tli tli-transfer';
       ld.innerHTML = `<div class="tls"><div class="tld" style="background:var(--xfer)"></div><div class="tll"></div></div>
       <div class="tlc" style="border-color:var(--xfer-bd);background:var(--xfer-lt)">
-        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(rec.grade)}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
+        <div class="tlch"><div class="tlvn" style="color:var(--xfer)">Barge transfer — ${esc(fromN)} → ${esc(toN)}</div><div class="br"><span class="tb" style="background:var(--xfer);color:#fff;border:1px solid var(--xfer-bd)">${esc(_xferGradeLbl(rec))}</span><span class="tb" style="background:var(--surface);color:var(--xfer);border:1px solid var(--xfer-bd)">Barge busy</span></div></div>
         <div class="tlm">
           <div class="tmi"><label>Transfer Start</label><span>${_ldStartTxt(rec)}</span></div>
           <div class="tmi"><label>Transfer End</label><span>${fmt24(new Date(rec.endAt))}</span></div>
           <div class="tmi tmi-xfer-dur"><label>Duration</label><span>${esc(_xferDurationText(rec))}</span></div>
-          <div class="tmi"><label>Quantity</label><span>${(Number(rec.qty)||0).toLocaleString()} MT</span></div>
+          <div class="tmi"><label>Quantity</label><span>${rec.grade === 'BOTH' ? esc(_xferGradeQtyTxt(rec)) + ' MT' : (Number(rec.qty)||0).toLocaleString() + ' MT'}</span></div>
           <div class="tmi"><label>Discharges</label><span>${esc(fromN)}</span></div>
           <div class="tmi"><label>Receives</label><span>${esc(toN)}</span></div>
           ${rec.surveyor ? `<div class="tmi"><label>Surveyor</label><span>${esc(rec.surveyor)}</span></div>` : ''}
@@ -17755,7 +17811,7 @@ function _transferBlocksForBarge(bargeId, bargeName) {
     return r && r.kind === 'transfer' && !r.deletedAt && !r.completed && (r.barge === name || r.fromBarge === name);
   }).map(function(r) {
     return { id: 'xfer_' + r.id, transferId: r.id, bargeName: name, start: r.startAt, end: r.endAt,
-      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO') };
+      reason: 'Barge transfer ' + r.fromBarge + ' → ' + r.barge + ' · ' + (r.grade === 'BOTH' ? _xferGradeQtyTxt(r) + ' MT' : (Number(r.qty) || 0).toLocaleString() + ' MT ' + (r.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO')) };
   });
 }
 function _blocksForBarge(bargeId, bargeName, list) {
@@ -17844,7 +17900,9 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
       // a supply). Both ROBs are still set by hand once it is Done.
       var xr = op.transferId ? (_loadingRecords || []).find(function(r) { return r && r.id === op.transferId; }) : null;
       if (xr && Number(xr.qty) > 0) {
-        bi.transferId = xr.id; bi.grade = xr.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'; bi.qty = Number(xr.qty) || 0;
+        var xq = _xferQtys(xr);
+        bi.transferId = xr.id; bi.grade = xr.grade === 'BOTH' ? 'BOTH' : (xr.grade === 'LSMGO' ? 'LSMGO' : 'VLSFO'); bi.qty = Number(xr.qty) || 0;
+        bi.xv = xq.v; bi.xm = xq.m; // per grade (a "Both" transfer moves the two at once)
         if (_resolveRecordBargeName(xr) === bargeName) { bi.xferIn = true; bi.peer = xr.fromBarge || ''; }
         else if (xr.fromBarge === bargeName) { bi.xferOut = true; bi.peer = _resolveRecordBargeName(xr); }
       }
@@ -17895,8 +17953,12 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
   // the discharging barge at its start, into the receiving one at its end.
   function apply(it, s) {
     if (it.kind === 'vessel') { s.v = Math.max(0, s.v - it.nomV); s.m = Math.max(0, s.m - it.nomM); }
-    else if (it.xferOut) { if (it.grade === 'LSMGO') s.m = Math.max(0, s.m - it.qty); else s.v = Math.max(0, s.v - it.qty); }
-    else if (it.kind === 'loading' || it.xferIn) {
+    else if (it.xferOut) { s.v = Math.max(0, s.v - (it.xv || 0)); s.m = Math.max(0, s.m - (it.xm || 0)); }
+    else if (it.xferIn) {
+      if (it.xv) s.v = vcap ? Math.min(vcap, s.v + it.xv) : s.v + it.xv;
+      if (it.xm) s.m = mcap ? Math.min(mcap, s.m + it.xm) : s.m + it.xm;
+    }
+    else if (it.kind === 'loading') {
       if (it.grade === 'LSMGO') s.m = mcap ? Math.min(mcap, s.m + it.qty) : s.m + it.qty;
       else s.v = vcap ? Math.min(vcap, s.v + it.qty) : s.v + it.qty;
     }
@@ -17907,7 +17969,8 @@ function _bargeStockProjection(bargeId, bargeName, lookEnd, opts) {
     var s = { v: v, m: m }, minV = v, minM = m, stopV = false, stopM = false;
     for (var k = idx; k < items.length && !(stopV && stopM); k++) {
       var it = items[k];
-      if (it.kind === 'loading' || it.xferIn) { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
+      if (it.xferIn) { if (it.xv) stopV = true; if (it.xm) stopM = true; continue; }
+      if (it.kind === 'loading') { if (it.grade === 'LSMGO') stopM = true; else stopV = true; continue; }
       apply(it, s);
       if (!stopV) minV = Math.min(minV, s.v);
       if (!stopM) minM = Math.min(minM, s.m);
@@ -18191,7 +18254,7 @@ function _bargeStockForecast(bargeId, horizonHrs, opts) {
       start: it.start, end: it.end, v: s.v, m: s.m, dv: s.v - before.v, dm: s.m - before.m, beforeV: before.v, beforeM: before.m };
     if (it.kind === 'vessel') { ev.vessel = it.vessel; ev.nomUid = it.nomUid; ev.nomV = it.nomV; ev.nomM = it.nomM; }
     if (it.kind === 'loading') { ev.grade = it.grade; ev.qty = it.qty; }
-    if (it.xferIn || it.xferOut) { ev.xfer = it.xferIn ? 'in' : 'out'; ev.peer = it.peer; ev.grade = it.grade; ev.qty = it.qty; }
+    if (it.xferIn || it.xferOut) { ev.xfer = it.xferIn ? 'in' : 'out'; ev.peer = it.peer; ev.grade = it.grade; ev.qty = it.qty; ev.xTxt = _xferGradeQtyTxt({ grade: it.grade, qty: it.qty, qtyM: it.xm }) + ' MT'; }
     events.push(ev);
   });
   var series = {};
@@ -18222,8 +18285,8 @@ function _rlAnalyse(b, proj, now, end, liveROBs) {
     var steps = [];
     proj.items.forEach(function(it, idx) {
       if (it.kind === 'vessel' && it[gi.nom] > 0) steps.push({ t: it.start, kind: 'vessel', q: it[gi.nom], it: it, idx: idx });
-      else if ((it.kind === 'loading' || it.xferIn) && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
-      else if (it.xferOut && it.grade === gi.g) steps.push({ t: it.start, kind: 'xferout', q: it.qty, it: it, idx: idx });
+      else if (it.kind === 'loading' && !it.xferIn && it.grade === gi.g) steps.push({ t: it.start, kind: 'loading', q: it.qty, it: it, idx: idx });
+      else if ((it.xferIn || it.xferOut) && (gi.k === 'm' ? it.xm : it.xv) > 0) steps.push({ t: it.start, kind: it.xferIn ? 'loading' : 'xferout', q: gi.k === 'm' ? it.xm : it.xv, it: it, idx: idx });
     });
     return { gi: gi, buf: proj[gi.buf], cap: proj[gi.cap], steps: steps, hyps: [], lastIdx: -1, done: false };
   });
@@ -18494,10 +18557,10 @@ function _rlChartHtml(fc) {
     }
     if (e.xfer === 'in') {
       col = e.grade === 'LSMGO' ? 'var(--fuel-m)' : 'var(--fuel-v)';
-      tip = 'Barge transfer from ' + e.peer + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.qty.toLocaleString() + ' MT ' + e.grade;
+      tip = 'Barge transfer from ' + e.peer + ' · ' + _rlFmt(e.start) + '–' + _rlHM(e.end) + ' · +' + e.xTxt;
       return '<span class="' + cls + ' rl-mk-load rl-mk-xfer" style="left:' + pct(e.end) + '%;border-color:var(--xfer)" title="' + esc(tip) + '"></span>';
     }
-    tip = (e.xfer === 'out' ? 'Barge transfer to ' + e.peer + ' · −' + e.qty.toLocaleString() + ' MT ' + e.grade + ' · ' : 'Unavailable — ' + e.label + ' · ') + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
+    tip = (e.xfer === 'out' ? 'Barge transfer to ' + e.peer + ' · −' + e.xTxt + ' · ' : 'Unavailable — ' + e.label + ' · ') + _rlFmt(e.start) + ' → ' + _rlFmt(e.end);
     return '<span class="' + cls + ' rl-mk-block" style="left:' + pct(e.start) + '%" title="' + esc(tip) + '"></span>';
   }).join('');
   var rbl = fc.recs.filter(function(r) { return r.reloadBy > fc.now && r.reloadBy < fc.end; }).map(function(r) {
@@ -18566,8 +18629,8 @@ function _rlEventListHtml(fc) {
         (e.counted ? ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' counted until it is' : ' — ' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' not counted (' + esc(e.why) + ')') +
         ' → ' + esc(after) + _rlDoneBtn(e) + '</li>';
     }
-    if (e.xfer === 'in') return '<li class="rl-xfer">' + when + ' — Barge transfer from ' + esc(e.peer) + ': +' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' → ' + esc(after) + '</li>';
-    if (e.xfer === 'out') return '<li class="rl-xfer">' + when + ' — Barge transfer to ' + esc(e.peer) + ': −' + esc(_rlMT(e.qty)) + ' ' + esc(e.grade) + ' (until ' + esc(_rlFmt(e.end)) + ') → ' + esc(after) + '</li>';
+    if (e.xfer === 'in') return '<li class="rl-xfer">' + when + ' — Barge transfer from ' + esc(e.peer) + ': +' + (e.grade === 'BOTH' ? esc(e.xTxt) : esc(_rlMT(e.qty)) + ' ' + esc(e.grade)) + ' → ' + esc(after) + '</li>';
+    if (e.xfer === 'out') return '<li class="rl-xfer">' + when + ' — Barge transfer to ' + esc(e.peer) + ': −' + (e.grade === 'BOTH' ? esc(e.xTxt) : esc(_rlMT(e.qty)) + ' ' + esc(e.grade)) + ' (until ' + esc(_rlFmt(e.end)) + ') → ' + esc(after) + '</li>';
     return '<li>' + when + ' — Unavailable: ' + esc(e.label) + ' (until ' + esc(_rlFmt(e.end)) + ')</li>';
   });
   return '<details class="rl-events"><summary>Projected events (' + rows.length + ')</summary>' +
@@ -24859,14 +24922,14 @@ function renderWeekCalendar(offsetDays) {
                 box-sizing:border-box;
                 cursor:pointer;
                 transition:filter .12s, transform .12s;
-              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(r.grade)} ${Number(r.qty).toLocaleString()} MT&#10;${xWin ? 'Start ' + xWin + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
+              " class="cal-ticket-clickable cal-ticket-transfer" onclick="showPage('loading');editLoadingRecord('${escJs(r.id)}')" title="Barge transfer — ${esc(fromN)} → ${esc(toN)}&#10;${esc(_xferGradeQtyTxt(r))} MT&#10;${xWin ? 'Start ' + xWin + ' ' + _etaFrameHours(r.startWin) + ' (time frame) · ' : ''}${start.toLocaleString('en-GB')} → ${end.toLocaleString('en-GB')}${r.notes?'&#10;'+esc(r.notes):''}&#10;Click to open in Loading">
                 <div style="display:flex;align-items:center;flex-wrap:wrap;row-gap:3px;gap:4px">
                   <span style="font-family:'DM Mono',monospace;font-size:8.5px;font-weight:700;color:#fff;display:flex;align-items:center;gap:3px;font-variant-numeric:tabular-nums;flex-shrink:0;opacity:.95">${ICO_CLOCK}${xWin || fmt(start)}</span>
                   <span style="font-size:7.5px;font-weight:700;padding:1px 4px;border:1px solid rgba(255,255,255,.55);border-radius:2px;color:#fff;letter-spacing:.03em;font-family:'DM Mono',monospace;white-space:nowrap;flex-shrink:0;margin-left:auto">TRANSFER</span>
                 </div>
                 <div class="cal-xfer-route" style="font-size:10.5px;font-weight:700;color:#fff;white-space:normal;word-break:break-word;overflow-wrap:break-word;max-width:100%;line-height:1.35;margin-top:4px">${esc(fromN)} → ${esc(toN)}</div>
                 <div style="display:flex;gap:8px;margin-top:4px;font-family:'DM Mono',monospace;font-size:9.5px;font-weight:700;font-variant-numeric:tabular-nums">
-                  <span style="color:#fff">${esc(r.grade)}&nbsp;${Number(r.qty).toLocaleString()}</span>
+                  <span style="color:#fff">${esc(_xferGradeQtyTxt(r)).replace(/ /g, '&nbsp;').replace(/&nbsp;\+&nbsp;/g, ' + ')}</span>
                 </div>
                 <div style="margin-top:4px;padding-top:4px;border-top:1px solid rgba(255,255,255,.3);display:flex;flex-direction:column;gap:2px">
                   <div style="font-size:8.5px;color:rgba(255,255,255,.85);font-weight:600;display:flex;align-items:center;gap:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:'DM Mono',monospace">${ICO_CLOCK}Ends ${fmt(end)}</div>
