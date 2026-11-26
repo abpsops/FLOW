@@ -153,8 +153,9 @@ function planSchedule(inp) {
    where BOTH its barges are free for its whole length, at or after the start
    asked for — clear of every supply (ETC + contingency, travel either side),
    Unavailable block and earlier transfer on either barge, and every Loading
-   of the barge that RECEIVES (a Loading of the barge that discharges waits
-   for the transfer instead: busyFor marks Loadings kind:'loading').
+   asked for BEFORE the transfer's own start (a Loading on either barge asked
+   for at or after it waits for the transfer instead: busyFor marks Loadings
+   kind:'loading' with req = the start asked for).
      transfers [{id, from, to, req: Date, durMs}]  in the order to place them
      sched     the schedule's jobs {bargeLabel, bargeStart, etc, refuelSlot}
      busyFor   name -> [{s: Date, e: Date}] other fixed commitments
@@ -162,22 +163,24 @@ function planSchedule(inp) {
 function placeTransfers(inp) {
   const H = 3600000, tr = (inp.travelHrs || 0) * H, cont = (inp.contHrs || 0) * H;
   const busy = {};
-  const add = (name, s, e, kind) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e, kind: kind || '' }); };
+  const add = (name, s, e, kind, req) => { if (!name || !(e > s)) return; (busy[name] = busy[name] || []).push({ s, e, kind: kind || '', req: req == null ? -Infinity : req }); };
   (inp.sched || []).forEach(j => {
     const s = new Date(j.bargeStart).getTime(), e0 = new Date(j.refuelSlot && j.refuelSlot.rfEnd ? j.refuelSlot.rfEnd : j.etc).getTime();
     if (isFinite(s) && isFinite(e0)) add(j.bargeLabel, s - tr, e0 + cont + tr);
   });
   const names = {};
   (inp.transfers || []).forEach(t => { names[t.from] = 1; names[t.to] = 1; });
-  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr, x.kind)));
+  Object.keys(names).forEach(n => (inp.busyFor ? inp.busyFor(n) : []).forEach(x => add(n, new Date(x.s).getTime() - tr, new Date(x.e).getTime() + tr, x.kind, x.req == null ? null : new Date(x.req).getTime())));
   const out = [];
   (inp.transfers || []).forEach(t => {
     let s = new Date(t.req).getTime();
     const d = Math.max(0, t.durMs || 0);
     for (let guard = 0; guard < 1000; guard++) {
-      // a Loading of the barge that discharges waits for the transfer (it is
-      // moved after it — _xferPlaceAll), so it does not hold the transfer back
-      const hits = [].concat((busy[t.from] || []).filter(x => x.kind !== 'loading'), busy[t.to] || []).filter(x => s < x.e && s + d > x.s);
+      // The transfer is done before a Loading on either barge asked for at or
+      // after its own start (that Loading is moved after it — _xferPlaceAll),
+      // so only a Loading asked for earlier holds the transfer back.
+      const tReq = new Date(t.req).getTime();
+      const hits = [].concat(busy[t.from] || [], t.to !== t.from ? (busy[t.to] || []) : []).filter(x => !(x.kind === 'loading' && x.req >= tReq)).filter(x => s < x.e && s + d > x.s);
       if (!hits.length) break;
       s = Math.max.apply(null, hits.map(x => x.e));
     }

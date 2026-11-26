@@ -389,13 +389,22 @@ function _confirmLoadingConflicts(bargeName, startAt, endAt, excludeLoadingId, f
    start asked for (reqStartAt) where both its barges are free — after the
    supplies of the current schedule, Unavailable blocks, earlier transfers and
    the Loadings of the barge that RECEIVES (placeTransfers). The barge that
-   DISCHARGES has to give the fuel first to have room to load: a Loading of
-   that barge which would overlap the transfer moves to right after it
-   (+ travel), keeping its length; once nothing is in its way any more it
-   goes back to the start asked for (reqStartAt). Saved start/end move with
+   DISCHARGES has to give the fuel first to have room to load, and the barge
+   that RECEIVES loads after it too: a Loading on either barge asked for at or
+   after the transfer's own start moves to right after the transfer (+ travel)
+   if it would start before the transfer ends, keeping its length; once
+   nothing is in its way any more it goes back to the start asked for
+   (reqStartAt). A Loading asked for earlier than the transfer keeps its
+   place and the transfer waits for it. Saved start/end move with
    them, so the calendar, timelines, Free Windows and the other devices all
    see the same times. `records` is not changed: the placed list is returned.
    Returns { records, moves: [{id, kind, from, to, barge, start, end, req}] }. */
+// The start a Loading was asked for (ms; never before now for one not started).
+function _ldReqMs(r) {
+  const st = new Date(r.startAt).getTime(), now = Date.now();
+  if (!(st > now)) return st;
+  return r.reqStartAt ? Math.max(new Date(r.reqStartAt).getTime(), now) : st;
+}
 function _xferPlaceAll(records, sched, barges) {
   const H = 3600000, now = Date.now();
   const recs = records || [];
@@ -431,7 +440,7 @@ function _xferPlaceAll(records, sched, barges) {
       } else if (_resolveRecordBargeName(r) === name) {
         // where the Loading sits in this pass (it may itself move for a transfer)
         const at = loadPos[r.id];
-        out.push({ s: at ? at.start : new Date(r.startAt), e: at ? at.end : new Date(r.endAt), kind: 'loading' });
+        out.push({ s: at ? at.start : new Date(r.startAt), e: at ? at.end : new Date(r.endAt), kind: 'loading', req: _ldReqMs(r) });
       }
     });
     return out.filter(function(x) { return x.e.getTime() > now && x.e > x.s; });
@@ -450,17 +459,19 @@ function _xferPlaceAll(records, sched, barges) {
   const byId = {}; placed.forEach(function(p) { byId[p.id] = p; });
   function placeLoads(placedNow) {
   // every transfer that keeps a discharging barge busy: placed now, or under way
-  const xferWins = placedNow.map(function(p) { const t = transfers.find(function(x) { return x.id === p.id; }); return { from: t.from, s: p.start.getTime(), e: p.end.getTime() }; })
+  const xferWins = placedNow.map(function(p) { const t = transfers.find(function(x) { return x.id === p.id; }); return { from: t.from, to: t.to, req: t.req.getTime(), s: p.start.getTime(), e: p.end.getTime() }; })
     .concat(recs.filter(function(r) { return _isTransfer(r) && live(r) && new Date(r.startAt).getTime() <= now; })
-      .map(function(r) { return { from: r.fromBarge || '', s: new Date(r.startAt).getTime(), e: new Date(r.endAt).getTime() }; }));
+      .map(function(r) { const st = new Date(r.startAt).getTime(); return { from: r.fromBarge || '', to: _resolveRecordBargeName(r), req: st, s: st, e: new Date(r.endAt).getTime() }; }));
   const loadAt = {};
   loads.forEach(function(r) {
     const st = new Date(r.startAt).getTime(), dur = new Date(r.endAt).getTime() - st;
     if (!(dur > 0)) return;
     const name = _resolveRecordBargeName(r);
     let s = r.reqStartAt ? Math.max(new Date(r.reqStartAt).getTime(), now) : st;
+    const lReq = _ldReqMs(r);
     for (let guard = 0; guard < 100; guard++) {
-      const hit = xferWins.filter(function(x) { return x.from === name && s < x.e + tr && s + dur > x.s - tr; });
+      // a transfer on this barge (either side) asked for at or before this Loading: done first
+      const hit = xferWins.filter(function(x) { return (x.from === name || x.to === name) && x.req <= lReq && s < x.e + tr; });
       if (!hit.length) break;
       s = Math.max.apply(null, hit.map(function(x) { return x.e + tr; }));
     }
@@ -526,12 +537,14 @@ function addLoadingRecord() {
   let data = _readLoadingForm();
   if (!data) return;
   const rec0 = Object.assign({ id: 'ld_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) }, data, { updatedAt: Date.now() });
-  // A transfer goes after the vessel supplies, a Loading of a discharging barge
-  // after its transfer: checked and saved at the place it gets.
+  // A transfer goes after the vessel supplies, the barges' Loadings after the
+  // transfer: checked and saved at the place it gets.
   const placed = _xferPlaceAll((_loadingRecords || []).concat([rec0]), _lastSched, _bargeConfig);
   const rec = placed.records[placed.records.length - 1];
-  if (!_confirmLoadingConflicts(rec.barge, rec.startAt, rec.endAt, null, rec.fromBarge)) return;
+  // checked against the others where they end up (a Loading moved after this transfer is not in its way)
+  const before = _loadingRecords.slice();
   placed.records.slice(0, -1).forEach(function(r, i) { _loadingRecords[i] = r; });
+  if (!_confirmLoadingConflicts(rec.barge, rec.startAt, rec.endAt, null, rec.fromBarge)) { before.forEach(function(r, i) { _loadingRecords[i] = r; }); return; }
   _xferMovesToast(placed.moves);
   _loadingRecords.push(rec);
   saveLoadingRecords();
@@ -600,8 +613,9 @@ function updateLoadingRecord(id) {
   const list = _loadingRecords.slice(); list[idx] = next;
   const placed = _xferPlaceAll(list, _lastSched, _bargeConfig);
   next = placed.records[idx];
-  if (!_confirmLoadingConflicts(next.barge, next.startAt, next.endAt, id, next.fromBarge)) return;
+  const before = _loadingRecords.slice();
   placed.records.forEach(function(r, i) { _loadingRecords[i] = r; });
+  if (!_confirmLoadingConflicts(next.barge, next.startAt, next.endAt, id, next.fromBarge)) { before.forEach(function(r, i) { _loadingRecords[i] = r; }); return; }
   _xferMovesToast(placed.moves);
   saveLoadingRecords();
   cancelLoadingEdit();

@@ -15,9 +15,9 @@
      (a record saved with the old 6h / 300 MT/h figures is brought up to date)
    • the stock forecast counts it: the receiving barge as loaded at its end, the discharging one
      gives it at its start (reload advice / Free Windows' available-to-promise follow)
-   • the barge that DISCHARGES loads after the transfer (it needs the room): its loading does not
-     hold the transfer back, it moves to right after it (start typed kept, back once the transfer
-     is gone); a loading of the barge that RECEIVES stays put and the transfer waits for it
+   • the transfer is done before the loadings: a loading on EITHER barge asked for at or after the
+     transfer's start moves to right after it (start typed kept, back once the transfer is gone);
+     a loading asked for before the transfer keeps its place and the transfer waits for it
    node suites/fix2/transfer-after-supply.test.js [appDir] */
 const path = require('path');
 if (process.argv[2]) process.env.APP_DIR = path.resolve(process.argv[2]);
@@ -187,12 +187,33 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
   });
 
   await scenario('T7 a loading of the receiving barge', async (openT) => {
-    // FNSA 11 loads at +31h for 5h, right where the transfer would go: the transfer waits for it
+    // FNSA 11 loads at +31h for 5h, asked for after the transfer (+23h): the transfer is done first
     const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), loading('l11', 'FNSA 11', 31, 5)]), realtime: false });
     const A = await openT(db, 'user-operator');
     const g = await generate(A.page);
     const l = await recAt(A.page, 'l11');
-    check('T7 a loading of the receiving barge stays where it is; the transfer goes after it (+ travel)', l.start === at(31) && l.req === null && g.x1.start === at(36) + HR, { l, x1: g.x1 });
+    const xStart = g.hayat.etc + 2 * HR;
+    check('T7 the transfer is done before the receiving barge\'s loading (asked for later): transfer right after HAYAT, the loading right after the transfer', g.x1.start === xStart && l.start === g.x1.end + HR && l.end - l.start === 5 * HR && l.req === iso(31), { l, x1: g.x1, xStart });
+  });
+
+  await scenario('T11 a loading asked for before the transfer', async (openT) => {
+    // FNSA 10 loads from +22h for 12h — asked for before the transfer (+23h): it keeps its place, the transfer waits for it
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), loading('l10', 'FNSA 10', 22, 12)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l = await recAt(A.page, 'l10');
+    check('T11 a loading asked for before the transfer keeps its place; the transfer goes after it (+ travel)', l.start === at(22) && l.req === null && g.x1.start === at(34) + HR, { l, x1: g.x1 });
+  });
+
+  await scenario('T12 both barges load after the transfer (27 Nov)', async (openT) => {
+    // as on 27 Nov: transfer asked for +23h; FNSA 10 loads +29h (17h) and FNSA 11 loads +29h (15h), both asked for later
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), loading('l10', 'FNSA 10', 29, 17), loading('l11', 'FNSA 11', 29, 15)]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l10 = await recAt(A.page, 'l10'), l11 = await recAt(A.page, 'l11');
+    const xStart = g.hayat.etc + 2 * HR;
+    check('T12 the transfer goes right after the supplies (not pushed behind the loadings)', g.x1.start === xStart, { x1: g.x1, xStart });
+    check('T12 …and both barges\' loadings follow it (+ travel), each keeping its length', l10.start === g.x1.end + HR && l11.start === g.x1.end + HR && l10.end - l10.start === 17 * HR && l11.end - l11.start === 15 * HR, { l10, l11, x1end: g.x1.end });
   });
 
   await scenario('T8 a loading added on the discharging barge', async (openT) => {
