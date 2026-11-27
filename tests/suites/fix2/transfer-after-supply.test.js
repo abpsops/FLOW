@@ -100,7 +100,8 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
   });
 
   await scenario('T2 a transfer clear of the supplies', async (openT) => {
-    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 40)]), realtime: false });
+    // saved with today's figures (1,500 MT at 400 MT/h + 4h ops = 7h45)
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 40, { pumpHours: 3.75, hoseHours: 4, estimatedHours: 7.75, endAt: iso(47.75) })]), realtime: false });
     const A = await openT(db, 'user-operator');
     const g = await generate(A.page);
     check('T2 a transfer that does not touch a supply stays exactly where it was (no reqStartAt, not re-saved)', g.x1.start === at(40) && g.x1.req === null && g.x1.updatedAt === NOW && g.note.length === 0 && !g.toasts.some(t => /Supplies first/.test(t)), g);
@@ -292,6 +293,32 @@ const SHIPS = () => [vessel('n1', 'JIN YU FU TONG', 10, 400, 2), vessel('n2', 'H
     const xStart = g.hayat.etc + 2 * HR;
     check('T14 a moved transfer asked for a time frame: its length without the frame', g.x1.start === xStart && g.x1.end === xStart + 7.75 * HR && !g.x1.startWin, { x1: g.x1, xStart });
     check('T14 a moved Loading asked for a time frame: its length without the frame (15h, not 21h)', l.start === g.x1.end + HR && l.end - l.start === 15 * HR, { l, x1end: g.x1.end });
+  });
+
+  await scenario('T15 a Loading moved before the frame came off is mended', async (openT) => {
+    // 26 Nov: FNSA 11's loading was already moved (frame mark gone) with frame + 15h = 21h kept;
+    // on the next Generate it is 15h long again (its operation); a hand-set end is left alone
+    const moved = loading('l11', 'FNSA 11', 29, 21, { estimatedHours: 15, reqStartAt: iso(29) });
+    const hand = loading('l10', 'FNSA 10', 60, 30, { estimatedHours: 12, reqStartAt: iso(60), endOverridden: true });
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x1', 23), moved, hand]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    const g = await generate(A.page);
+    const l = await recAt(A.page, 'l11'), h = await recAt(A.page, 'l10');
+    check('T15 the moved Loading is its operation long again (15h, not 21h), right after the transfer', l.start === g.x1.end + HR && l.end - l.start === 15 * HR, { l, x1end: g.x1.end });
+    check('T15 a Loading with a hand-set end keeps its length', h.end - h.start === 30 * HR, h);
+    const cloud = (U.row(db).payload.state.loadingRecords || []).find(r => r.id === 'l11');
+    check('T15 …and it is saved so', cloud && new Date(cloud.endAt) - new Date(cloud.startAt) === 15 * HR, cloud);
+  });
+
+  await scenario('T16 the same, its transfer already under way (only its length changes)', async (openT) => {
+    // 27 Nov 06:00: both transfers under way since 03:08; FNSA 11's loading sits right after them, 21h long
+    const moved = loading('l11', 'FNSA 11', 10, 21, { estimatedHours: 15, reqStartAt: iso(10) });
+    const db = H.createDb({ workspace: seed(SHIPS(), [xfer('x0', -2), moved]), realtime: false });
+    const A = await openT(db, 'user-operator');
+    await generate(A.page);
+    const l = await recAt(A.page, 'l11');
+    const cloud = (U.row(db).payload.state.loadingRecords || []).find(r => r.id === 'l11');
+    check('T16 it keeps its start and is 15h long again, saved', l.start === at(10) && l.end - l.start === 15 * HR && cloud && new Date(cloud.endAt) - new Date(cloud.startAt) === 15 * HR, { l, cloud });
   });
 
   await browser.close();

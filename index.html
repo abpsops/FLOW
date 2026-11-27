@@ -9463,8 +9463,17 @@ function _xferPlaceAll(records, sched, barges) {
       .map(function(r) { const st = new Date(r.startAt).getTime(); return { from: r.fromBarge || '', to: _resolveRecordBargeName(r), req: st, s: st, e: new Date(r.endAt).getTime() }; }));
   const loadAt = {};
   loads.forEach(function(r) {
-    const st = new Date(r.startAt).getTime(), dur = new Date(r.endAt).getTime() - st;
+    const st = new Date(r.startAt).getTime();
+    let dur = new Date(r.endAt).getTime() - st;
     if (!(dur > 0)) return;
+    // A Loading moved for a transfer is as long as its operation (+ its start frame,
+    // while it still has one); a hand-set end stays. Mends one moved before the frame
+    // came off (its frame mark gone, its length still frame + operation).
+    const est = Number(r.estimatedHours) || 0;
+    if (r.reqStartAt && !r.endOverridden && est > 0) {
+      const exact = Math.round(est * H) + frameMs(r);
+      if (Math.abs(exact - dur) > 60000) dur = exact;
+    }
     const name = _resolveRecordBargeName(r);
     let s = r.reqStartAt ? Math.max(new Date(r.reqStartAt).getTime(), now) : st;
     const lReq = _ldReqMs(r);
@@ -9502,7 +9511,8 @@ function _xferPlaceAll(records, sched, barges) {
 function _xferApplyPlacement(sched, barges) {
   if (typeof isTrader === 'function' && isTrader()) return []; // a trader can't save Loadings
   const res = _xferPlaceAll(_loadingRecords, sched, barges);
-  if (!res.moves.length) return [];
+  // a record only made shorter / longer (same start) is no move, but is saved all the same
+  if (!res.records.some(function(r, i) { return r !== _loadingRecords[i]; })) return [];
   res.records.forEach(function(r, i) { _loadingRecords[i] = r; });
   if (typeof _saveLoadingToLocal === 'function') _saveLoadingToLocal();
   return res.moves;
